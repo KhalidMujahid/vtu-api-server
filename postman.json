@@ -1,0 +1,1814 @@
+{
+  "info": {
+    "_postman_id": "yareema-data-hub-api",
+    "name": "Yareema Data Hub API",
+    "description": "Complete Nigerian VTU & Utility Platform API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Register User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\",\n  \"email\": \"john.doe@example.com\",\n  \"phoneNumber\": \"08012345678\",\n  \"password\": \"Password@123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/register",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "register"]
+            },
+            "description": "Register a new user account"
+          },
+          "response": []
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"john.doe@example.com\",\n  \"password\": \"Password@123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "login"]
+            },
+            "description": "Login with email and password"
+          },
+          "response": []
+        },
+        {
+          "name": "Verify OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"john.doe@example.com\",\n  \"otp\": \"123456\",\n  \"verificationType\": \"email\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/verify-otp",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "verify-otp"]
+            },
+            "description": "Verify OTP sent to email or phone"
+          },
+          "response": []
+        },
+        {
+          "name": "Resend OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"john.doe@example.com\",\n  \"verificationType\": \"email\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/resend-otp",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "resend-otp"]
+            },
+            "description": "Resend OTP to email or phone"
+          },
+          "response": []
+        },
+        {
+          "name": "Forgot Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"john.doe@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/forgot-password",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "forgot-password"]
+            },
+            "description": "Request password reset link"
+          },
+          "response": []
+        },
+        {
+          "name": "Reset Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"password\": \"NewPassword@123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/reset-password/:token",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "reset-password", ":token"],
+              "variable": [
+                {
+                  "key": "token",
+                  "value": "reset_token_here"
+                }
+              ]
+            },
+            "description": "Reset password with token"
+          },
+          "response": []
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"Password@123\",\n  \"newPassword\": \"NewPassword@123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/change-password",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "change-password"]
+            },
+            "description": "Change password (requires authentication)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/profile",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "profile"]
+            },
+            "description": "Get user profile (requires authentication)"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\",\n  \"dateOfBirth\": \"1990-01-01\",\n  \"gender\": \"male\",\n  \"address\": {\n    \"street\": \"123 Main St\",\n    \"city\": \"Lagos\",\n    \"state\": \"Lagos\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/profile",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "profile"]
+            },
+            "description": "Update user profile"
+          },
+          "response": []
+        },
+        {
+          "name": "Set Transaction PIN",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transactionPin\": \"1234\",\n  \"confirmPin\": \"1234\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/set-transaction-pin",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "set-transaction-pin"]
+            },
+            "description": "Set transaction PIN (4 digits)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Wallet",
+      "item": [
+        {
+          "name": "Get Wallet Balance",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/wallet/balance",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "wallet", "balance"]
+            },
+            "description": "Get wallet balance and details"
+          },
+          "response": []
+        },
+        {
+          "name": "Fund Wallet",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 5000,\n  \"paymentMethod\": \"paystack\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/wallet/fund",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "wallet", "fund"]
+            },
+            "description": "Initialize wallet funding via payment gateway"
+          },
+          "response": []
+        },
+        {
+          "name": "Transfer to User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recipientEmail\": \"jane.doe@example.com\",\n  \"amount\": 1000,\n  \"transactionPin\": \"1234\",\n  \"description\": \"Payment for services\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/wallet/transfer",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "wallet", "transfer"]
+            },
+            "description": "Transfer funds to another user"
+          },
+          "response": []
+        },
+        {
+          "name": "Withdraw to Bank",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 5000,\n  \"bankCode\": \"058\",\n  \"accountNumber\": \"1234567890\",\n  \"transactionPin\": \"1234\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/wallet/withdraw",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "wallet", "withdraw"]
+            },
+            "description": "Withdraw funds to bank account"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Transaction History",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/wallet/transactions?page=1&limit=20&type=data_recharge&startDate=2024-01-01&endDate=2024-12-31",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "wallet", "transactions"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "type",
+                  "value": "data_recharge"
+                },
+                {
+                  "key": "startDate",
+                  "value": "2024-01-01"
+                },
+                {
+                  "key": "endDate",
+                  "value": "2024-12-31"
+                }
+              ]
+            },
+            "description": "Get user transaction history with filters"
+          },
+          "response": []
+        },
+        {
+          "name": "Set Wallet PIN",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transactionPin\": \"1234\",\n  \"confirmPin\": \"1234\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/wallet/set-pin",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "wallet", "set-pin"]
+            },
+            "description": "Set wallet transaction PIN"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Telecom Services",
+      "item": [
+        {
+          "name": "Get Data Plans",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/telecom/data/plans?network=mtn",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "telecom", "data", "plans"],
+              "query": [
+                {
+                  "key": "network",
+                  "value": "mtn"
+                }
+              ]
+            },
+            "description": "Get available data plans for a network"
+          },
+          "response": []
+        },
+        {
+          "name": "Purchase Data",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phoneNumber\": \"08012345678\",\n  \"network\": \"mtn\",\n  \"planId\": \"{{plan_id}}\",\n  \"transactionPin\": \"1234\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/telecom/data/purchase",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "telecom", "data", "purchase"]
+            },
+            "description": "Purchase data plan for a phone number"
+          },
+          "response": []
+        },
+        {
+          "name": "Purchase Airtime",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phoneNumber\": \"08012345678\",\n  \"network\": \"mtn\",\n  \"amount\": 500,\n  \"transactionPin\": \"1234\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/telecom/airtime/purchase",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "telecom", "airtime", "purchase"]
+            },
+            "description": "Purchase airtime for a phone number"
+          },
+          "response": []
+        },
+        {
+          "name": "Airtime Swap",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phoneNumber\": \"08012345678\",\n  \"network\": \"mtn\",\n  \"airtimeAmount\": 1000,\n  \"transactionPin\": \"1234\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/telecom/airtime/swap",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "telecom", "airtime", "swap"]
+            },
+            "description": "Convert airtime to wallet balance"
+          },
+          "response": []
+        },
+        {
+          "name": "Purchase Recharge PIN",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"network\": \"mtn\",\n  \"pinType\": \"1000\",\n  \"quantity\": 1,\n  \"transactionPin\": \"1234\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/telecom/recharge-pin/purchase",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "telecom", "recharge-pin", "purchase"]
+            },
+            "description": "Purchase recharge PINs"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Bills Payment",
+      "item": [
+        {
+          "name": "Verify Electricity Customer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"meterNumber\": \"12345678901\",\n  \"disco\": \"aedc\",\n  \"meterType\": \"prepaid\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/bills/electricity/verify",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "bills", "electricity", "verify"]
+            },
+            "description": "Verify electricity customer details"
+          },
+          "response": []
+        },
+        {
+          "name": "Purchase Electricity",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"meterNumber\": \"12345678901\",\n  \"disco\": \"aedc\",\n  \"amount\": 2000,\n  \"phoneNumber\": \"08012345678\",\n  \"transactionPin\": \"1234\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/bills/electricity/purchase",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "bills", "electricity", "purchase"]
+            },
+            "description": "Purchase electricity credit"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Cable Plans",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/bills/cable/plans?provider=dstv",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "bills", "cable", "plans"],
+              "query": [
+                {
+                  "key": "provider",
+                  "value": "dstv"
+                }
+              ]
+            },
+            "description": "Get available cable TV plans"
+          },
+          "response": []
+        },
+        {
+          "name": "Purchase Cable TV",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"smartCardNumber\": \"123456789012\",\n  \"provider\": \"dstv\",\n  \"planId\": \"{{plan_id}}\",\n  \"months\": 1,\n  \"transactionPin\": \"1234\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/bills/cable/purchase",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "bills", "cable", "purchase"]
+            },
+            "description": "Purchase cable TV subscription"
+          },
+          "response": []
+        },
+        {
+          "name": "Purchase Education PIN",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"examType\": \"WAEC\",\n  \"quantity\": 1,\n  \"transactionPin\": \"1234\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/bills/education/purchase",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "bills", "education", "purchase"]
+            },
+            "description": "Purchase education PINs (WAEC, NECO, etc.)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "item": [
+        {
+          "name": "Admin Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@yareemadata.com\",\n  \"password\": \"Admin@1234\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "login"]
+            },
+            "description": "Admin login (uses same endpoint)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Dashboard Stats",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/dashboard",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "dashboard"]
+            },
+            "description": "Get admin dashboard statistics"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Users",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/users?page=1&limit=20&search=john&role=user&isActive=true",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "users"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "search",
+                  "value": "john"
+                },
+                {
+                  "key": "role",
+                  "value": "user"
+                },
+                {
+                  "key": "isActive",
+                  "value": "true"
+                }
+              ]
+            },
+            "description": "Get users list with filters"
+          },
+          "response": []
+        },
+        {
+          "name": "Get User Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/users/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "users", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "user_id_here"
+                }
+              ]
+            },
+            "description": "Get detailed user information"
+          },
+          "response": []
+        },
+        {
+          "name": "Suspend User",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Violation of terms of service\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/users/:id/suspend",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "users", ":id", "suspend"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "user_id_here"
+                }
+              ]
+            },
+            "description": "Suspend user account"
+          },
+          "response": []
+        },
+        {
+          "name": "Activate User",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/users/:id/activate",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "users", ":id", "activate"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "user_id_here"
+                }
+              ]
+            },
+            "description": "Activate suspended user account"
+          },
+          "response": []
+        },
+        {
+          "name": "Reset Transaction PIN",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/users/:id/reset-pin",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "users", ":id", "reset-pin"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "user_id_here"
+                }
+              ]
+            },
+            "description": "Reset user's transaction PIN"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Wallets",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/wallets?page=1&limit=20&minBalance=0&maxBalance=1000000",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "wallets"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "minBalance",
+                  "value": "0"
+                },
+                {
+                  "key": "maxBalance",
+                  "value": "1000000"
+                }
+              ]
+            },
+            "description": "Get all wallets with filters"
+          },
+          "response": []
+        },
+        {
+          "name": "Get User Wallet",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/wallets/:userId",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "wallets", ":userId"],
+              "variable": [
+                {
+                  "key": "userId",
+                  "value": "user_id_here"
+                }
+              ]
+            },
+            "description": "Get specific user's wallet"
+          },
+          "response": []
+        },
+        {
+          "name": "Credit Wallet",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 5000,\n  \"reason\": \"Manual credit by admin\",\n  \"reference\": \"ADMIN-CREDIT-001\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/wallets/:userId/credit",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "wallets", ":userId", "credit"],
+              "variable": [
+                {
+                  "key": "userId",
+                  "value": "user_id_here"
+                }
+              ]
+            },
+            "description": "Manually credit user wallet"
+          },
+          "response": []
+        },
+        {
+          "name": "Debit Wallet",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 1000,\n  \"reason\": \"Manual debit by admin\",\n  \"reference\": \"ADMIN-DEBIT-001\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/wallets/:userId/debit",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "wallets", ":userId", "debit"],
+              "variable": [
+                {
+                  "key": "userId",
+                  "value": "user_id_here"
+                }
+              ]
+            },
+            "description": "Manually debit user wallet"
+          },
+          "response": []
+        },
+        {
+          "name": "Lock Wallet",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Suspicious activity detected\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/wallets/:userId/lock",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "wallets", ":userId", "lock"],
+              "variable": [
+                {
+                  "key": "userId",
+                  "value": "user_id_here"
+                }
+              ]
+            },
+            "description": "Lock user wallet"
+          },
+          "response": []
+        },
+        {
+          "name": "Unlock Wallet",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/wallets/:userId/unlock",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "wallets", ":userId", "unlock"],
+              "variable": [
+                {
+                  "key": "userId",
+                  "value": "user_id_here"
+                }
+              ]
+            },
+            "description": "Unlock user wallet"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Transactions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/transactions?page=1&limit=20&type=data_recharge&status=successful&startDate=2024-01-01&endDate=2024-12-31",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "transactions"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "type",
+                  "value": "data_recharge"
+                },
+                {
+                  "key": "status",
+                  "value": "successful"
+                },
+                {
+                  "key": "startDate",
+                  "value": "2024-01-01"
+                },
+                {
+                  "key": "endDate",
+                  "value": "2024-12-31"
+                }
+              ]
+            },
+            "description": "Get transactions with filters"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Transaction Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/transactions/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "transactions", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "transaction_id_here"
+                }
+              ]
+            },
+            "description": "Get detailed transaction information"
+          },
+          "response": []
+        },
+        {
+          "name": "Refund Transaction",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Service not delivered\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/transactions/:id/refund",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "transactions", ":id", "refund"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "transaction_id_here"
+                }
+              ]
+            },
+            "description": "Refund a failed transaction"
+          },
+          "response": []
+        },
+        {
+          "name": "Retry Failed Transactions",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"data_recharge\",\n  \"provider\": \"mtn\",\n  \"limit\": 10\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/transactions/retry-failed",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "transactions", "retry-failed"]
+            },
+            "description": "Retry multiple failed transactions"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Service Pricing",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/pricing?serviceType=data_recharge&network=mtn&isActive=true",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "pricing"],
+              "query": [
+                {
+                  "key": "serviceType",
+                  "value": "data_recharge"
+                },
+                {
+                  "key": "network",
+                  "value": "mtn"
+                },
+                {
+                  "key": "isActive",
+                  "value": "true"
+                }
+              ]
+            },
+            "description": "Get service pricing with filters"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Service Pricing",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"serviceType\": \"data_recharge\",\n  \"provider\": \"mtn\",\n  \"network\": \"mtn\",\n  \"planName\": \"MTN 3GB\",\n  \"planCode\": \"MTN-3GB\",\n  \"validity\": \"30 days\",\n  \"dataAmount\": \"3GB\",\n  \"costPrice\": 750,\n  \"sellingPrice\": 800,\n  \"isActive\": true,\n  \"isAvailable\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/pricing",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "pricing"]
+            },
+            "description": "Create new service pricing"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Service Pricing",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sellingPrice\": 850,\n  \"isAvailable\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/pricing/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "pricing", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "pricing_id_here"
+                }
+              ]
+            },
+            "description": "Update service pricing"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Service Pricing",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/pricing/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "pricing", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "pricing_id_here"
+                }
+              ]
+            },
+            "description": "Delete service pricing (marks as inactive)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Providers",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/providers?status=active&serviceType=data_recharge",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "providers"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "active"
+                },
+                {
+                  "key": "serviceType",
+                  "value": "data_recharge"
+                }
+              ]
+            },
+            "description": "Get provider status and information"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Provider Status",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"maintenance\",\n  \"maintenanceMessage\": \"Scheduled maintenance from 2AM to 4AM\",\n  \"maintenanceStart\": \"2024-01-15T02:00:00Z\",\n  \"maintenanceEnd\": \"2024-01-15T04:00:00Z\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/providers/:name/status",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "providers", ":name", "status"],
+              "variable": [
+                {
+                  "key": "name",
+                  "value": "mtn"
+                }
+              ]
+            },
+            "description": "Update provider status"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Admin Logs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/logs?page=1&limit=20&action=update&entity=user&startDate=2024-01-01",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "logs"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "action",
+                  "value": "update"
+                },
+                {
+                  "key": "entity",
+                  "value": "user"
+                },
+                {
+                  "key": "startDate",
+                  "value": "2024-01-01"
+                }
+              ]
+            },
+            "description": "Get admin activity logs"
+          },
+          "response": []
+        },
+        {
+          "name": "Broadcast Notification",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"System Maintenance\",\n  \"message\": \"The platform will be undergoing maintenance from 2AM to 4AM on January 15, 2024.\",\n  \"type\": \"info\",\n  \"targetUsers\": \"all\",\n  \"sendEmail\": true,\n  \"sendSMS\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/broadcast",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "broadcast"]
+            },
+            "description": "Send broadcast notification to users"
+          },
+          "response": []
+        },
+        {
+          "name": "Get System Settings",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/settings",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "settings"]
+            },
+            "description": "Get system settings"
+          },
+          "response": []
+        },
+        {
+          "name": "Update System Settings",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"settings\": {\n    \"fees\": {\n      \"walletTransferFee\": 0.025,\n      \"walletTransferMinFee\": 15\n    },\n    \"limits\": {\n      \"dailyTransactionLimit\": 2000000\n    }\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/settings",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "settings"]
+            },
+            "description": "Update system settings"
+          },
+          "response": []
+        },
+        {
+          "name": "Export Data",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"transactions\",\n  \"format\": \"csv\",\n  \"startDate\": \"2024-01-01\",\n  \"endDate\": \"2024-01-31\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/export",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "export"]
+            },
+            "description": "Export data (transactions, users, wallets)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Webhooks",
+      "item": [
+        {
+          "name": "Paystack Webhook",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-paystack-signature",
+                "value": "paystack_signature_here"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"charge.success\",\n  \"data\": {\n    \"reference\": \"REF-123456789\",\n    \"amount\": 500000,\n    \"status\": \"success\",\n    \"gateway_response\": \"Successful\",\n    \"paid_at\": \"2024-01-01T12:00:00.000Z\",\n    \"created_at\": \"2024-01-01T11:55:00.000Z\",\n    \"channel\": \"card\",\n    \"currency\": \"NGN\",\n    \"ip_address\": \"197.210.76.68\",\n    \"metadata\": {\n      \"custom_fields\": [\n        {\n          \"display_name\": \"Invoice ID\",\n          \"variable_name\": \"invoice_id\",\n          \"value\": \"INV-001\"\n        }\n      ]\n    },\n    \"customer\": {\n      \"id\": 123456,\n      \"first_name\": \"John\",\n      \"last_name\": \"Doe\",\n      \"email\": \"john.doe@example.com\",\n      \"customer_code\": \"CUS_123456\",\n      \"phone\": \"08012345678\"\n    }\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/webhook/paystack",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "webhook", "paystack"]
+            },
+            "description": "Paystack payment webhook"
+          },
+          "response": []
+        },
+        {
+          "name": "Monnify Webhook",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"eventType\": \"SUCCESSFUL_TRANSACTION\",\n  \"eventData\": {\n    \"product\": {\n      \"reference\": \"REF-123456789\"\n    },\n    \"transactionReference\": \"MONNIFY_REF_123\",\n    \"paymentReference\": \"PYTM_1234567890\",\n    \"paidOn\": \"2024-01-01 12:00:00.000\",\n    \"paymentDescription\": \"Wallet Funding\",\n    \"paymentSource\": \"ACCOUNT_TRANSFER\",\n    \"paymentStatus\": \"PAID\",\n    \"amountPaid\": 500000,\n    \"totalPayable\": 500000,\n    \"cardDetails\": null,\n    \"accountDetails\": {\n      \"accountName\": \"John Doe\",\n      \"accountNumber\": \"1234567890\",\n      \"bankCode\": \"058\",\n      \"bankName\": \"Guaranty Trust Bank\"\n    },\n    \"currency\": \"NGN\",\n    \"paymentMethod\": \"ACCOUNT_TRANSFER\",\n    \"customer\": {\n      \"email\": \"john.doe@example.com\",\n      \"name\": \"John Doe\"\n    }\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/webhook/monnify",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "webhook", "monnify"]
+            },
+            "description": "Monnify payment webhook"
+          },
+          "response": []
+        },
+        {
+          "name": "Flutterwave Webhook",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "verif-hash",
+                "value": "flutterwave_verif_hash_here"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"charge.completed\",\n  \"data\": {\n    \"id\": 1234567,\n    \"tx_ref\": \"REF-123456789\",\n    \"flw_ref\": \"FLW123456789\",\n    \"device_fingerprint\": \"a1b2c3d4e5f6\",\n    \"amount\": 500000,\n    \"currency\": \"NGN\",\n    \"charged_amount\": 500000,\n    \"app_fee\": 7500,\n    \"merchant_fee\": 0,\n    \"processor_response\": \"Approved\",\n    \"auth_model\": \"PIN\",\n    \"ip\": \"197.210.76.68\",\n    \"narration\": \"Wallet Funding\",\n    \"status\": \"successful\",\n    \"payment_type\": \"card\",\n    \"created_at\": \"2024-01-01T12:00:00.000Z\",\n    \"account_id\": 12345,\n    \"customer\": {\n      \"id\": 123456,\n      \"name\": \"John Doe\",\n      \"phone_number\": \"08012345678\",\n      \"email\": \"john.doe@example.com\",\n      \"created_at\": \"2024-01-01T11:55:00.000Z\"\n    },\n    \"card\": {\n      \"first_6digits\": \"123456\",\n      \"last_4digits\": \"7890\",\n      \"issuer\": \"MASTERCARD\",\n      \"country\": \"NG\",\n      \"type\": \"MASTERCARD\",\n      \"expiry\": \"01/30\"\n    }\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/webhook/flutterwave",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "webhook", "flutterwave"]
+            },
+            "description": "Flutterwave payment webhook"
+          },
+          "response": []
+        },
+        {
+          "name": "Provider Callback",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transactionId\": \"PROV-123456789\",\n  \"reference\": \"REF-123456789\",\n  \"status\": \"SUCCESS\",\n  \"message\": \"Transaction completed successfully\",\n  \"phoneNumber\": \"08012345678\",\n  \"amount\": 500,\n  \"network\": \"MTN\",\n  \"token\": \"1234567890ABCDEF\",\n  \"date\": \"2024-01-01T12:00:00.000Z\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/webhook/provider/:providerName",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "webhook", "provider", ":providerName"],
+              "variable": [
+                {
+                  "key": "providerName",
+                  "value": "mtn"
+                }
+              ]
+            },
+            "description": "Provider transaction callback"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Utilities",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/health",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "health"]
+            },
+            "description": "Check API health status"
+          },
+          "response": []
+        },
+        {
+          "name": "Check Provider Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/check-provider/:providerName",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "check-provider", ":providerName"],
+              "variable": [
+                {
+                  "key": "providerName",
+                  "value": "mtn"
+                }
+              ]
+            },
+            "description": "Check specific provider status"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Transaction Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/transaction/status/:reference",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "transaction", "status", ":reference"],
+              "variable": [
+                {
+                  "key": "reference",
+                  "value": "REF-123456789"
+                }
+              ]
+            },
+            "description": "Check transaction status by reference"
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:5000",
+      "type": "string"
+    },
+    {
+      "key": "auth_token",
+      "value": "user_jwt_token_here",
+      "type": "string"
+    },
+    {
+      "key": "admin_token",
+      "value": "admin_jwt_token_here",
+      "type": "string"
+    },
+    {
+      "key": "plan_id",
+      "value": "data_plan_id_here",
+      "type": "string"
+    },
+    {
+      "key": "user_id_here",
+      "value": "user_object_id_here",
+      "type": "string"
+    },
+    {
+      "key": "transaction_id_here",
+      "value": "transaction_object_id_here",
+      "type": "string"
+    },
+    {
+      "key": "pricing_id_here",
+      "value": "pricing_object_id_here",
+      "type": "string"
+    },
+    {
+      "key": "reset_token_here",
+      "value": "password_reset_token_here",
+      "type": "string"
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "console.log('Request started at: ' + new Date().toISOString());"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "pm.test('Status code is 200', function () {",
+          "    pm.response.to.have.status(200);",
+          "});",
+          "",
+          "pm.test('Response time is less than 500ms', function () {",
+          "    pm.expect(pm.response.responseTime).to.be.below(500);",
+          "});"
+        ]
+      }
+    }
+  ],
+  "auth": null
+}
