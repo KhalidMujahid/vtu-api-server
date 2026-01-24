@@ -87,8 +87,8 @@ exports.register = async (req, res, next) => {
     user.verificationTokenExpires = Date.now() + 10 * 60 * 1000; 
     await user.save();
     
-    await sendOTPEmail(user.email, otp);
-    await sendOTPSMS(user.phoneNumber, otp);
+    // await sendOTPEmail(user.email, otp);
+    // await sendOTPSMS(user.phoneNumber, otp);
     
     createSendToken(user, 201, res);
     

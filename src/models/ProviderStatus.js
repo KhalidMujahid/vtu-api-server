@@ -15,6 +15,9 @@ const providerStatusSchema = new mongoose.Schema({
       'electricity',
       'cable_tv',
       'education_pin',
+      'airtime_swap',
+      'sme_data',
+      'recharge_pin'
     ],
   }],
   
