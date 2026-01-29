@@ -141,9 +141,9 @@ class AdminController {
             lastChecked: p.lastChecked,
           })),
           charts: {
-            dailyTransactions: await this.getDailyTransactionChart(),
-            userGrowth: await this.getUserGrowthChart(),
-            revenueByService: await this.getRevenueByServiceChart(),
+            dailyTransactions: await AdminController.getDailyTransactionChart(),
+            userGrowth: await AdminController.getUserGrowthChart(),
+            revenueByService: await AdminController.getRevenueByServiceChart(),
           },
         },
       });
