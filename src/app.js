@@ -13,7 +13,7 @@ const adminRoutes = require('./routes/adminRoutes');
 // const webhookRoutes = require('./routes/webhookRoutes');
 // const agentRoutes = require('/routes/agentRoutes');
 
-const errorHandler = require('./middlewares/errorHandler');
+const { errorHandler } = require('./middlewares/errorHandler');
 const logger = require('./utils/logger');
 
 const app = express();
@@ -57,6 +57,9 @@ app.get('/api/v1/health', (req, res) => {
   });
 });
 
+app.use(errorHandler);
+
+
 app.all('*', (req, res) => {
   res.status(404).json({
     status: 'error',
@@ -64,6 +67,5 @@ app.all('*', (req, res) => {
   });
 });
 
-// app.use(errorHandler);
 
 module.exports = app;
