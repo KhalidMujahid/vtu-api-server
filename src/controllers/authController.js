@@ -5,6 +5,7 @@ const WalletService = require('../services/walletService');
 const { sendOTPEmail, sendOTPSMS } = require('../utils/emailService');
 const { AppError } = require('../middlewares/errorHandler');
 const logger = require('../utils/logger');
+const { normalizePhone } = require('../utils/normalizePhone');
 
 const signToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, {
@@ -49,6 +50,13 @@ exports.register = async (req, res, next) => {
       password,
       referralCode,
     } = req.body;
+
+    const normalizedPhone = normalizePhone(phoneNumber);
+    if (!normalizedPhone) {
+      return next(
+        new AppError('Invalid phone number', 400)
+      );
+    }
     
     const existingUser = await User.findOne({
       $or: [{ email }, { phoneNumber }],
@@ -394,4 +402,5 @@ exports.updateProfile = async (req, res, next) => {
   } catch (error) {
     next(error);
   }
+
 };
