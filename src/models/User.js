@@ -75,12 +75,83 @@ const userSchema = new mongoose.Schema({
   
   role: {
     type: String,
-    enum: ['user', 'staff', 'admin', 'super_admin'],
+    enum: ['user', 'agent', 'staff', 'admin', 'super_admin'],
     default: 'user',
   },
   isActive: {
     type: Boolean,
     default: true,
+  },
+  
+  // Agent specific fields
+  agentInfo: {
+    agentId: {
+      type: String,
+      unique: true,
+      sparse: true,
+    },
+    commissionRate: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 50, // Maximum 50% commission
+    },
+    totalCommissionEarned: {
+      type: Number,
+      default: 0,
+    },
+    availableCommission: {
+      type: Number,
+      default: 0,
+    },
+    totalTransactions: {
+      type: Number,
+      default: 0,
+    },
+    totalTransactionAmount: {
+      type: Number,
+      default: 0,
+    },
+    performanceRating: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 5,
+    },
+    referralCode: {
+      type: String,
+      unique: true,
+      sparse: true,
+    },
+    isVerified: {
+      type: Boolean,
+      default: false,
+    },
+    verificationDocuments: [{
+      documentType: String,
+      documentUrl: String,
+      verified: {
+        type: Boolean,
+        default: false,
+      },
+      uploadedAt: Date,
+    }],
+    assignedArea: {
+      state: String,
+      city: String,
+      lga: String,
+    },
+    bankDetails: {
+      bankName: String,
+      accountNumber: String,
+      accountName: String,
+      isVerified: {
+        type: Boolean,
+        default: false,
+      },
+    },
+    activationDate: Date,
+    lastCommissionWithdrawal: Date,
   },
   
   dateOfBirth: Date,
@@ -139,6 +210,18 @@ userSchema.pre('save', async function(next) {
   if (!this.referralCode) {
     this.referralCode = Math.random().toString(36).substring(2, 8).toUpperCase();
   }
+  
+  if (this.role === 'agent' && !this.agentInfo?.agentId) {
+    this.agentInfo = this.agentInfo || {};
+    const timestamp = Date.now().toString().slice(-6);
+    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+    this.agentInfo.agentId = `AGT${timestamp}${random}`;
+    
+    if (!this.agentInfo.referralCode) {
+      this.agentInfo.referralCode = `AGENT${this.referralCode}`;
+    }
+  }
+  
   next();
 });
 
@@ -175,6 +258,34 @@ userSchema.methods.incrementLoginAttempts = function() {
 userSchema.virtual('fullName').get(function() {
   return `${this.firstName} ${this.lastName}`;
 });
+
+userSchema.virtual('isAgent').get(function() {
+  return this.role === 'agent';
+});
+
+
+userSchema.statics.findByAgentId = function(agentId) {
+  return this.findOne({ 'agentInfo.agentId': agentId });
+};
+
+userSchema.methods.calculatePerformanceRating = async function() {
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  
+  const recentTransactions = await mongoose.model('Transaction').countDocuments({
+    user: this._id,
+    createdAt: { $gte: thirtyDaysAgo },
+    status: 'successful'
+  });
+  
+  let rating = 0;
+  if (recentTransactions >= 50) rating = 5;
+  else if (recentTransactions >= 30) rating = 4;
+  else if (recentTransactions >= 15) rating = 3;
+  else if (recentTransactions >= 5) rating = 2;
+  else if (recentTransactions > 0) rating = 1;
+  
+  return rating;
+};
 
 const User = mongoose.model('User', userSchema);
 module.exports = User;

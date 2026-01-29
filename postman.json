@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "yareema-data-hub-api",
     "name": "Yareema Data Hub API",
-    "description": "Complete Nigerian VTU & Utility Platform API",
+    "description": "Complete Nigerian VTU & Utility Platform API with Agent System",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -33,6 +33,29 @@
           "response": []
         },
         {
+          "name": "Agent Register",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Agent\",\n  \"lastName\": \"Smith\",\n  \"email\": \"agent.smith@example.com\",\n  \"phoneNumber\": \"08087654321\",\n  \"password\": \"Agent@123\",\n  \"referralCode\": \"AGTREF001\",\n  \"businessName\": \"Smith Enterprises\",\n  \"businessAddress\": \"123 Business Street, Lagos\",\n  \"state\": \"Lagos\",\n  \"city\": \"Ikeja\",\n  \"idType\": \"nin\",\n  \"idNumber\": \"12345678901\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/agents/register",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "agents", "register"]
+            },
+            "description": "Register as an agent (requires approval)"
+          },
+          "response": []
+        },
+        {
           "name": "Login",
           "request": {
             "method": "POST",
@@ -52,6 +75,29 @@
               "path": ["api", "v1", "auth", "login"]
             },
             "description": "Login with email and password"
+          },
+          "response": []
+        },
+        {
+          "name": "Agent Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"agent.smith@example.com\",\n  \"password\": \"Agent@123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/agents/login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "agents", "login"]
+            },
+            "description": "Agent login (separate endpoint)"
           },
           "response": []
         },
@@ -250,6 +296,450 @@
               "path": ["api", "v1", "auth", "set-transaction-pin"]
             },
             "description": "Set transaction PIN (4 digits)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Agents",
+      "item": [
+        {
+          "name": "Agent Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{agent_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/agents/dashboard",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "agents", "dashboard"]
+            },
+            "description": "Get agent dashboard statistics"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Agent Services",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{agent_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/agents/services",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "agents", "services"]
+            },
+            "description": "Get available services for agents"
+          },
+          "response": []
+        },
+        {
+          "name": "Purchase Airtime (Agent)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{agent_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phoneNumber\": \"08012345678\",\n  \"amount\": 500,\n  \"network\": \"mtn\",\n  \"requestId\": \"AIR-001\",\n  \"bypassOTP\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/agents/purchase/airtime",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "agents", "purchase", "airtime"]
+            },
+            "description": "Purchase airtime as agent"
+          },
+          "response": []
+        },
+        {
+          "name": "Purchase Data (Agent)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{agent_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phoneNumber\": \"08012345678\",\n  \"planId\": \"{{plan_id}}\",\n  \"requestId\": \"DATA-001\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/agents/purchase/data",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "agents", "purchase", "data"]
+            },
+            "description": "Purchase data plan as agent"
+          },
+          "response": []
+        },
+        {
+          "name": "Pay Bill (Agent)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{agent_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"serviceType\": \"electricity\",\n  \"meterNumber\": \"12345678901\",\n  \"amount\": 2000,\n  \"provider\": \"aedc\",\n  \"requestId\": \"BILL-001\",\n  \"customerDetails\": {\n    \"name\": \"John Doe\",\n    \"phone\": \"08012345678\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/agents/pay-bill",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "agents", "pay-bill"]
+            },
+            "description": "Pay bills (electricity, cable TV) as agent"
+          },
+          "response": []
+        },
+        {
+          "name": "Verify Customer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{agent_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"serviceType\": \"electricity\",\n  \"customerId\": \"12345678901\",\n  \"provider\": \"aedc\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/agents/verify-customer",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "agents", "verify-customer"]
+            },
+            "description": "Verify customer details for bill payments"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Agent Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{agent_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/agents/profile",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "agents", "profile"]
+            },
+            "description": "Get agent profile details"
+          },
+          "response": []
+        },
+        {
+          "name": "Admin: Get All Agents",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/agents/agents?page=1&limit=20&search=smith&state=Lagos&isVerified=true&minCommission=0&maxCommission=10000",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "agents", "agents"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "search",
+                  "value": "smith"
+                },
+                {
+                  "key": "state",
+                  "value": "Lagos"
+                },
+                {
+                  "key": "isVerified",
+                  "value": "true"
+                },
+                {
+                  "key": "minCommission",
+                  "value": "0"
+                },
+                {
+                  "key": "maxCommission",
+                  "value": "10000"
+                }
+              ]
+            },
+            "description": "Get all agents with filters (Admin only)"
+          },
+          "response": []
+        },
+        {
+          "name": "Admin: Get Agent Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/agents/agents/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "agents", "agents", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "agent_id_here"
+                }
+              ]
+            },
+            "description": "Get detailed agent information (Admin only)"
+          },
+          "response": []
+        },
+        {
+          "name": "Admin: Create Agent",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Jane\",\n  \"lastName\": \"Smith\",\n  \"email\": \"jane.smith@example.com\",\n  \"phoneNumber\": \"08098765432\",\n  \"password\": \"Agent@1234\",\n  \"commissionRate\": 5.5,\n  \"assignedArea\": {\n    \"state\": \"Lagos\",\n    \"city\": \"Ikeja\",\n    \"zone\": \"Central\"\n  },\n  \"bankDetails\": {\n    \"bankName\": \"Guaranty Trust Bank\",\n    \"accountNumber\": \"1234567890\",\n    \"accountName\": \"Jane Smith\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/agents/agents",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "agents", "agents"]
+            },
+            "description": "Create new agent (Admin only)"
+          },
+          "response": []
+        },
+        {
+          "name": "Admin: Update Agent",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"commissionRate\": 6.0,\n  \"isVerified\": true,\n  \"isActive\": true,\n  \"assignedArea\": {\n    \"zone\": \"East\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/agents/agents/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "agents", "agents", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "agent_id_here"
+                }
+              ]
+            },
+            "description": "Update agent details (Admin only)"
+          },
+          "response": []
+        },
+        {
+          "name": "Admin: Verify Agent Documents",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"documentType\": \"nin_slip\",\n  \"status\": \"approved\",\n  \"remarks\": \"Document verified successfully\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/agents/agents/:id/verify-documents",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "agents", "agents", ":id", "verify-documents"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "agent_id_here"
+                }
+              ]
+            },
+            "description": "Verify agent documents (Admin only)"
+          },
+          "response": []
+        },
+        {
+          "name": "Admin: Get Agent Performance",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/agents/agents/:id/performance?period=monthly",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "agents", "agents", ":id", "performance"],
+              "query": [
+                {
+                  "key": "period",
+                  "value": "monthly"
+                }
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "agent_id_here"
+                }
+              ]
+            },
+            "description": "Get agent performance report (Admin only)"
+          },
+          "response": []
+        },
+        {
+          "name": "Admin: Get Agent Commission Report",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/agents/agents/:id/commission-report?startDate=2024-01-01&endDate=2024-12-31&page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "agents", "agents", ":id", "commission-report"],
+              "query": [
+                {
+                  "key": "startDate",
+                  "value": "2024-01-01"
+                },
+                {
+                  "key": "endDate",
+                  "value": "2024-12-31"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "agent_id_here"
+                }
+              ]
+            },
+            "description": "Get agent commission report (Admin only)"
+          },
+          "response": []
+        },
+        {
+          "name": "Admin: Process Commission Withdrawal",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 5000,\n  \"paymentMethod\": \"bank_transfer\",\n  \"reference\": \"COMM-WDL-001\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/agents/agents/:id/withdraw-commission",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "agents", "agents", ":id", "withdraw-commission"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "agent_id_here"
+                }
+              ]
+            },
+            "description": "Process agent commission withdrawal (Admin only)"
           },
           "response": []
         }
@@ -1759,6 +2249,11 @@
       "type": "string"
     },
     {
+      "key": "agent_token",
+      "value": "agent_jwt_token_here",
+      "type": "string"
+    },
+    {
       "key": "plan_id",
       "value": "data_plan_id_here",
       "type": "string"
@@ -1766,6 +2261,11 @@
     {
       "key": "user_id_here",
       "value": "user_object_id_here",
+      "type": "string"
+    },
+    {
+      "key": "agent_id_here",
+      "value": "agent_object_id_here",
       "type": "string"
     },
     {

@@ -402,5 +402,4 @@ exports.updateProfile = async (req, res, next) => {
   } catch (error) {
     next(error);
   }
-
 };
