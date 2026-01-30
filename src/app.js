@@ -11,7 +11,7 @@ const telecomRoutes = require('./routes/telecomRoutes');
 const billsRoutes = require('./routes/billsRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 // const webhookRoutes = require('./routes/webhookRoutes');
-const agentRoutes = require('/routes/agentRoutes');
+const agentRoutes = require('./routes/agentRoutes');
 
 const { errorHandler } = require('./middlewares/errorHandler');
 const logger = require('./utils/logger');
