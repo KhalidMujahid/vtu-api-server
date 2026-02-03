@@ -238,6 +238,7 @@ userSchema.methods.isLocked = function() {
   return this.lockUntil && this.lockUntil > Date.now();
 };
 
+
 userSchema.methods.incrementLoginAttempts = function() {
   if (this.lockUntil && this.lockUntil < Date.now()) {
     return this.updateOne({

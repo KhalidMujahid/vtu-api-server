@@ -6,6 +6,35 @@ const { AppError } = require('../middlewares/errorHandler');
 const logger = require('../utils/logger');
 const crypto = require('crypto');
 
+const signToken = (id) => {
+  return jwt.sign({ id }, process.env.JWT_SECRET, {
+    expiresIn: process.env.JWT_EXPIRE,
+  });
+};
+
+const signRefreshToken = (id) => {
+  return jwt.sign({ id }, process.env.REFRESH_TOKEN_SECRET, {
+    expiresIn: process.env.REFRESH_TOKEN_EXPIRE,
+  });
+};
+
+const createSendToken = (user, statusCode, res) => {
+  const token = signToken(user._id);
+  const refreshToken = signRefreshToken(user._id);
+  
+  user.password = undefined;
+  user.transactionPin = undefined;
+  
+  res.status(statusCode).json({
+    status: 'success',
+    token,
+    refreshToken,
+    data: {
+      user,
+    },
+  });
+};
+
 class AgentController {
   static async getAgents(req, res, next) {
     try {
@@ -882,12 +911,15 @@ class AgentController {
             return next(new AppError('Invalid credentials', 401));
           }
           
-          // Generate JWT token
-          const token = agent.generateAuthToken();
-          
-          // Update last login
           agent.lastLogin = new Date();
-          await agent.save();
+          agent.lastLoginIp = req.ip;
+          agent.lastLoginDevice = req.get('user-agent');
+          agent.failedLoginAttempts = 0;
+          agent.lockUntil = undefined;
+          
+          await agent.save({ validateBeforeSave: false });
+          
+          createSendToken(agent, 200, res);
           
           // Log the login
           await AdminLog.log({
@@ -972,7 +1004,6 @@ class AgentController {
             }
           }
           
-          // Create agent with pending status
           const agentData = {
             firstName,
             lastName,
@@ -982,7 +1013,7 @@ class AgentController {
             role: 'agent',
             isEmailVerified: false,
             isPhoneVerified: false,
-            isActive: false, // Will be activated after admin approval
+            isActive: false,
             kycStatus: 'pending',
             referredBy: referringAgent?._id,
             agentInfo: {
@@ -1008,16 +1039,14 @@ class AgentController {
             balance: 0,
           });
           
-          // Generate email verification token
           const verificationToken = crypto.randomBytes(32).toString('hex');
           agent.emailVerificationToken = crypto
             .createHash('sha256')
             .update(verificationToken)
             .digest('hex');
-          agent.emailVerificationExpires = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
+          agent.emailVerificationExpires = Date.now() + 24 * 60 * 60 * 1000;
           await agent.save();
-          
-          // TODO: Send verification email
+
           // await sendVerificationEmail(agent.email, verificationToken);
           
           // Log registration
