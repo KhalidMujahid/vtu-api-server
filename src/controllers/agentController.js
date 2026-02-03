@@ -5,6 +5,7 @@ const AdminLog = require('../models/AdminLog');
 const { AppError } = require('../middlewares/errorHandler');
 const logger = require('../utils/logger');
 const crypto = require('crypto');
+const jwt = require("jsonwebtoken");
 
 const signToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, {
