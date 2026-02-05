@@ -1,6 +1,7 @@
 const User = require('../models/User');
 const Wallet = require('../models/Wallet');
 const Transaction = require('../models/Transaction');
+const ServicePricing = require("../models/ServicePricing");
 const AdminLog = require('../models/AdminLog');
 const { AppError } = require('../middlewares/errorHandler');
 const logger = require('../utils/logger');
@@ -828,7 +829,7 @@ class AgentController {
         },
       });
       
-      // Simulate payment processing (in real implementation, this would call payment gateway)
+      // Simulate payment processing
       setTimeout(async () => {
         try {
           await Transaction.findByIdAndUpdate(transaction._id, {
@@ -887,7 +888,6 @@ class AgentController {
             return next(new AppError('Please provide email/phone and password', 400));
           }
     
-          // Find agent by email or phone
           const query = { 
             role: 'agent',
             $or: []
@@ -920,8 +920,6 @@ class AgentController {
           
           await agent.save({ validateBeforeSave: false });
           
-          createSendToken(agent, 200, res);
-          
           // Log the login
           await AdminLog.log({
             admin: agent._id,
@@ -936,26 +934,28 @@ class AgentController {
             status: 'success',
           });
           
-          res.status(200).json({
-            status: 'success',
-            message: 'Login successful',
-            data: {
-              token,
-              agent: {
-                id: agent._id,
-                firstName: agent.firstName,
-                lastName: agent.lastName,
-                email: agent.email,
-                phoneNumber: agent.phoneNumber,
-                agentId: agent.agentInfo.agentId,
-                referralCode: agent.agentInfo.referralCode,
-                commissionRate: agent.agentInfo.commissionRate,
-                isVerified: agent.agentInfo.isVerified,
-              },
-            },
-          });
-          
           logger.info(`Agent login: ${agent.email}, Agent ID: ${agent.agentInfo.agentId}`);
+          
+          createSendToken(agent, 200, res);
+          
+          // res.status(200).json({
+          //   status: 'success',
+          //   message: 'Login successful',
+          //   data: {
+          //     agent: {
+          //       id: agent._id,
+          //       firstName: agent.firstName,
+          //       lastName: agent.lastName,
+          //       email: agent.email,
+          //       phoneNumber: agent.phoneNumber,
+          //       agentId: agent.agentInfo.agentId,
+          //       referralCode: agent.agentInfo.referralCode,
+          //       commissionRate: agent.agentInfo.commissionRate,
+          //       isVerified: agent.agentInfo.isVerified,
+          //     },
+          //   },
+          // });
+          
           
         } catch (error) {
           logger.error('Error during agent login:', error);
@@ -1173,7 +1173,6 @@ class AgentController {
           }
           
           // TODO: Integrate with airtime API
-          // Simulate API call
           const apiResponse = {
             success: true,
             reference: transaction.reference,
@@ -1744,7 +1743,7 @@ class AgentController {
           }
           
           // TODO: Integrate with verification API
-          // Simulate verification
+          
           const verificationResponse = {
             success: true,
             data: {
