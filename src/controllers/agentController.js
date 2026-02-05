@@ -2,6 +2,7 @@ const User = require('../models/User');
 const Wallet = require('../models/Wallet');
 const Transaction = require('../models/Transaction');
 const ServicePricing = require("../models/ServicePricing");
+const ProviderStatus  = require("../models/ProviderStatus");
 const AdminLog = require('../models/AdminLog');
 const { AppError } = require('../middlewares/errorHandler');
 const logger = require('../utils/logger');
