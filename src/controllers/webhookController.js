@@ -110,6 +110,33 @@ exports.flutterwaveWebhook = async (req, res, next) => {
   }
 };
 
+exports.providerCallback = async (req, res, next) => {
+  try {
+    const { providerName } = req.params;
+    const callbackData = req.body;
+    
+    logger.info(`Provider callback received from ${providerName}:`, callbackData);
+    
+    // Process provider callback based on provider
+    switch (providerName.toLowerCase()) {
+      case 'mtn':
+      case 'airtel':
+      case 'glo':
+      case '9mobile':
+        // Handle provider-specific callback logic
+        // You might want to update transaction status based on the callback
+        break;
+      default:
+        logger.warn(`Unknown provider callback: ${providerName}`);
+    }
+    
+    res.status(200).json({ status: 'success' });
+  } catch (error) {
+    logger.error('Provider callback error:', error);
+    res.status(400).json({ status: 'error', message: error.message });
+  }
+};
+
 async function handleSuccessfulPayment(paymentData) {
   try {
     const { reference, amount } = paymentData;

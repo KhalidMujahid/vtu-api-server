@@ -10,7 +10,7 @@ const walletRoutes = require('./routes/walletRoutes');
 const telecomRoutes = require('./routes/telecomRoutes');
 const billsRoutes = require('./routes/billsRoutes');
 const adminRoutes = require('./routes/adminRoutes');
-// const webhookRoutes = require('./routes/webhookRoutes');
+const webhookRoutes = require('./routes/webhookRoutes');
 const agentRoutes = require('./routes/agentRoutes');
 
 const { errorHandler } = require('./middlewares/errorHandler');
@@ -47,7 +47,7 @@ app.use('/api/v1/telecom', telecomRoutes);
 app.use('/api/v1/bills', billsRoutes);
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/agent', agentRoutes);
-// app.use('/api/v1/webhook', webhookRoutes);
+app.use('/api/v1/webhook', webhookRoutes);
 
 app.get('/api/v1/health', (req, res) => {
   res.status(200).json({
