@@ -225,7 +225,6 @@ class TelecomService {
 
     return this.processWithProvider(transaction);
   }
-}
 
   static async processAirtimeRecharge(transaction, providerName) {
     try {
@@ -351,52 +350,6 @@ class TelecomService {
       
     } catch (error) {
       logger.error('Error in processRechargePin:', error);
-      throw error;
-    }
-  }
-
-  // Process SME/CG/Gifting data
-  static async processSMEData(transaction, providerName) {
-    try {
-      const { service } = transaction;
-      const config = this.providerConfigs[providerName];
-      
-      if (!config) {
-        throw new AppError(`Provider ${providerName} not configured`, 500);
-      }
-      
-      // Mock API call to provider
-      const mockResponse = {
-        success: true,
-        message: 'SME Data purchase successful',
-        data: {
-          transactionId: `SME-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
-          phoneNumber: service.phoneNumber,
-          network: service.provider.toUpperCase(),
-          plan: service.plan,
-          dataAmount: service.dataAmount,
-          validity: service.validity,
-          amount: transaction.amount,
-          date: new Date().toISOString(),
-          token: Math.random().toString(36).substring(2, 15).toUpperCase(),
-          reference: `SME-REF-${Date.now()}`,
-        },
-        provider: providerName,
-      };
-      
-      // Simulate API delay
-      await this.simulateDelay(1200, 3500);
-      
-      // Simulate occasional failure (12% chance for testing - SME data can be less reliable)
-      if (Math.random() < 0.12) {
-        throw new AppError(`Provider ${providerName} SME data service temporarily unavailable`, 503);
-      }
-      
-      logger.info(`SME Data purchase successful: ${service.phoneNumber}, Plan: ${service.plan}, Provider: ${providerName}`);
-      return mockResponse;
-      
-    } catch (error) {
-      logger.error('Error in processSMEData:', error);
       throw error;
     }
   }
