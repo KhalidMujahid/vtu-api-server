@@ -78,168 +78,154 @@ class TelecomService {
     },
   };
 
+  static apiConfig = {
+    baseUrl: process.env.VTU_BASE_URL,
+    token: process.env.VTU_API_TOKEN,
+    timeout: 30000,
+  };
+
   static async processWithProvider(transaction, preferredProvider = null) {
-    try {
-      const { type, service } = transaction;
-      
-      const providerName = preferredProvider || service.provider;
-      
-      if (!providerName) {
-        throw new AppError('No provider specified for transaction', 400);
-      }
+    const { type, service } = transaction;
 
-      const availableProviders = await this.getAvailableProviders(type, providerName);
-      
-      if (availableProviders.length === 0) {
-        throw new AppError('No available providers for this service', 503);
-      }
+    const providerName = preferredProvider || service.provider;
+    if (!providerName) throw new AppError('No provider specified', 400);
 
-      let lastError = null;
-      
-      for (const provider of availableProviders) {
-        try {
-          logger.info(`Processing ${type} with provider: ${provider.providerName}`);
-          
-          let result;
-          switch (type) {
-            case 'data_recharge':
-              result = await this.processDataRecharge(transaction, provider.providerName);
-              break;
-            case 'airtime_recharge':
-              result = await this.processAirtimeRecharge(transaction, provider.providerName);
-              break;
-            case 'airtime_swap':
-              result = await this.processAirtimeSwap(transaction, provider.providerName);
-              break;
-            case 'recharge_pin':
-              result = await this.processRechargePin(transaction, provider.providerName);
-              break;
-            case 'sme_data':
-              result = await this.processSMEData(transaction, provider.providerName);
-              break;
-            default:
-              throw new AppError(`Unsupported telecom service type: ${type}`, 400);
-          }
-          
-          await ProviderStatus.findOneAndUpdate(
-            { providerName: provider.providerName },
-            {
-              $inc: { successfulRequests: 1, totalRequests: 1 },
-              $set: { lastChecked: new Date() },
-            }
-          );
-          
-          logger.info(`Transaction ${transaction.reference} processed successfully with ${provider.providerName}`);
-          return result;
-          
-        } catch (error) {
-          lastError = error;
-          logger.error(`Provider ${provider.providerName} failed:`, error.message);
-          
-          await ProviderStatus.findOneAndUpdate(
-            { providerName: provider.providerName },
-            {
-              $inc: { failedRequests: 1, totalRequests: 1 },
-              $set: { lastChecked: new Date() },
-            }
-          );
-          
-          continue;
+    const providers = await this.getAvailableProviders(type, providerName);
+    if (!providers.length) throw new AppError('No available providers', 503);
+
+    let lastError;
+
+    for (const provider of providers) {
+      try {
+        let result;
+
+        if (type === 'data_recharge') {
+          result = await this.processDataRecharge(transaction, provider.providerName);
+        } else if (type === 'sme_data') {
+          result = await this.processSMEData(transaction, provider.providerName);
+        } else {
+          throw new AppError(`Unsupported service: ${type}`, 400);
         }
+
+        await this.markProviderSuccess(provider.providerName);
+        return result;
+
+      } catch (err) {
+        lastError = err;
+        await this.markProviderFailure(provider.providerName);
+        logger.error(`Provider ${provider.providerName} failed → ${err.message}`);
       }
-      
-      throw new AppError(
-        `All providers failed for transaction ${transaction.reference}: ${lastError?.message}`,
-        503
-      );
-      
-    } catch (error) {
-      logger.error('Error in processWithProvider:', error);
-      throw error;
     }
+
+    throw new AppError(`All providers failed → ${lastError?.message}`, 503);
   }
 
-  static async getAvailableProviders(serviceType, preferredProvider = null) {
-    try {
-      const query = {
-        supportedServices: serviceType,
-        status: { $in: ['active', 'degraded'] },
-      };
-      
-      const providers = await ProviderStatus.find(query)
-        .sort({ priority: 1, successRate: -1 })
-        .lean();
-      
-      const availableProviders = providers.filter(provider => {
-        if (provider.status === 'maintenance') return false;
-        if (provider.status === 'inactive') return false;
-        
-        if (provider.maintenanceStart && provider.maintenanceEnd) {
-          const now = new Date();
-          if (now >= provider.maintenanceStart && now <= provider.maintenanceEnd) {
-            return false;
-          }
-        }
-        
-        return true;
-      });
-      
-      if (preferredProvider) {
-        const preferred = availableProviders.find(p => p.providerName === preferredProvider);
-        if (preferred) {
-          return [
-            preferred,
-            ...availableProviders.filter(p => p.providerName !== preferredProvider),
-          ];
-        }
-      }
-      
-      return availableProviders;
-    } catch (error) {
-      logger.error('Error getting available providers:', error);
-      return [];
-    }
+  static async getAvailableProviders(serviceType, preferredProvider) {
+    const providers = await ProviderStatus.find({
+      supportedServices: serviceType,
+      status: { $in: ['active', 'degraded'] },
+    })
+      .sort({ priority: 1, successRate: -1 })
+      .lean();
+
+    if (!preferredProvider) return providers;
+
+    const preferred = providers.find(p => p.providerName === preferredProvider);
+    return preferred
+      ? [preferred, ...providers.filter(p => p.providerName !== preferredProvider)]
+      : providers;
   }
+
+  static http() {
+    return axios.create({
+      baseURL: this.apiConfig.baseUrl,
+      timeout: this.apiConfig.timeout,
+      headers: {
+        Authorization: `Bearer ${this.apiConfig.token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+  }
+
 
   static async processDataRecharge(transaction, providerName) {
+    const { service, amount, reference } = transaction;
+
     try {
-      const { service } = transaction;
-      const config = this.providerConfigs[providerName];
-      
-      if (!config) {
-        throw new AppError(`Provider ${providerName} not configured`, 500);
-      }
-      
-      const mockResponse = {
+      const res = await this.http().post('/data', {
+        phone: service.phoneNumber,
+        network: providerName,
+        plan: service.plan,
+        amount,
+        reference,
+      });
+
+      return {
         success: true,
         message: 'Data recharge successful',
-        data: {
-          transactionId: `PROV-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
-          phoneNumber: service.phoneNumber,
-          network: service.provider.toUpperCase(),
-          plan: service.plan,
-          amount: transaction.amount,
-          date: new Date().toISOString(),
-          token: Math.random().toString(36).substring(2, 15).toUpperCase(),
-          balance: Math.floor(Math.random() * 10000),
-        },
+        data: res.data,
         provider: providerName,
       };
-      
-      await this.simulateDelay(1000, 3000);
-      
-      if (Math.random() < 0.1) {
-        throw new AppError(`Provider ${providerName} temporary failure`, 503);
-      }
-      
-      logger.info(`Data recharge successful: ${service.phoneNumber}, Provider: ${providerName}`);
-      return mockResponse;
-      
-    } catch (error) {
-      logger.error('Error in processDataRecharge:', error);
-      throw error;
+    } catch (err) {
+      throw new AppError(
+        err.response?.data?.message || `Data purchase failed on ${providerName}`,
+        err.response?.status || 503
+      );
     }
   }
+
+  static async processSMEData(transaction, providerName) {
+    const { service, amount, reference } = transaction;
+
+    try {
+      const res = await this.http().post('/sme-data', {
+        phone: service.phoneNumber,
+        network: providerName,
+        plan: service.plan,
+        dataAmount: service.dataAmount,
+        validity: service.validity,
+        amount,
+        reference,
+      });
+
+      return {
+        success: true,
+        message: 'SME data purchase successful',
+        data: res.data,
+        provider: providerName,
+      };
+    } catch (err) {
+      throw new AppError(
+        err.response?.data?.message || `SME data failed on ${providerName}`,
+        err.response?.status || 503
+      );
+    }
+  }
+
+
+  static async markProviderSuccess(providerName) {
+    await ProviderStatus.findOneAndUpdate(
+      { providerName },
+      { $inc: { successfulRequests: 1, totalRequests: 1 }, $set: { lastChecked: new Date() } }
+    );
+  }
+
+  static async markProviderFailure(providerName) {
+    await ProviderStatus.findOneAndUpdate(
+      { providerName },
+      { $inc: { failedRequests: 1, totalRequests: 1 }, $set: { lastChecked: new Date() } }
+    );
+  }
+
+
+  static async retryFailedTransaction(transactionId) {
+    const transaction = await Transaction.findById(transactionId);
+    if (!transaction) throw new AppError('Transaction not found', 404);
+    if (transaction.status !== 'failed') throw new AppError('Transaction not failed', 400);
+
+    return this.processWithProvider(transaction);
+  }
+}
 
   static async processAirtimeRecharge(transaction, providerName) {
     try {

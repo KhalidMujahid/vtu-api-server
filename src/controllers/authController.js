@@ -83,7 +83,8 @@ exports.register = async (req, res, next) => {
       referredBy,
     });
     
-    await WalletService.createWallet(user._id);
+    // await WalletService.createWallet(user._id);
+    // const wallet = await WalletService.createWallet(user);
     
     const otp = generateOTP();
     const verificationToken = crypto
@@ -102,6 +103,7 @@ exports.register = async (req, res, next) => {
     
     logger.info(`New user registered: ${user.email}`);
   } catch (error) {
+    console.log(error);
     next(error);
   }
 };
@@ -142,8 +144,30 @@ exports.login = async (req, res, next) => {
     user.lastLoginIp = req.ip;
     user.lastLoginDevice = req.get('user-agent');
     await user.save();
+
+    const wallet = await WalletService.getWalletWithAccounts(user._id);
     
-    createSendToken(user, 200, res);
+    // createSendToken(user, 200, res);
+
+    const token = signToken(user._id);
+    const refreshToken = signRefreshToken(user._id);
+
+    user.password = undefined;
+    user.transactionPin = undefined;
+
+    res.status(200).json({
+      status: 'success',
+      token,
+      refreshToken,
+      data: {
+        user,
+        wallet: {
+          balance: wallet.balance,
+          accounts: wallet.accounts,
+          primaryAccount: wallet.primaryAccount,
+        },
+      },
+    });
     
     logger.info(`User logged in: ${user.email}`);
   } catch (error) {

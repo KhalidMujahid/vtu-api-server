@@ -37,6 +37,27 @@ const walletSchema = new mongoose.Schema({
     default: 'NGN',
     enum: ['NGN'],
   },
+  
+  monnifyAccounts: [{
+    bankName: String,
+    accountNumber: String,
+    accountName: String,
+    bankCode: String,
+    isDefault: {
+      type: Boolean,
+      default: false,
+    },
+    accountReference: String,
+    createdAt: {
+      type: Date,
+      default: Date.now,
+    },
+  }],
+  
+  accountReference: String,
+  collectionChannel: String,
+  reservationReference: String,
+  
   virtualCard: {
     cardId: String,
     cardNumber: String,
@@ -52,6 +73,7 @@ const walletSchema = new mongoose.Schema({
 
 walletSchema.index({ user: 1 });
 walletSchema.index({ balance: 1 });
+walletSchema.index({ 'monnifyAccounts.accountNumber': 1 });
 
 walletSchema.methods.canDebit = function(amount) {
   if (this.locked) return false;
@@ -81,5 +103,25 @@ walletSchema.methods.credit = async function(amount, reason) {
   return this;
 };
 
+walletSchema.virtual('primaryAccountNumber').get(function() {
+  if (this.monnifyAccounts && this.monnifyAccounts.length > 0) {
+    const defaultAccount = this.monnifyAccounts.find(acc => acc.isDefault);
+    return defaultAccount ? defaultAccount.accountNumber : this.monnifyAccounts[0].accountNumber;
+  }
+  return null;
+});
+
+walletSchema.virtual('accountNumbers').get(function() {
+  if (this.monnifyAccounts && this.monnifyAccounts.length > 0) {
+    return this.monnifyAccounts.map(acc => ({
+      bankName: acc.bankName,
+      accountNumber: acc.accountNumber,
+      accountName: acc.accountName,
+    }));
+  }
+  return [];
+});
+
 const Wallet = mongoose.model('Wallet', walletSchema);
+
 module.exports = Wallet;

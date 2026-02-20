@@ -1,6 +1,7 @@
 const WalletService = require('../services/walletService');
 const TransactionService = require('../services/transactionService');
 const { AppError } = require('../middlewares/errorHandler');
+const Wallet = require("../models/Wallet");
 const User = require("../models/User");
 const logger = require('../utils/logger');
 
@@ -18,9 +19,87 @@ exports.getWalletBalance = async (req, res, next) => {
         totalWithdrawn: wallet.totalWithdrawn,
         totalSpent: wallet.totalSpent,
         lastTransaction: wallet.lastTransaction,
+        accounts: wallet.accountNumbers,
+        primaryAccount: wallet.primaryAccountNumber,
       },
     });
   } catch (error) {
+    if (error.statusCode === 404) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Wallet not found. Please create a wallet first.',
+        data: {
+          needsWalletCreation: true
+        }
+      });
+    }
+    next(error);
+  }
+};
+
+exports.getWalletAccounts = async (req, res, next) => {
+  try {
+    const accounts = await WalletService.getFundingAccounts(req.user.id);
+    
+    res.status(200).json({
+      status: 'success',
+      data: accounts
+    });
+  } catch (error) {
+    if (error.statusCode === 404) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Wallet not found. Please create a wallet first.',
+        data: {
+          needsWalletCreation: true
+        }
+      });
+    }
+    next(error);
+  }
+};
+
+exports.checkWalletStatus = async (req, res, next) => {
+  try {
+    const wallet = await Wallet.findOne({ user: req.user.id });
+    
+    res.status(200).json({
+      status: 'success',
+      data: {
+        hasWallet: !!wallet,
+        walletExists: !!wallet,
+        ...(wallet && {
+          balance: wallet.balance,
+          currency: wallet.currency,
+          locked: wallet.locked,
+          accountsCount: wallet.monnifyAccounts?.length || 0
+        })
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.refreshWalletAccounts = async (req, res, next) => {
+  try {
+    const wallet = await WalletService.refreshMonnifyAccounts(req.user.id);
+    
+    res.status(200).json({
+      status: 'success',
+      message: 'Wallet accounts refreshed successfully',
+      data: {
+        accounts: wallet.accountNumbers,
+        primaryAccount: wallet.primaryAccountNumber
+      }
+    });
+  } catch (error) {
+    if (error.statusCode === 404) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Wallet not found. Please create a wallet first.'
+      });
+    }
     next(error);
   }
 };
@@ -284,6 +363,69 @@ exports.getTransactionHistory = async (req, res, next) => {
     next(error);
   }
 };
+
+exports.createWallet = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    
+    const existingWallet = await Wallet.findOne({ user: userId });
+    
+    if (existingWallet) {
+      return res.status(200).json({
+        status: 'success',
+        message: 'Wallet already exists',
+        data: {
+          wallet: {
+            balance: existingWallet.balance,
+            currency: existingWallet.currency,
+            locked: existingWallet.locked,
+            accounts: existingWallet.accountNumbers,
+            primaryAccount: existingWallet.primaryAccountNumber,
+            totalFunded: existingWallet.totalFunded,
+            totalSpent: existingWallet.totalSpent,
+            createdAt: existingWallet.createdAt,
+          }
+        }
+      });
+    }
+    
+    const user = await User.findById(userId);
+    if (!user) {
+      return next(new AppError('User not found', 404));
+    }
+    
+    logger.info(`Creating wallet for user: ${userId}`);
+    const wallet = await WalletService.createWallet(user);
+    
+    res.status(201).json({
+      status: 'success',
+      message: 'Wallet created successfully',
+      data: {
+        wallet: {
+          balance: wallet.balance,
+          currency: wallet.currency,
+          locked: wallet.locked,
+          accounts: wallet.accountNumbers,
+          primaryAccount: wallet.primaryAccountNumber,
+          totalFunded: wallet.totalFunded,
+          totalSpent: wallet.totalSpent,
+          createdAt: wallet.createdAt,
+        }
+      }
+    });
+    
+    logger.info(`Wallet created successfully for user: ${userId}`);
+  } catch (error) {
+    logger.error('Error creating wallet:', error);
+    
+    if (error.message.includes('Monnify')) {
+      return next(new AppError('Unable to create wallet at this time. Please try again later.', 503));
+    }
+    
+    next(error);
+  }
+};
+
 
 exports.setTransactionPin = async (req, res, next) => {
   try {
