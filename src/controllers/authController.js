@@ -161,11 +161,11 @@ exports.login = async (req, res, next) => {
       refreshToken,
       data: {
         user,
-        wallet: {
+        wallet: wallet ? {
           balance: wallet.balance,
           accounts: wallet.accounts,
           primaryAccount: wallet.primaryAccount,
-        },
+        } : null,
       },
     });
     
