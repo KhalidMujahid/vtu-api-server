@@ -112,7 +112,12 @@ class MonnifyService {
             };
           } else {
             console.error('Monnify API returned non-200 status:', { status, response });
-            throw new AppError(`Monnify API error (${status}): ${JSON.stringify(response)}`, 500);
+            if (status === 422 && response?.responseCode === "R42") {
+              logger.warn("Reserved account already exists. Fetching existing account...");
+            
+              const existing = await this.getAccountDetailsByEmail(user.email);
+              return existing;
+            }
           }
         } catch (error) {
           console.error('Monnify Create Account Error Details:', {
