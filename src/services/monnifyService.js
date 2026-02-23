@@ -29,7 +29,7 @@ class MonnifyService {
     
           if (status === 200) {
             logger.info('Monnify access token obtained successfully');
-            return body.responseBody.accessToken; 
+            return body; 
           }
     
           throw new Error(`Token error: ${JSON.stringify(body)}`);
