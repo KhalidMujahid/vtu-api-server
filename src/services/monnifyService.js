@@ -81,32 +81,34 @@ class MonnifyService {
           console.log('Monnify Create Account Response - Body:', JSON.stringify(response, null, 2));
     
           if (status === 200) {
-            const accounts = response.accounts || [];
-            
+            const responseBody = response.responseBody || {};
+
+            const accounts = responseBody.accounts || [];
+          
             if (accounts.length === 0) {
               console.warn('No accounts returned from Monnify');
             }
-            
+          
             const formattedAccounts = accounts.map((account, index) => ({
               bankName: account.bankName,
               accountNumber: account.accountNumber,
               accountName: account.accountName,
               bankCode: account.bankCode,
-              isDefault: index === 0, 
+              isDefault: index === 0,
             }));
-    
+          
             logger.info(`Reserved account created successfully for user: ${user.email}`, {
               userId: user._id,
               accountsCount: formattedAccounts.length,
-              accountReference: response.accountReference || accountReference
+              accountReference: responseBody.accountReference || accountReference
             });
-    
+          
             return {
               success: true,
               accounts: formattedAccounts,
-              accountReference: response.accountReference || accountReference,
-              collectionChannel: response.collectionChannel,
-              reservationReference: response.reservationReference,
+              accountReference: responseBody.accountReference || accountReference,
+              collectionChannel: responseBody.collectionChannel,
+              reservationReference: responseBody.reservationReference,
             };
           } else {
             console.error('Monnify API returned non-200 status:', { status, response });
