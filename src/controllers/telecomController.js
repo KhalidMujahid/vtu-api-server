@@ -8,119 +8,171 @@ const Transaction = require('../models/Transaction');
 exports.getDataPlans = async (req, res, next) => {
   try {
     const { network } = req.query;
-    
+
     const query = {
       serviceType: 'data_recharge',
       isActive: true,
       isAvailable: true,
     };
-    
+
     if (network) {
-      query.network = network;
+      const allowedNetworks = ['mtn', 'glo', 'airtel', '9mobile'];
+
+      if (!allowedNetworks.includes(network.toLowerCase())) {
+        return next(new AppError('Invalid network provider', 400));
+      }
+
+      query.network = network.toLowerCase();
     }
-    
+
     const dataPlans = await ServicePricing.find(query)
       .sort({ sellingPrice: 1 })
       .select('-costPrice -profitMargin -createdBy -updatedBy')
       .lean();
-    
+
     const groupedPlans = dataPlans.reduce((acc, plan) => {
       if (!acc[plan.network]) {
         acc[plan.network] = [];
       }
-      acc[plan.network].push(plan);
+
+      acc[plan.network].push({
+        id: plan._id,
+        planName: plan.planName,
+        size: plan.planName,
+        price: plan.sellingPrice,
+        validity: plan.validity
+      });
+
       return acc;
     }, {});
-    
-    res.status(200).json({
+
+    return res.status(200).json({
       status: 'success',
-      data: {
-        plans: groupedPlans,
-      },
+      results: dataPlans.length,
+      data: groupedPlans
     });
+
   } catch (error) {
     next(error);
   }
 };
 
+// {
+//   "network": "mtn",
+//   "serviceType": "data_recharge",
+//   "planName": "1GB",
+//   "sellingPrice": 350,
+//   "validity": "30 days",
+//   "isActive": true,
+//   "isAvailable": true
+// }
+
 exports.purchaseData = async (req, res, next) => {
   try {
-    const { phoneNumber, network, planId, transactionPin } = req.body;
-    
-    if (!phoneNumber || !network || !planId || !transactionPin) {
+    const { phoneNumber, network, size, transactionPin } = req.body;
+
+    if (!phoneNumber || !network || !size || !transactionPin) {
       return next(new AppError('Please provide all required fields', 400));
     }
-    
+
     if (!/^(?:\+234|0)[789][01]\d{8}$/.test(phoneNumber)) {
       return next(new AppError('Invalid phone number format', 400));
     }
-    
-    const plan = await ServicePricing.findOne({
-      _id: planId,
-      serviceType: 'data_recharge',
-      network,
-      isActive: true,
-      isAvailable: true,
-    });
-    
-    if (!plan) {
-      return next(new AppError('Plan not found or unavailable', 404));
+
+    const allowedNetworks = ['mtn', 'glo', 'airtel', '9mobile'];
+    const normalizedNetwork = network.toLowerCase();
+
+    if (!allowedNetworks.includes(normalizedNetwork)) {
+      return next(new AppError('Invalid network provider', 400));
     }
-    
+
     const user = await User.findById(req.user.id).select('+transactionPin');
+
+    if (!user) {
+      return next(new AppError('User not found', 404));
+    }
+
     const isPinValid = await user.compareTransactionPin(transactionPin);
-    
     if (!isPinValid) {
       return next(new AppError('Invalid transaction PIN', 401));
     }
-    
+
+    const plan = await ServicePricing.findOne({
+      network: normalizedNetwork,
+      serviceType: 'data_recharge',
+      planName: size,
+      isActive: true,
+      isAvailable: true
+    });
+
+    if (!plan) {
+      return next(new AppError('Selected data plan not available', 404));
+    }
+
+    const amount = plan.sellingPrice;
+
+    if (user.walletBalance < amount) {
+      return next(new AppError('Insufficient wallet balance', 400));
+    }
+
+    user.walletBalance -= amount;
+    await user.save();
+
     const reference = Transaction.generateReference();
-    const transaction = await TransactionService.createTransaction({
+
+    const transaction = await Transaction.create({
       reference,
-      user: req.user.id,
+      user: user._id,
       type: 'data_recharge',
       category: 'telecom',
-      amount: plan.sellingPrice,
-      fee: 0,
-      totalAmount: plan.sellingPrice,
-      previousBalance: 0,
-      newBalance: 0,
+      amount,
+      totalAmount: amount,
       status: 'pending',
-      description: `${network.toUpperCase()} ${plan.planName} data plan for ${phoneNumber}`,
+      description: `${normalizedNetwork.toUpperCase()} ${size} for ${phoneNumber}`,
       service: {
-        provider: network,
-        plan: plan.planName,
+        provider: normalizedNetwork,
         phoneNumber,
-        planCode: plan.planCode,
-        dataAmount: plan.dataAmount,
-        validity: plan.validity,
-      },
-      metadata: {
-        planId: plan._id,
-        costPrice: plan.costPrice,
-        profitMargin: plan.profitMargin,
-      },
+        plan: size
+      }
     });
-    
-    const processedTransaction = await TransactionService.processTelecomTransaction(
-      transaction._id,
-      network
-    );
-    
-    res.status(200).json({
-      status: 'success',
-      message: 'Data purchase initiated',
-      data: {
-        reference,
-        phoneNumber,
-        network,
-        plan: plan.planName,
-        amount: plan.sellingPrice,
-        transaction: processedTransaction,
-      },
-    });
-    
-    logger.info(`Data purchase initiated: User ${req.user.id}, ${network} ${plan.planName} for ${phoneNumber}`);
+
+    try {
+      const apiResult = await TelecomService.processDataRecharge(transaction);
+
+      transaction.status = 'successful';
+      transaction.providerResponse = apiResult.apiResponse;
+      await transaction.save();
+
+      logger.info(
+        `Data purchase successful: User ${user._id}, ${normalizedNetwork} ${size} for ${phoneNumber}`
+      );
+
+      return res.status(200).json({
+        status: 'success',
+        message: 'Data purchase successful',
+        data: {
+          reference,
+          phoneNumber,
+          network: normalizedNetwork,
+          size,
+          amount
+        }
+      });
+
+    } catch (apiError) {
+
+      user.walletBalance += amount;
+      await user.save();
+
+      transaction.status = 'failed';
+      transaction.failureReason = apiError.message;
+      await transaction.save();
+
+      logger.error(`Data purchase failed: ${apiError.message}`);
+
+      return next(new AppError('Data purchase failed. Wallet refunded.', 500));
+    }
+
   } catch (error) {
     next(error);
   }

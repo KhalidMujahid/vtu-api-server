@@ -101,6 +101,10 @@ class WalletService {
     try {
       const wallet = await Wallet.findOne({ user: userId });
       
+      if (!wallet) {
+        return null;
+      }
+      
       return {
         balance: wallet.balance,
         currency: wallet.currency,

@@ -145,7 +145,13 @@ exports.login = async (req, res, next) => {
     user.lastLoginDevice = req.get('user-agent');
     await user.save();
 
-    const wallet = await WalletService.getWalletWithAccounts(user._id);
+    let wallet = null;
+
+    try {
+      wallet = await WalletService.getWalletWithAccounts(user._id);
+    } catch (err) {
+      logger.warn('Wallet fetch failed during login:', err);
+    }
     
     // createSendToken(user, 200, res);
 
