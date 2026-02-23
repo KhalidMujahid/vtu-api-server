@@ -148,28 +148,60 @@ class TelecomService {
   }
 
 
-  static async processDataRecharge(transaction, providerName) {
-    const { service, amount, reference } = transaction;
+  static async processDataRecharge(transaction) {
+    const { service } = transaction;
+
+    if (!service?.provider || !service?.phoneNumber || !service?.plan) {
+      throw new AppError('Incomplete service data', 400);
+    }
 
     try {
-      const res = await this.http().post('/data', {
-        phone: service.phoneNumber,
-        network: providerName,
-        plan: service.plan,
-        amount,
-        reference,
-      });
+      const response = await axios.get(
+        process.env.VTU_BASE_URL,
+        {
+          params: {
+            token: process.env.VTU_API_TOKEN,
+            network: service.provider.toUpperCase(),
+            phone: service.phoneNumber,
+            size: service.plan.toUpperCase()
+          },
+          timeout: 30000
+        }
+      );
 
-      return {
-        success: true,
-        message: 'Data recharge successful',
-        data: res.data,
-        provider: providerName,
-      };
-    } catch (err) {
+      const apiResponse = response.data;
+
+
+      if (
+        apiResponse.status === 'success' ||
+        apiResponse.Status === 'successful' ||
+        apiResponse.response === 'success'
+      ) {
+
+        logger.info(`SMEData success → ${service.phoneNumber}`);
+
+        return {
+          success: true,
+          message: 'Data purchase successful',
+          provider: 'smedata',
+          apiResponse
+        };
+      }
+
       throw new AppError(
-        err.response?.data?.message || `Data purchase failed on ${providerName}`,
-        err.response?.status || 503
+        apiResponse.message || apiResponse.error || 'Data purchase failed',
+        400
+      );
+
+    } catch (error) {
+
+      logger.error('SMEData Error:', error.response?.data || error.message);
+
+      throw new AppError(
+        error.response?.data?.message ||
+        error.message ||
+        'SMEData request failed',
+        error.response?.status || 503
       );
     }
   }
