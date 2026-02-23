@@ -66,7 +66,8 @@ class MonnifyService {
             customerEmail: user.email,
             customerName: accountName,
             getAllAvailableBanks: true,
-            nin: user.nin || "12345678901",
+            nin: user?.nin,
+            bvn: user?.bvn
           };
 
     
