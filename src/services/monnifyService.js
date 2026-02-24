@@ -67,7 +67,7 @@ class MonnifyService {
             customerName: accountName,
             getAllAvailableBanks: true,
             nin: user?.nin,
-            bvn: user?.bvn
+            // bvn: user?.bvn
           };
 
     
