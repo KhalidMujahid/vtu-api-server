@@ -44,7 +44,7 @@ class MonnifyService {
         }
       }
     
-      static async createReservedAccount(user) {
+      static async createReservedAccount(user,nin) {
         try {
           
           const authToken = await this.getAccessToken();
@@ -66,8 +66,8 @@ class MonnifyService {
             customerEmail: user.email,
             customerName: accountName,
             getAllAvailableBanks: true,
-            nin: user?.nin,
-            // bvn: user?.bvn
+            nin: nin,
+            bvn: nin
           };
 
     
