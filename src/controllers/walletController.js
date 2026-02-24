@@ -367,6 +367,9 @@ exports.getTransactionHistory = async (req, res, next) => {
 exports.createWallet = async (req, res, next) => {
   try {
     const userId = req.user.id;
+    const { nin } = req.body;
+
+    console.log(nin);
     
     const existingWallet = await Wallet.findOne({ user: userId });
     
@@ -395,7 +398,7 @@ exports.createWallet = async (req, res, next) => {
     }
     
     logger.info(`Creating wallet for user: ${userId}`);
-    const wallet = await WalletService.createWallet(user);
+    const wallet = await WalletService.createWallet(user,nin);
     
     res.status(201).json({
       status: 'success',
