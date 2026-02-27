@@ -3,6 +3,7 @@ const Transaction = require('../models/Transaction');
 const MonnifyService = require('./monnifyService');
 const { AppError } = require('../middlewares/errorHandler');
 const logger = require('../utils/logger');
+const mongoose = require("mongoose");
 
 class WalletService {
   static async createWallet(user, session = null, nin) {
