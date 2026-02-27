@@ -10,7 +10,7 @@ const walletRoutes = require('./routes/walletRoutes');
 const telecomRoutes = require('./routes/telecomRoutes');
 const billsRoutes = require('./routes/billsRoutes');
 const adminRoutes = require('./routes/adminRoutes');
-const webhookRoutes = require('./routes/webhookRoutes');
+// const webhookRoutes = require('./routes/webhookRoutes');
 const agentRoutes = require('./routes/agentRoutes');
 const paymentRoutes = require("./routes/paymentRoutes");
 
@@ -24,12 +24,6 @@ app.use(cors());
 app.use(xss());
 app.use(mongoSanitize());
 
-// const limiter = rateLimit({
-//   windowMs: 15 * 60 * 1000, 
-//   max: 100,
-//   message: 'Too many requests from this IP, please try again later.',
-// });
-// app.use('/api', limiter);
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -48,7 +42,7 @@ app.use('/api/v1/telecom', telecomRoutes);
 app.use('/api/v1/bills', billsRoutes);
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/agent', agentRoutes);
-app.use('/api/v1/webhook', webhookRoutes);
+// app.use('/api/v1/webhook', webhookRoutes);
 app.use('/api/v1/payments', paymentRoutes);
 
 app.get('/api/v1/health', (req, res) => {
