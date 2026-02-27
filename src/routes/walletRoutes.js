@@ -16,6 +16,7 @@ router.post('/withdraw', hasWallet, requireTransactionPin, walletController.with
 router.get('/transactions', hasWallet, walletController.getTransactionHistory);
 router.get('/accounts', hasWallet, walletController.getWalletAccounts);
 router.post('/accounts/refresh', hasWallet, walletController.refreshWalletAccounts);
-router.post('/set-pin', walletController.setTransactionPin); 
+router.post('/set-pin', walletController.setTransactionPin);
+router.post('/update-pin', walletController.updateTransactionPin); 
 
 module.exports = router;

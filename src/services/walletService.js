@@ -8,37 +8,35 @@ const axios = require("axios");
 
 class WalletService {
   static async createWallet(user, verification = {}) {
-
-    const existingWallet = await Wallet.findOne({ user: user._id });
-  
-    if (existingWallet) {
-      return existingWallet;
-    }
-  
-    const { bvn, nin } = verification;
-  
-    const accessToken = await this.getMonnifyToken();
-  
-    const reference = `wallet_${user._id}_${Date.now()}`;
-  
-    const payload = {
-      accountReference: reference,
-      accountName: `${user.firstName} ${user.lastName}`,
-      currencyCode: "NGN",
-      contractCode: process.env.MONNIFY_CONTRACT_CODE,
-      customerEmail: user.email,
-      customerName: `${user.firstName} ${user.lastName}`,
-      getAllAvailableBanks: true
-    };
-  
-    if (bvn) payload.bvn = bvn;
-    if (nin) payload.nin = nin;
-  
-    let response;
-  
     try {
   
-      response = await axios.post(
+      const { bvn, nin } = verification;
+  
+      const existingWallet = await Wallet.findOne({ user: user._id });
+  
+      if (existingWallet) {
+        logger.info(`Wallet already exists for user ${user._id}, returning existing wallet`);
+        return existingWallet;
+      }
+  
+      const accessToken = await this.getMonnifyToken();
+  
+      const reference = `wallet_${user._id}_${Date.now()}`;
+  
+      const payload = {
+        accountReference: reference,
+        accountName: `${user.firstName} ${user.lastName}`,
+        currencyCode: "NGN",
+        contractCode: process.env.MONNIFY_CONTRACT_CODE,
+        customerEmail: user.email,
+        customerName: `${user.firstName} ${user.lastName}`,
+        getAllAvailableBanks: true
+      };
+  
+      if (bvn) payload.bvn = bvn;
+      if (nin) payload.nin = nin;
+  
+      const response = await axios.post(
         `${process.env.MONNIFY_BASE_URL}/api/v2/bank-transfer/reserved-accounts`,
         payload,
         {
@@ -49,41 +47,52 @@ class WalletService {
         }
       );
   
+      const accounts = response.data.responseBody.accounts;
+  
+      const wallet = await Wallet.create({
+        user: user._id,
+        balance: 0,
+        currency: "NGN",
+        locked: false,
+        totalFunded: 0,
+        totalSpent: 0,
+        monnifyAccounts: accounts.map((acc, index) => ({
+          bankName: acc.bankName,
+          accountNumber: acc.accountNumber,
+          accountName: acc.accountName,
+          bankCode: acc.bankCode,
+          isDefault: index === 0
+        }))
+      });
+  
+      logger.info(`Monnify virtual account created for user ${user._id}`);
+  
+      return wallet;
+  
     } catch (error) {
   
-      if (error.response?.data?.responseMessage?.includes("cannot reserve more than")) {
+      if (
+        error.response?.data?.responseMessage?.includes(
+          "cannot reserve more than"
+        )
+      ) {
+        const wallet = await Wallet.findOne({ user: user._id });
   
-        const existing = await Wallet.findOne({ user: user._id });
-  
-        if (existing) return existing;
-  
-        throw new Error("Wallet already exists for this user");
+        if (wallet) {
+          logger.info(`Fetched existing wallet from DB for user ${user._id}`);
+          return wallet;
+        }
       }
   
+      logger.error(
+        "Monnify wallet creation error:",
+        error.response?.data || error.message
+      );
+  
       throw new Error(
-        error.response?.data?.responseMessage || "Monnify wallet creation failed"
+        error.response?.data?.responseMessage || "Failed to create wallet"
       );
     }
-  
-    const accounts = response.data.responseBody.accounts;
-  
-    const wallet = await Wallet.create({
-      user: user._id,
-      balance: 0,
-      currency: "NGN",
-      locked: false,
-      totalFunded: 0,
-      totalSpent: 0,
-      monnifyAccounts: accounts.map((acc, index) => ({
-        bankName: acc.bankName,
-        accountNumber: acc.accountNumber,
-        accountName: acc.accountName,
-        bankCode: acc.bankCode,
-        isDefault: index === 0
-      }))
-    });
-  
-    return wallet;
   }
 
   static async getMonnifyToken() {

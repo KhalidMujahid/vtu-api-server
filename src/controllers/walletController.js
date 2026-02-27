@@ -461,3 +461,95 @@ exports.setTransactionPin = async (req, res, next) => {
     next(error);
   }
 };
+
+
+exports.updateTransactionPin = async (req, res, next) => {
+  try {
+    const { transactionPin, confirmPin } = req.body;
+    
+    if (!transactionPin || !confirmPin) {
+      return next(new AppError('Please provide transaction PIN and confirmation', 400));
+    }
+    
+    if (transactionPin !== confirmPin) {
+      return next(new AppError('PINs do not match', 400));
+    }
+    
+    if (transactionPin.length !== 4 || !/^\d+$/.test(transactionPin)) {
+      return next(new AppError('Transaction PIN must be 4 digits', 400));
+    }
+    
+    const user = await User.findById(req.user.id);
+    
+    if (user.transactionPin) {
+      return next(new AppError('Transaction PIN already set', 400));
+    }
+    
+    user.transactionPin = transactionPin;
+    await user.save();
+    
+    res.status(200).json({
+      status: 'success',
+      message: 'Transaction PIN set successfully',
+    });
+    
+    logger.info(`Transaction PIN set for user: ${req.user.id}`);
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.updateTransactionPin = async (req, res, next) => {
+  try {
+    const { oldPin, transactionPin, confirmPin } = req.body;
+
+    if (!oldPin || !transactionPin || !confirmPin) {
+      return next(
+        new AppError("Please provide old PIN, new PIN and confirmation", 400)
+      );
+    }
+
+    if (transactionPin !== confirmPin) {
+      return next(new AppError("New PIN and confirmation PIN do not match", 400));
+    }
+
+    if (!/^\d{4}$/.test(transactionPin)) {
+      return next(new AppError("Transaction PIN must be exactly 4 digits", 400));
+    }
+
+    const user = await User.findById(req.user.id).select("+transactionPin");
+
+    if (!user) {
+      return next(new AppError("User not found", 404));
+    }
+
+    if (!user.transactionPin) {
+      return next(new AppError("Transaction PIN has not been set yet", 400));
+    }
+
+    const isCorrectPin = await bcrypt.compare(oldPin, user.transactionPin);
+
+    if (!isCorrectPin) {
+      return next(new AppError("Incorrect old PIN", 400));
+    }
+
+    const isSamePin = await bcrypt.compare(transactionPin, user.transactionPin);
+    if (isSamePin) {
+      return next(new AppError("New PIN cannot be the same as old PIN", 400));
+    }
+
+    const hashedPin = await bcrypt.hash(transactionPin, 12);
+
+    user.transactionPin = hashedPin;
+    await user.save();
+
+    logger.info(`Transaction PIN updated for user: ${req.user.id}`);
+
+    res.status(200).json({
+      status: "success",
+      message: "Transaction PIN updated successfully",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
