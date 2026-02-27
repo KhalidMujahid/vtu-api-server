@@ -368,26 +368,31 @@ exports.createWallet = async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { nin, bvn } = req.body;
-    
+
     const verificationId = bvn || nin;
-    
+
     if (!verificationId) {
       return next(new AppError('BVN or NIN is required to create a wallet', 400));
     }
-    
+
     if (!/^\d{11}$/.test(verificationId)) {
       return next(new AppError('BVN/NIN must be exactly 11 digits', 400));
     }
-    
+
     const user = await User.findById(userId);
     if (!user) {
       return next(new AppError('User not found', 404));
     }
-    
+
+    const existingWallet = await Wallet.findOne({ user: userId });
+    if (existingWallet) {
+      return next(new AppError('Wallet already exists for this user', 400));
+    }
+
     logger.info(`Creating wallet for user: ${userId}`);
-    
-    const wallet = await WalletService.createWallet(user, null, verificationId);
-    
+
+    const wallet = await WalletService.createWallet(user, { bvn, nin });
+
     res.status(201).json({
       status: 'success',
       message: 'Wallet created successfully',
@@ -396,28 +401,27 @@ exports.createWallet = async (req, res, next) => {
           balance: wallet.balance,
           currency: wallet.currency,
           locked: wallet.locked,
-          accounts: wallet.monnifyAccounts?.map(acc => ({
+          accounts: wallet.monnifyAccounts.map(acc => ({
             bankName: acc.bankName,
             accountNumber: acc.accountNumber,
             accountName: acc.accountName,
             isDefault: acc.isDefault
           })),
-          primaryAccount: wallet.monnifyAccounts?.find(a => a.isDefault)?.accountNumber || wallet.monnifyAccounts?.[0]?.accountNumber,
+          primaryAccount: wallet.monnifyAccounts.find(a => a.isDefault)?.accountNumber,
           totalFunded: wallet.totalFunded,
           totalSpent: wallet.totalSpent,
-          createdAt: wallet.createdAt,
+          createdAt: wallet.createdAt
         }
       }
     });
-    
-    logger.info(`Wallet created successfully for user: ${userId}`);
+
   } catch (error) {
     logger.error('Error creating wallet:', error);
-    
+
     if (error.message.includes('Monnify')) {
       return next(new AppError('Unable to create wallet at this time. Please try again later.', 503));
     }
-    
+
     next(error);
   }
 };

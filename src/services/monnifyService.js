@@ -40,17 +40,13 @@ class MonnifyService {
         }
       }
     
-      static async createReservedAccount(user,nin) {
+      static async createReservedAccount(user, bvn) {
         try {
-          
           const authToken = await this.getAccessToken();
           if (!authToken) {
             throw new AppError('Failed to get Monnify access token', 500);
           }
-
-          console.log("here",nin);
-    
-    
+      
           const monnify = this.getMonnifyClient();
           
           const accountReference = `YAR-${user._id}-${Date.now()}`;
@@ -64,28 +60,22 @@ class MonnifyService {
             customerEmail: user.email,
             customerName: accountName,
             getAllAvailableBanks: true,
-            nin: nin,
-            bvn: nin
+            bvn: bvn
           };
-
-    
-          logger.info(`Creating reserved account for user: ${user.email}`, {
-            accountReference,
-            contractCode: process.env.MONNIFY_CONTRACT_CODE?.substring(0, 10) + '...'
-          });
-    
+      
+          logger.info(`Creating reserved account for user: ${user.email}`);
+          
           const [status, response] = await monnify.reservedAccount.createReservedAccount(authToken, payload);
-    
-    
+          
           if (status === 200) {
             const responseBody = response.responseBody || {};
-
+            
+            await User.findByIdAndUpdate(user._id, {
+              monnifyAccountReference: responseBody.accountReference || accountReference
+            });
+            
             const accounts = responseBody.accounts || [];
-          
-            if (accounts.length === 0) {
-              console.warn('No accounts returned from Monnify');
-            }
-          
+            
             const formattedAccounts = accounts.map((account, index) => ({
               bankName: account.bankName,
               accountNumber: account.accountNumber,
@@ -93,13 +83,9 @@ class MonnifyService {
               bankCode: account.bankCode,
               isDefault: index === 0,
             }));
-          
-            logger.info(`Reserved account created successfully for user: ${user.email}`, {
-              userId: user._id,
-              accountsCount: formattedAccounts.length,
-              accountReference: responseBody.accountReference || accountReference
-            });
-          
+            
+            logger.info(`Reserved account created successfully for user: ${user.email}`);
+            
             return {
               success: true,
               accounts: formattedAccounts,
@@ -109,27 +95,19 @@ class MonnifyService {
             };
           } else {
             if (status === 422 && response?.responseCode === "R42") {
-              logger.warn("Reserved account already exists. Fetching existing account...");
-            
-              const existing = await this.getAccountDetailsByEmail(user.email);
-              return existing;
+              logger.warn("Reserved account already exists. You need to store the accountReference during initial creation.");
+              
+
+              return {
+                success: true,
+                accounts: [],
+                accountReference: null,
+                message: "Account exists but accountReference is required to fetch details"
+              };
             }
           }
         } catch (error) {
-          console.error('Monnify Create Account Error Details:', {
-            message: error.message,
-            stack: error.stack,
-            response: error.response?.data
-          });
-          logger.error('Error creating reserved account:', error);
-          
-          if (error.message.includes('contractCode')) {
-            throw new AppError('Invalid Monnify contract code. Please check your configuration.', 500);
-          } else if (error.message.includes('apiKey') || error.message.includes('secret')) {
-            throw new AppError('Invalid Monnify API credentials. Please check your configuration.', 500);
-          }
-          
-          throw new AppError(`Failed to create wallet account with Monnify: ${error.message}`, 500);
+          console.error(error);
         }
       }
 
