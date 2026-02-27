@@ -32,7 +32,7 @@ exports.getDataPlans = async (req, res, next) => {
       acc[plan.network].push({
         id: plan._id,
         planName: plan.planName,
-        size: plan.planName,
+        size: plan.size,
         price: plan.sellingPrice,
         validity: plan.validity,
       });
@@ -57,7 +57,7 @@ exports.purchaseData = async (req, res, next) => {
 
     if (!(await user.compareTransactionPin(transactionPin))) return next(new AppError('Invalid transaction PIN', 401));
 
-    const plan = await ServicePricing.findOne({ network: network.toLowerCase(), serviceType: 'data_recharge', planName: size, isActive: true });
+    const plan = await ServicePricing.findOne({ network: network.toLowerCase(),isActive: true });
     if (!plan) return next(new AppError('Plan not available', 404));
 
     if (user.walletBalance < plan.sellingPrice) return next(new AppError('Insufficient balance', 400));

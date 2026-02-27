@@ -88,6 +88,7 @@ const servicePricingSchema = new mongoose.Schema({
   
   userCommission: Number,
   agentCommission: Number,
+  size: String, 
 
   description: String,
   terms: String,

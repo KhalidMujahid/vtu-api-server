@@ -8,7 +8,7 @@ const transactionSchema = new mongoose.Schema({
   },
   userReference: {
     type: String,
-    required: true,
+    // required: true,
   },
   
   user: {
@@ -59,11 +59,11 @@ const transactionSchema = new mongoose.Schema({
   },
   previousBalance: {
     type: Number,
-    required: true,
+    // required: true,
   },
   newBalance: {
     type: Number,
-    required: true,
+    // required: true,
   },
   currency: {
     type: String,
