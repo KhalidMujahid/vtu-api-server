@@ -64,6 +64,8 @@ const userSchema = new mongoose.Schema({
   lastLogin: Date,
   lastLoginIp: String,
   lastLoginDevice: String,
+  nin: String,
+  bvn: String,
   
   kycStatus: {
     type: String,

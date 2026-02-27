@@ -20,12 +20,8 @@ class MonnifyService {
     
       static async getAccessToken() {
         try {
-          console.log('Attempting to get Monnify access token...');
           const monnify = this.getMonnifyClient();
           const [status, body] = await monnify.getToken();
-    
-          console.log('Monnify Token Response - Status:', status);
-          console.log('Monnify Token Response - Body:', body);
     
           if (status === 200) {
             logger.info('Monnify access token obtained successfully');
@@ -51,6 +47,8 @@ class MonnifyService {
           if (!authToken) {
             throw new AppError('Failed to get Monnify access token', 500);
           }
+
+          console.log("here",nin);
     
     
           const monnify = this.getMonnifyClient();
@@ -78,8 +76,6 @@ class MonnifyService {
     
           const [status, response] = await monnify.reservedAccount.createReservedAccount(authToken, payload);
     
-          console.log('Monnify Create Account Response - Status:', status);
-          console.log('Monnify Create Account Response - Body:', JSON.stringify(response, null, 2));
     
           if (status === 200) {
             const responseBody = response.responseBody || {};
@@ -112,7 +108,6 @@ class MonnifyService {
               reservationReference: responseBody.reservationReference,
             };
           } else {
-            console.error('Monnify API returned non-200 status:', { status, response });
             if (status === 422 && response?.responseCode === "R42") {
               logger.warn("Reserved account already exists. Fetching existing account...");
             

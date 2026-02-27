@@ -6,30 +6,23 @@ const User = require('../models/User');
 const { AppError } = require('../middlewares/errorHandler');
 const logger = require('../utils/logger');
 
-/**
- * Initialize Paystack Payment for Wallet Funding
- * Endpoint: POST /api/payments/initialize
- */
+
 exports.initializePaystackPayment = async (req, res, next) => {
   try {
     const { amount } = req.body;
     const userId = req.user.id;
     
-    // Validate amount
     if (!amount || amount < 100) {
       return next(new AppError('Amount must be at least ₦100', 400));
     }
     
-    // Get user email
     const user = await User.findById(userId);
     if (!user) {
       return next(new AppError('User not found', 404));
     }
     
-    // Generate unique reference
     const reference = `FUND-${Date.now()}-${userId.slice(-6)}-${Math.random().toString(36).substring(7)}`;
     
-    // Create transaction record
     const transaction = await Transaction.create({
       user: userId,
       type: 'wallet_funding',
@@ -49,12 +42,11 @@ exports.initializePaystackPayment = async (req, res, next) => {
       }]
     });
     
-    // Initialize Paystack payment
     const response = await axios.post(
       'https://api.paystack.co/transaction/initialize',
       {
         email: user.email,
-        amount: amount * 100, // Convert to kobo
+        amount: amount * 100,
         reference: reference,
         currency: 'NGN',
         callback_url: `${process.env.FRONTEND_URL}/wallet/funding/callback`,
@@ -86,7 +78,6 @@ exports.initializePaystackPayment = async (req, res, next) => {
   } catch (error) {
     logger.error('Error initializing Paystack payment:', error);
     
-    // Update transaction status if it was created
     if (error.response?.data?.transactionId) {
       await Transaction.findByIdAndUpdate(error.response.data.transactionId, {
         status: 'failed',
@@ -102,15 +93,10 @@ exports.initializePaystackPayment = async (req, res, next) => {
   }
 };
 
-/**
- * Verify Paystack Payment
- * Endpoint: GET /api/payments/verify/:reference
- */
 exports.verifyPaystackPayment = async (req, res, next) => {
   try {
     const { reference } = req.params;
     
-    // Verify with Paystack
     const response = await axios.get(
       `https://api.paystack.co/transaction/verify/${reference}`,
       {
@@ -123,11 +109,9 @@ exports.verifyPaystackPayment = async (req, res, next) => {
     const paymentData = response.data.data;
     
     if (paymentData.status === 'success') {
-      // Find transaction
       const transaction = await Transaction.findOne({ reference });
       
       if (transaction && transaction.status === 'pending') {
-        // Credit wallet
         const wallet = await Wallet.findOneAndUpdate(
           { user: transaction.user },
           { 
@@ -145,7 +129,6 @@ exports.verifyPaystackPayment = async (req, res, next) => {
           { new: true }
         );
         
-        // Update transaction status
         transaction.status = 'completed';
         transaction.statusHistory.push({
           status: 'completed',
@@ -171,13 +154,8 @@ exports.verifyPaystackPayment = async (req, res, next) => {
   }
 };
 
-/**
- * Paystack Webhook Handler
- * Endpoint: POST /webhook/paystack
- */
 exports.paystackWebhook = async (req, res, next) => {
   try {
-    // Verify webhook signature
     const signature = req.headers['x-paystack-signature'];
     const hash = crypto
       .createHmac('sha512', process.env.PAYSTACK_SECRET_KEY)
@@ -192,26 +170,22 @@ exports.paystackWebhook = async (req, res, next) => {
     const event = req.body;
     logger.info(`Paystack webhook received: ${event.event}`);
     
-    // Handle charge success
     if (event.event === 'charge.success') {
       const paymentData = event.data;
       const { reference, amount, metadata } = paymentData;
       
-      // Find transaction
       const transaction = await Transaction.findOne({ reference });
       
       if (!transaction) {
         logger.error(`Transaction not found: ${reference}`);
-        return res.status(200).json({ status: 'success' }); // Acknowledge receipt
+        return res.status(200).json({ status: 'success' }); 
       }
       
-      // Check if already processed
       if (transaction.status === 'completed') {
         logger.info(`Transaction already processed: ${reference}`);
         return res.status(200).json({ status: 'success' });
       }
       
-      // Credit wallet
       const wallet = await Wallet.findOneAndUpdate(
         { user: transaction.user },
         { 
@@ -222,14 +196,13 @@ exports.paystackWebhook = async (req, res, next) => {
               amount: transaction.amount,
               reference: reference,
               description: 'Wallet funding via Paystack',
-              balance: transaction.amount // This will be calculated by MongoDB
+              balance: transaction.amount
             }
           }
         },
         { new: true }
       );
       
-      // If wallet doesn't exist, create it
       if (!wallet) {
         await Wallet.create({
           user: transaction.user,
@@ -243,7 +216,6 @@ exports.paystackWebhook = async (req, res, next) => {
         });
       }
       
-      // Update transaction
       transaction.status = 'completed';
       transaction.statusHistory.push({
         status: 'completed',
@@ -259,22 +231,17 @@ exports.paystackWebhook = async (req, res, next) => {
       
       await transaction.save();
       
-      logger.info(`✅ Wallet funded via webhook: ${reference}, Amount: ₦${transaction.amount}`);
+      logger.info(`Wallet funded via webhook: ${reference}, Amount: ₦${transaction.amount}`);
     }
     
-    // Acknowledge webhook
     res.status(200).json({ status: 'success' });
     
   } catch (error) {
     logger.error('Paystack webhook error:', error);
-    res.status(200).json({ status: 'success' }); // Always return 200 to prevent retries
+    res.status(200).json({ status: 'success' });
   }
 };
 
-/**
- * Get Payment Status
- * Endpoint: GET /api/payments/status/:reference
- */
 exports.getPaymentStatus = async (req, res, next) => {
   try {
     const { reference } = req.params;

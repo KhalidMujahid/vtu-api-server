@@ -367,29 +367,16 @@ exports.getTransactionHistory = async (req, res, next) => {
 exports.createWallet = async (req, res, next) => {
   try {
     const userId = req.user.id;
-    const { nin } = req.body;
-
-    console.log(nin);
+    const { nin, bvn } = req.body;
     
-    const existingWallet = await Wallet.findOne({ user: userId });
+    const verificationId = bvn || nin;
     
-    if (existingWallet) {
-      return res.status(200).json({
-        status: 'success',
-        message: 'Wallet already exists',
-        data: {
-          wallet: {
-            balance: existingWallet.balance,
-            currency: existingWallet.currency,
-            locked: existingWallet.locked,
-            accounts: existingWallet.accountNumbers,
-            primaryAccount: existingWallet.primaryAccountNumber,
-            totalFunded: existingWallet.totalFunded,
-            totalSpent: existingWallet.totalSpent,
-            createdAt: existingWallet.createdAt,
-          }
-        }
-      });
+    if (!verificationId) {
+      return next(new AppError('BVN or NIN is required to create a wallet', 400));
+    }
+    
+    if (!/^\d{11}$/.test(verificationId)) {
+      return next(new AppError('BVN/NIN must be exactly 11 digits', 400));
     }
     
     const user = await User.findById(userId);
@@ -398,7 +385,8 @@ exports.createWallet = async (req, res, next) => {
     }
     
     logger.info(`Creating wallet for user: ${userId}`);
-    const wallet = await WalletService.createWallet(user,nin);
+    
+    const wallet = await WalletService.createWallet(user, null, verificationId);
     
     res.status(201).json({
       status: 'success',
@@ -408,8 +396,13 @@ exports.createWallet = async (req, res, next) => {
           balance: wallet.balance,
           currency: wallet.currency,
           locked: wallet.locked,
-          accounts: wallet.accountNumbers,
-          primaryAccount: wallet.primaryAccountNumber,
+          accounts: wallet.monnifyAccounts?.map(acc => ({
+            bankName: acc.bankName,
+            accountNumber: acc.accountNumber,
+            accountName: acc.accountName,
+            isDefault: acc.isDefault
+          })),
+          primaryAccount: wallet.monnifyAccounts?.find(a => a.isDefault)?.accountNumber || wallet.monnifyAccounts?.[0]?.accountNumber,
           totalFunded: wallet.totalFunded,
           totalSpent: wallet.totalSpent,
           createdAt: wallet.createdAt,
@@ -428,7 +421,6 @@ exports.createWallet = async (req, res, next) => {
     next(error);
   }
 };
-
 
 exports.setTransactionPin = async (req, res, next) => {
   try {

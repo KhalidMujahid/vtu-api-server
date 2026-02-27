@@ -5,65 +5,101 @@ const { AppError } = require('../middlewares/errorHandler');
 const logger = require('../utils/logger');
 
 class WalletService {
-  static async createWallet(user, session = null) {
+  static async createWallet(user, session = null, nin) {
     try {
-      console.log('Starting wallet creation for user:', user._id);
       
-      let wallet = await Wallet.findOne({ user: user._id }).session(session);
+      const useSession = session || await mongoose.startSession();
+      const shouldManageSession = !session;
       
-      if (wallet) {
-        console.log('Wallet already exists for user:', user._id);
-        return wallet;
-      }
-      
-      console.log('Creating Monnify account for user:', user.email);
-      
-      let monnifyResult;
       try {
-        monnifyResult = await MonnifyService.createReservedAccount(user);
-        console.log('Monnify account creation result:', monnifyResult);
-      } catch (monnifyError) {
-        console.error('Monnify account creation failed with error:', monnifyError.message);
-        console.error('Full error:', monnifyError);
-        
-        if (monnifyError.message.includes('contractCode')) {
-          throw new AppError('Invalid Monnify contract code. Please check your MONNIFY_CONTRACT_CODE in .env', 500);
-        } else if (monnifyError.message.includes('apiKey') || monnifyError.message.includes('secret')) {
-          throw new AppError('Invalid Monnify API credentials. Please check your MONNIFY_API_KEY and MONNIFY_SECRET_KEY in .env', 500);
-        } else if (monnifyError.message.includes('network') || monnifyError.message.includes('ECONNREFUSED')) {
-          throw new AppError('Cannot connect to Monnify. Please check your internet connection.', 500);
+        if (shouldManageSession) {
+          useSession.startTransaction();
         }
         
-        throw monnifyError;
+        let wallet = await Wallet.findOne({ user: user._id }).session(useSession);
+        
+        if (wallet) {
+          
+          if (shouldManageSession) {
+            await useSession.commitTransaction();
+            useSession.endSession();
+          }
+          return wallet;
+        }
+        
+        
+        let monnifyResult;
+        try {
+          monnifyResult = await MonnifyService.createReservedAccount(user, nin);
+          console.log('Monnify account creation result:', monnifyResult);
+        } catch (monnifyError) {
+          console.error('Monnify account creation failed with error:', monnifyError.message);
+          console.error('Full error:', monnifyError);
+          
+          if (shouldManageSession) {
+            await useSession.abortTransaction();
+            useSession.endSession();
+          }
+          
+          if (monnifyError.message.includes('contractCode')) {
+            throw new AppError('Invalid Monnify contract code. Please check your MONNIFY_CONTRACT_CODE in .env', 500);
+          } else if (monnifyError.message.includes('apiKey') || monnifyError.message.includes('secret')) {
+            throw new AppError('Invalid Monnify API credentials. Please check your MONNIFY_API_KEY and MONNIFY_SECRET_KEY in .env', 500);
+          } else if (monnifyError.message.includes('network') || monnifyError.message.includes('ECONNREFUSED')) {
+            throw new AppError('Cannot connect to Monnify. Please check your internet connection.', 500);
+          }
+          
+          throw monnifyError;
+        }
+        
+        if (!monnifyResult || !monnifyResult.success) {
+          
+          if (shouldManageSession) {
+            await useSession.abortTransaction();
+            useSession.endSession();
+          }
+          
+          throw new AppError('Failed to create Monnify account - no accounts returned', 500);
+        }
+        
+        
+        wallet = new Wallet({
+          user: user._id,
+          balance: 0,
+          locked: false,
+          monnifyAccounts: monnifyResult.accounts.map((acc, index) => ({
+            ...acc,
+            isDefault: index === 0,
+            accountReference: monnifyResult.accountReference
+          })),
+          accountReference: monnifyResult.accountReference,
+          collectionChannel: monnifyResult.collectionChannel,
+          reservationReference: monnifyResult.reservationReference,
+        });
+        
+        await wallet.save({ session: useSession });
+        
+        if (shouldManageSession) {
+          await useSession.commitTransaction();
+          useSession.endSession();
+        }
+        
+        console.log('Wallet created successfully for user:', user._id);
+        logger.info(`Wallet created for user: ${user._id} with ${monnifyResult.accounts.length} bank accounts`);
+        
+        return wallet;
+      } catch (error) {
+        if (shouldManageSession && useSession) {
+          try {
+            await useSession.abortTransaction();
+          } catch (abortError) {
+            console.error('Error aborting transaction:', abortError);
+          } finally {
+            useSession.endSession();
+          }
+        }
+        throw error;
       }
-      
-      if (!monnifyResult || !monnifyResult.success) {
-        console.error('Monnify result indicates failure:', monnifyResult);
-        throw new AppError('Failed to create Monnify account - no accounts returned', 500);
-      }
-      
-      console.log('Creating wallet document with', monnifyResult.accounts.length, 'accounts');
-      
-      wallet = new Wallet({
-        user: user._id,
-        balance: 0,
-        locked: false,
-        monnifyAccounts: monnifyResult.accounts.map((acc, index) => ({
-          ...acc,
-          isDefault: index === 0,
-          accountReference: monnifyResult.accountReference
-        })),
-        accountReference: monnifyResult.accountReference,
-        collectionChannel: monnifyResult.collectionChannel,
-        reservationReference: monnifyResult.reservationReference,
-      });
-      
-      await wallet.save({ session });
-      
-      console.log('Wallet created successfully for user:', user._id);
-      logger.info(`Wallet created for user: ${user._id} with ${monnifyResult.accounts.length} bank accounts`);
-      
-      return wallet;
     } catch (error) {
       console.error('Error in createWallet:', error);
       logger.error('Error creating wallet:', error);
