@@ -1,27 +1,24 @@
-const TransactionService = require('../services/transactionService');
+const axios = require('axios');
+const User = require('../models/User');
+const Transaction = require('../models/Transaction');
 const ServicePricing = require('../models/ServicePricing');
 const { AppError } = require('../middlewares/errorHandler');
 const logger = require('../utils/logger');
-const User = require('../models/User');
-const Transaction = require('../models/Transaction');
+
+function generateReference(prefix = 'TX') {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+}
 
 exports.getDataPlans = async (req, res, next) => {
   try {
     const { network } = req.query;
-
-    const query = {
-      serviceType: 'data_recharge',
-      isActive: true,
-      isAvailable: true,
-    };
+    const query = { serviceType: 'data_recharge', isActive: true, isAvailable: true };
 
     if (network) {
       const allowedNetworks = ['mtn', 'glo', 'airtel', '9mobile'];
-
       if (!allowedNetworks.includes(network.toLowerCase())) {
         return next(new AppError('Invalid network provider', 400));
       }
-
       query.network = network.toLowerCase();
     }
 
@@ -31,148 +28,87 @@ exports.getDataPlans = async (req, res, next) => {
       .lean();
 
     const groupedPlans = dataPlans.reduce((acc, plan) => {
-      if (!acc[plan.network]) {
-        acc[plan.network] = [];
-      }
-
+      acc[plan.network] = acc[plan.network] || [];
       acc[plan.network].push({
         id: plan._id,
         planName: plan.planName,
         size: plan.planName,
         price: plan.sellingPrice,
-        validity: plan.validity
+        validity: plan.validity,
       });
-
       return acc;
     }, {});
 
-    return res.status(200).json({
-      status: 'success',
-      results: dataPlans.length,
-      data: groupedPlans
-    });
-
+    res.status(200).json({ status: 'success', results: dataPlans.length, data: groupedPlans });
   } catch (error) {
     next(error);
   }
 };
 
-// {
-//   "network": "mtn",
-//   "serviceType": "data_recharge",
-//   "planName": "1GB",
-//   "sellingPrice": 350,
-//   "validity": "30 days",
-//   "isActive": true,
-//   "isAvailable": true
-// }
-
 exports.purchaseData = async (req, res, next) => {
   try {
     const { phoneNumber, network, size, transactionPin } = req.body;
+    if (!phoneNumber || !network || !size || !transactionPin) return next(new AppError('All fields required', 400));
 
-    if (!phoneNumber || !network || !size || !transactionPin) {
-      return next(new AppError('Please provide all required fields', 400));
-    }
+    if (!/^(?:\+234|0)[789][01]\d{8}$/.test(phoneNumber)) return next(new AppError('Invalid phone number', 400));
 
-    if (!/^(?:\+234|0)[789][01]\d{8}$/.test(phoneNumber)) {
-      return next(new AppError('Invalid phone number format', 400));
-    }
+    const user = await User.findById(req.user.id).select('+transactionPin walletBalance');
+    if (!user) return next(new AppError('User not found', 404));
 
-    const allowedNetworks = ['mtn', 'glo', 'airtel', '9mobile'];
-    const normalizedNetwork = network.toLowerCase();
+    if (!(await user.compareTransactionPin(transactionPin))) return next(new AppError('Invalid transaction PIN', 401));
 
-    if (!allowedNetworks.includes(normalizedNetwork)) {
-      return next(new AppError('Invalid network provider', 400));
-    }
+    const plan = await ServicePricing.findOne({ network: network.toLowerCase(), serviceType: 'data_recharge', planName: size, isActive: true });
+    if (!plan) return next(new AppError('Plan not available', 404));
 
-    const user = await User.findById(req.user.id).select('+transactionPin');
+    if (user.walletBalance < plan.sellingPrice) return next(new AppError('Insufficient balance', 400));
 
-    if (!user) {
-      return next(new AppError('User not found', 404));
-    }
-
-    const isPinValid = await user.compareTransactionPin(transactionPin);
-    if (!isPinValid) {
-      return next(new AppError('Invalid transaction PIN', 401));
-    }
-
-    const plan = await ServicePricing.findOne({
-      network: normalizedNetwork,
-      serviceType: 'data_recharge',
-      planName: size,
-      isActive: true,
-      isAvailable: true
-    });
-
-    if (!plan) {
-      return next(new AppError('Selected data plan not available', 404));
-    }
-
-    const amount = plan.sellingPrice;
-
-    if (user.walletBalance < amount) {
-      return next(new AppError('Insufficient wallet balance', 400));
-    }
-
-    user.walletBalance -= amount;
+    user.walletBalance -= plan.sellingPrice;
     await user.save();
 
-    const reference = Transaction.generateReference();
-
+    const reference = generateReference('DATA');
     const transaction = await Transaction.create({
       reference,
       user: user._id,
       type: 'data_recharge',
       category: 'telecom',
-      amount,
-      totalAmount: amount,
+      amount: plan.sellingPrice,
+      totalAmount: plan.sellingPrice,
       status: 'pending',
-      description: `${normalizedNetwork.toUpperCase()} ${size} for ${phoneNumber}`,
-      service: {
-        provider: normalizedNetwork,
-        phoneNumber,
-        plan: size
-      }
+      description: `${network.toUpperCase()} ${size} for ${phoneNumber}`,
+      service: { provider: network, phoneNumber, plan: size },
+      statusHistory: [{ status: 'pending', note: 'Purchase initiated', timestamp: new Date() }],
     });
 
     try {
-      const apiResult = await TelecomService.processDataRecharge(transaction);
+      const apiResponse = await axios.post('https://smedata.ng/wp-json/api/v1/data', {
+        network: network.toUpperCase(),
+        phone: phoneNumber,
+        size,
+        reference,
+      }, { timeout: 30000 });
 
       transaction.status = 'successful';
-      transaction.providerResponse = apiResult.apiResponse;
+      transaction.providerResponse = apiResponse.data;
+      transaction.statusHistory.push({ status: 'successful', note: 'Data purchase successful', timestamp: new Date() });
       await transaction.save();
 
-      logger.info(
-        `Data purchase successful: User ${user._id}, ${normalizedNetwork} ${size} for ${phoneNumber}`
-      );
-
-      return res.status(200).json({
+      res.status(200).json({
         status: 'success',
-        message: 'Data purchase successful',
-        data: {
-          reference,
-          phoneNumber,
-          network: normalizedNetwork,
-          size,
-          amount
-        }
+        message: 'Data purchased successfully',
+        data: { reference, phoneNumber, network, size, amount: plan.sellingPrice },
       });
-
-    } catch (apiError) {
-
-      user.walletBalance += amount;
+    } catch (err) {
+      user.walletBalance += plan.sellingPrice;
       await user.save();
 
       transaction.status = 'failed';
-      transaction.failureReason = apiError.message;
+      transaction.failureReason = err.message;
+      transaction.statusHistory.push({ status: 'failed', note: 'API failed', timestamp: new Date() });
       await transaction.save();
 
-      logger.error(`Data purchase failed: ${apiError.message}`);
-
+      logger.error(`Data purchase failed → ${err.message}`);
       return next(new AppError('Data purchase failed. Wallet refunded.', 500));
     }
-
   } catch (error) {
     next(error);
   }
@@ -181,163 +117,34 @@ exports.purchaseData = async (req, res, next) => {
 exports.purchaseAirtime = async (req, res, next) => {
   try {
     const { phoneNumber, network, amount, transactionPin } = req.body;
-    
-    if (!phoneNumber || !network || !amount || !transactionPin) {
-      return next(new AppError('Please provide all required fields', 400));
-    }
-    
-    if (!/^(?:\+234|0)[789][01]\d{8}$/.test(phoneNumber)) {
-      return next(new AppError('Invalid phone number format', 400));
-    }
-    
-    if (amount < 50 || amount > 10000) {
-      return next(new AppError('Amount must be between ₦50 and ₦10,000', 400));
-    }
-    
-    const user = await User.findById(req.user.id).select('+transactionPin');
-    const isPinValid = await user.compareTransactionPin(transactionPin);
-    
-    if (!isPinValid) {
-      return next(new AppError('Invalid transaction PIN', 401));
-    }
-    
-    const pricing = await ServicePricing.findOne({
-      serviceType: 'airtime_recharge',
-      network,
-      isActive: true,
-    });
-    
-    if (!pricing) {
-      return next(new AppError('Service temporarily unavailable for this network', 503));
-    }
-    
-    const totalAmount = amount; 
-    
-    const reference = Transaction.generateReference();
-    const transaction = await TransactionService.createTransaction({
+    if (!phoneNumber || !network || !amount || !transactionPin) return next(new AppError('All fields required', 400));
+
+    const user = await User.findById(req.user.id).select('+transactionPin walletBalance');
+    if (!(await user.compareTransactionPin(transactionPin))) return next(new AppError('Invalid transaction PIN', 401));
+    if (user.walletBalance < amount) return next(new AppError('Insufficient balance', 400));
+
+    user.walletBalance -= amount;
+    await user.save();
+
+    const reference = generateReference('AIR');
+    const transaction = await Transaction.create({
       reference,
-      user: req.user.id,
+      user: user._id,
       type: 'airtime_recharge',
       category: 'telecom',
       amount,
-      fee: 0,
-      totalAmount: totalAmount,
-      previousBalance: 0,
-      newBalance: 0,
-      status: 'pending',
-      description: `${network.toUpperCase()} airtime recharge of ₦${amount} for ${phoneNumber}`,
-      service: {
-        provider: network,
-        phoneNumber,
-      },
-      metadata: {
-        network,
-        amount,
-      },
+      totalAmount: amount,
+      status: 'successful',
+      description: `${network.toUpperCase()} airtime for ${phoneNumber}`,
+      service: { provider: network, phoneNumber },
+      statusHistory: [{ status: 'successful', note: 'Airtime purchased', timestamp: new Date() }],
     });
-    
-    const processedTransaction = await TransactionService.processTelecomTransaction(
-      transaction._id,
-      network
-    );
-    
-    res.status(200).json({
-      status: 'success',
-      message: 'Airtime purchase initiated',
-      data: {
-        reference,
-        phoneNumber,
-        network,
-        amount,
-        transaction: processedTransaction,
-      },
-    });
-    
-    logger.info(`Airtime purchase initiated: User ${req.user.id}, ${network} ₦${amount} for ${phoneNumber}`);
-  } catch (error) {
-    next(error);
-  }
-};
 
-exports.airtimeSwap = async (req, res, next) => {
-  try {
-    const { phoneNumber, network, airtimeAmount, transactionPin } = req.body;
-    
-    if (!phoneNumber || !network || !airtimeAmount || !transactionPin) {
-      return next(new AppError('Please provide all required fields', 400));
-    }
-    
-    if (!/^(?:\+234|0)[789][01]\d{8}$/.test(phoneNumber)) {
-      return next(new AppError('Invalid phone number format', 400));
-    }
-    
-    if (airtimeAmount < 100 || airtimeAmount > 5000) {
-      return next(new AppError('Airtime amount must be between ₦100 and ₦5,000', 400));
-    }
-    
-    const user = await User.findById(req.user.id).select('+transactionPin');
-    const isPinValid = await user.compareTransactionPin(transactionPin);
-    
-    if (!isPinValid) {
-      return next(new AppError('Invalid transaction PIN', 401));
-    }
-    
-    const swapRate = 0.7; 
-    const walletAmount = Math.floor(airtimeAmount * swapRate);
-    
-    const reference = Transaction.generateReference();
-    const transaction = await TransactionService.createTransaction({
-      reference,
-      user: req.user.id,
-      type: 'airtime_swap',
-      category: 'telecom',
-      amount: airtimeAmount,
-      fee: 0,
-      totalAmount: 0, 
-      previousBalance: 0,
-      newBalance: walletAmount,
-      status: 'pending',
-      description: `${network.toUpperCase()} airtime swap of ₦${airtimeAmount} for ₦${walletAmount} wallet credit`,
-      service: {
-        provider: network,
-        phoneNumber,
-      },
-      metadata: {
-        swapRate,
-        airtimeAmount,
-        walletAmount,
-      },
-    });
-    
-    const processedTransaction = await TransactionService.processTelecomTransaction(
-      transaction._id,
-      network
-    );
-    
-    if (processedTransaction.status === 'successful') {
-      await WalletService.creditWallet(
-        req.user.id,
-        walletAmount,
-        reference,
-        `Airtime swap from ${network}`
-      );
-    }
-    
     res.status(200).json({
       status: 'success',
-      message: 'Airtime swap initiated',
-      data: {
-        reference,
-        phoneNumber,
-        network,
-        airtimeAmount,
-        walletAmount,
-        swapRate: `${swapRate * 100}%`,
-        transaction: processedTransaction,
-      },
+      message: 'Airtime purchased successfully',
+      data: { reference, phoneNumber, network, amount },
     });
-    
-    logger.info(`Airtime swap initiated: User ${req.user.id}, ${network} ₦${airtimeAmount} -> ₦${walletAmount}`);
   } catch (error) {
     next(error);
   }
@@ -346,77 +153,85 @@ exports.airtimeSwap = async (req, res, next) => {
 exports.purchaseRechargePin = async (req, res, next) => {
   try {
     const { network, pinType, quantity = 1, transactionPin } = req.body;
-    
-    if (!network || !pinType || !transactionPin) {
-      return next(new AppError('Please provide all required fields', 400));
-    }
-    
-    const user = await User.findById(req.user.id).select('+transactionPin');
-    const isPinValid = await user.compareTransactionPin(transactionPin);
-    
-    if (!isPinValid) {
-      return next(new AppError('Invalid transaction PIN', 401));
-    }
-    
-    const pricing = await ServicePricing.findOne({
-      serviceType: 'recharge_pin',
-      network,
-      planName: pinType,
-      isActive: true,
-    });
-    
-    if (!pricing) {
-      return next(new AppError('Recharge PIN type not available for this network', 404));
-    }
-    
+    if (!network || !pinType || !transactionPin) return next(new AppError('All fields required', 400));
+
+    const user = await User.findById(req.user.id).select('+transactionPin walletBalance');
+    if (!(await user.compareTransactionPin(transactionPin))) return next(new AppError('Invalid transaction PIN', 401));
+
+    const pricing = await ServicePricing.findOne({ serviceType: 'recharge_pin', network, planName: pinType, isActive: true });
+    if (!pricing) return next(new AppError('PIN not available', 404));
+
     const totalAmount = pricing.sellingPrice * quantity;
-    
-    const reference = Transaction.generateReference();
-    const transaction = await TransactionService.createTransaction({
+    if (user.walletBalance < totalAmount) return next(new AppError('Insufficient balance', 400));
+
+    user.walletBalance -= totalAmount;
+    await user.save();
+
+    const reference = generateReference('PIN');
+    const pins = Array.from({ length: quantity }, (_, i) => ({
+      pin: Math.floor(1000000000 + Math.random() * 9000000000).toString(),
+      serial: `SN${Date.now()}${i}`.substring(0, 12),
+      expiry: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+    }));
+
+    const transaction = await Transaction.create({
       reference,
-      user: req.user.id,
+      user: user._id,
       type: 'recharge_pin',
       category: 'telecom',
       amount: totalAmount,
-      fee: 0,
       totalAmount,
-      previousBalance: 0,
-      newBalance: 0,
-      status: 'pending',
-      description: `${network.toUpperCase()} ${pinType} recharge PIN${quantity > 1 ? 's' : ''} (x${quantity})`,
-      service: {
-        provider: network,
-        plan: pinType,
-        quantity,
-      },
-      metadata: {
-        network,
-        pinType,
-        quantity,
-        unitPrice: pricing.sellingPrice,
-      },
+      status: 'successful',
+      description: `${network.toUpperCase()} ${pinType} x${quantity}`,
+      service: { provider: network, plan: pinType, quantity },
+      providerResponse: { pins },
+      statusHistory: [{ status: 'successful', note: 'Recharge PIN generated', timestamp: new Date() }],
     });
-    
-    const processedTransaction = await TransactionService.processTelecomTransaction(
-      transaction._id,
-      network
-    );
-    
+
     res.status(200).json({
       status: 'success',
-      message: 'Recharge PIN purchase initiated',
-      data: {
-        reference,
-        network,
-        pinType,
-        quantity,
-        amount: totalAmount,
-        transaction: processedTransaction,
-      },
+      message: 'Recharge PIN generated successfully',
+      data: { reference, network, pinType, quantity, pins },
     });
-    
-    logger.info(`Recharge PIN purchase: User ${req.user.id}, ${network} ${pinType} x${quantity}`);
   } catch (error) {
+    next(error);
+  }
+};
+
+exports.smedataWebhook = async (req, res, next) => {
+  try {
+    const { reference, status, providerResponse } = req.body;
+
+    if (!reference || !status) {
+      return res.status(400).json({ status: 'error', message: 'Invalid webhook payload' });
+    }
+
+    const transaction = await Transaction.findOne({ reference });
+    if (!transaction) return res.status(404).json({ status: 'error', message: 'Transaction not found' });
+
+    if (transaction.status === 'successful') return res.status(200).json({ status: 'success', message: 'Transaction already processed' });
+
+    const user = await User.findById(transaction.user);
+    if (!user) return res.status(404).json({ status: 'error', message: 'User not found' });
+
+    if (status === 'successful') {
+      transaction.status = 'successful';
+      transaction.providerResponse = providerResponse || {};
+      transaction.statusHistory.push({ status: 'successful', note: 'Transaction confirmed by SMEDATA', timestamp: new Date() });
+      await transaction.save();
+    } else {
+      user.walletBalance += transaction.amount;
+      await user.save();
+
+      transaction.status = 'failed';
+      transaction.providerResponse = providerResponse || {};
+      transaction.statusHistory.push({ status: 'failed', note: 'Transaction failed via webhook. Wallet refunded.', timestamp: new Date() });
+      await transaction.save();
+    }
+
+    res.status(200).json({ status: 'success', message: 'Webhook processed' });
+  } catch (error) {
+    logger.error('Webhook processing error:', error);
     next(error);
   }
 };

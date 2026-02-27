@@ -7,4 +7,6 @@ router.post('/initialize', protect, paymentController.initializePaystackPayment)
 router.get('/verify/:reference', protect, paymentController.verifyPaystackPayment);
 router.get('/status/:reference', protect, paymentController.getPaymentStatus);
 
+router.post('/webhook', paymentController.paystackWebhook);
+
 module.exports = router;
