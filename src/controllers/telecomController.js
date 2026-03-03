@@ -4,6 +4,7 @@ const Transaction = require('../models/Transaction');
 const ServicePricing = require('../models/ServicePricing');
 const { AppError } = require('../middlewares/errorHandler');
 const logger = require('../utils/logger');
+const crypto = require('crypto');
 
 function generateReference(prefix = 'TX') {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
@@ -114,39 +115,163 @@ exports.purchaseData = async (req, res, next) => {
   }
 };
 
+const networkMap = {
+  MTN: 1,
+  GLO: 2,
+  AIRTEL: 4,
+  '9MOBILE': 3,
+  ETISALAT: 3,
+};
+
+const profitConfig = {
+  MTN: 3,      
+  GLO: 4,
+  AIRTEL: 3,
+  '9MOBILE': 2,
+};
+
 exports.purchaseAirtime = async (req, res, next) => {
   try {
     const { phoneNumber, network, amount, transactionPin } = req.body;
-    if (!phoneNumber || !network || !amount || !transactionPin) return next(new AppError('All fields required', 400));
 
-    const user = await User.findById(req.user.id).select('+transactionPin walletBalance');
-    if (!(await user.compareTransactionPin(transactionPin))) return next(new AppError('Invalid transaction PIN', 401));
-    if (user.walletBalance < amount) return next(new AppError('Insufficient balance', 400));
+    if (!phoneNumber || !network || !amount || !transactionPin)
+      return next(new AppError('All fields required', 400));
+
+    const user = await User.findById(req.user.id)
+      .select('+transactionPin walletBalance');
+
+    if (!(await user.compareTransactionPin(transactionPin)))
+      return next(new AppError('Invalid transaction PIN', 401));
+
+    if (user.walletBalance < amount)
+      return next(new AppError('Insufficient balance', 400));
+
+    const networkCode = networkMap[network.toUpperCase()];
+    if (!networkCode)
+      return next(new AppError('Invalid network selected', 400));
+
+    const requestId = `AIR-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
+
+    const profitPercent = profitConfig[network.toUpperCase()] || 0;
+    const profit = (profitPercent / 100) * amount;
 
     user.walletBalance -= amount;
     await user.save();
 
-    const reference = generateReference('AIR');
     const transaction = await Transaction.create({
-      reference,
+      reference: requestId,
       user: user._id,
       type: 'airtime_recharge',
       category: 'telecom',
       amount,
+      profit,
       totalAmount: amount,
-      status: 'successful',
-      description: `${network.toUpperCase()} airtime for ${phoneNumber}`,
+      status: 'pending',
+      description: `${network} airtime for ${phoneNumber}`,
       service: { provider: network, phoneNumber },
-      statusHistory: [{ status: 'successful', note: 'Airtime purchased', timestamp: new Date() }],
+      statusHistory: [
+        { status: 'pending', note: 'Transaction initiated', timestamp: new Date() },
+      ],
     });
+
+    let apiResponse;
+    let attempts = 0;
+    const maxAttempts = 3;
+
+    while (attempts < maxAttempts) {
+      try {
+        attempts++;
+
+        apiResponse = await axios.get(
+          'https://www.nellobytesystems.com/APIAirtimeV1.asp',
+          {
+            params: {
+              UserID: process.env.NELLO_USER_ID,
+              APIKey: process.env.NELLO_API_KEY,
+              MobileNetwork: networkCode,
+              Amount: amount,
+              MobileNumber: phoneNumber,
+              RequestID: requestId,
+              CallBackURL: process.env.AIRTIME_CALLBACK_URL,
+            },
+            timeout: 10000,
+          }
+        );
+
+        break;
+      } catch (err) {
+        if (attempts >= maxAttempts) throw err;
+      }
+    }
+
+    if (apiResponse?.data?.includes?.('SUCCESS')) {
+      transaction.status = 'successful';
+      transaction.statusHistory.push({
+        status: 'successful',
+        note: 'Provider instant success',
+        timestamp: new Date(),
+      });
+      await transaction.save();
+    }
 
     res.status(200).json({
       status: 'success',
-      message: 'Airtime purchased successfully',
-      data: { reference, phoneNumber, network, amount },
+      message: 'Airtime request submitted',
+      data: { reference: requestId },
     });
+
   } catch (error) {
     next(error);
+  }
+};
+
+exports.airtimeWebhook = async (req, res) => {
+  try {
+    const { orderid, statuscode, status } = req.body;
+
+    const transaction = await Transaction.findOne({ reference: orderid });
+    if (!transaction) return res.status(404).send('Transaction not found');
+
+    if (transaction.status === 'successful' || transaction.status === 'failed') {
+      return res.status(200).send('Already processed');
+    }
+
+    if (statuscode === "100") {
+      transaction.status = 'pending';
+      transaction.statusHistory.push({
+        status: 'pending',
+        note: status,
+        timestamp: new Date(),
+      });
+
+    } else if (statuscode === "200") {
+      transaction.status = 'successful';
+      transaction.statusHistory.push({
+        status: 'successful',
+        note: 'Confirmed by provider',
+        timestamp: new Date(),
+      });
+
+    } else {
+      transaction.status = 'failed';
+      transaction.statusHistory.push({
+        status: 'failed',
+        note: status || 'Provider failure',
+        timestamp: new Date(),
+      });
+
+      const user = await User.findById(transaction.user);
+      user.walletBalance += transaction.amount;
+      await user.save();
+    }
+
+    await transaction.save();
+
+    res.status(200).send('OK');
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).send('Webhook error');
   }
 };
 

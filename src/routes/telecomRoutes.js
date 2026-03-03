@@ -8,6 +8,7 @@ router.post('/webhook/smedata', telecomController.smedataWebhook);
 router.use(protect);
 
 router.get('/data/plans', telecomController.getDataPlans);
+router.get('/airtime/webhook', telecomController.airtimeWebhook);
 router.post('/data/purchase', requireTransactionPin, telecomController.purchaseData);
 
 router.post('/airtime/purchase', requireTransactionPin, telecomController.purchaseAirtime);

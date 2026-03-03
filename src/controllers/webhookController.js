@@ -1,8 +1,87 @@
 const crypto = require('crypto');
 const WalletService = require('../services/walletService');
 const Transaction = require('../models/Transaction');
+const Wallet = require('../models/wallet');
 const { AppError } = require('../middlewares/errorHandler');
 const logger = require('../utils/logger');
+
+exports.budpayWebhook = async (req, res) => {
+  try {
+    const secret = process.env.BUDPAY_SECRET_KEY;
+
+    const signature = req.headers['x-budpay-signature'];
+
+    const hash = crypto
+      .createHmac('sha512', secret)
+      .update(req.body)
+      .digest('hex');
+
+    if (hash !== signature) {
+      return res.status(401).send('Invalid signature');
+    }
+
+    const event = JSON.parse(req.body.toString());
+
+    if (event.type !== 'dedicated.account.transaction') {
+      return res.status(200).send('Event ignored');
+    }
+
+    const data = event.data;
+
+    const {
+      amount,
+      account_number,
+      customer_code,
+      reference,
+      status,
+    } = data;
+
+    if (status !== 'success') {
+      return res.status(200).send('Payment not successful');
+    }
+
+    const existingTx = await Transaction.findOne({ reference });
+    if (existingTx) {
+      return res.status(200).send('Already processed');
+    }
+
+    const wallet = await Wallet.findOne({
+      'virtualAccount.accountNumber': account_number,
+    });
+
+    if (!wallet) {
+      return res.status(404).send('Wallet not found');
+    }
+
+    wallet.balance += amount;
+    wallet.totalFunded += amount;
+    await wallet.save();
+
+    await Transaction.create({
+      reference,
+      user: wallet.user,
+      type: 'wallet_funding',
+      category: 'deposit',
+      amount,
+      totalAmount: amount,
+      status: 'successful',
+      description: 'Wallet funded successfully',
+      statusHistory: [
+        {
+          status: 'successful',
+          note: 'Funding confirmed from webhook',
+          timestamp: new Date(),
+        },
+      ],
+    });
+
+    return res.status(200).send('OK');
+
+  } catch (error) {
+    console.error(error);
+    return res.status(500).send('Webhook error');
+  }
+};
 
 exports.paystackWebhook = async (req, res, next) => {
   try {

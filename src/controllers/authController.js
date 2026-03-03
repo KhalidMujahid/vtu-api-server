@@ -53,57 +53,40 @@ exports.register = async (req, res, next) => {
 
     const normalizedPhone = normalizePhone(phoneNumber);
     if (!normalizedPhone) {
-      return next(
-        new AppError('Invalid phone number', 400)
-      );
+      return next(new AppError('Invalid phone number', 400));
     }
-    
+
     const existingUser = await User.findOne({
-      $or: [{ email }, { phoneNumber }],
+      $or: [{ email }, { phoneNumber: normalizedPhone }],
     });
-    
+
     if (existingUser) {
-      return next(new AppError('User with this email or phone already exists', 400));
+      return next(new AppError('User already exists', 400));
     }
-    
-    let referredBy = null;
-    if (referralCode) {
-      const referrer = await User.findOne({ referralCode });
-      if (referrer) {
-        referredBy = referrer._id;
-      }
-    }
-    
+
     const user = await User.create({
       firstName,
       lastName,
       email,
-      phoneNumber,
+      phoneNumber: normalizedPhone,
       password,
-      referredBy,
     });
-    
-    // await WalletService.createWallet(user._id);
-    // const wallet = await WalletService.createWallet(user);
-    
+
+    await WalletService.createWallet(user);
+
     const otp = generateOTP();
     const verificationToken = crypto
       .createHash('sha256')
       .update(otp)
       .digest('hex');
-    
+
     user.verificationToken = verificationToken;
-    user.verificationTokenExpires = Date.now() + 10 * 60 * 1000; 
+    user.verificationTokenExpires = Date.now() + 10 * 60 * 1000;
     await user.save();
-    
-    // await sendOTPEmail(user.email, otp);
-    // await sendOTPSMS(user.phoneNumber, otp);
-    
+
     createSendToken(user, 201, res);
-    
-    logger.info(`New user registered: ${user.email}`);
+
   } catch (error) {
-    console.log(error);
     next(error);
   }
 };

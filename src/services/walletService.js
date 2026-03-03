@@ -7,161 +7,84 @@ const mongoose = require("mongoose");
 const axios = require("axios");
 
 class WalletService {
-  static async createWallet(user, verification = {}) {
-    try {
+    static async createWallet(user) {
+      try {
+        const existingWallet = await Wallet.findOne({ user: user._id });
+        if (existingWallet) {
+          logger.info(`Wallet already exists for user ${user._id}`);
+          return existingWallet;
+        }
   
-      const { bvn, nin } = verification;
-  
-      const existingWallet = await Wallet.findOne({ user: user._id });
-  
-      if (existingWallet) {
-        logger.info(`Wallet already exists for user ${user._id}, returning existing wallet`);
-        return existingWallet;
-      }
-  
-      const accessToken = await this.getMonnifyToken();
-  
-      const reference = `wallet_${user._id}_${Date.now()}`;
-  
-      const payload = {
-        accountReference: reference,
-        accountName: `${user.firstName} ${user.lastName}`,
-        currencyCode: "NGN",
-        contractCode: process.env.MONNIFY_CONTRACT_CODE,
-        customerEmail: user.email,
-        customerName: `${user.firstName} ${user.lastName}`,
-        getAllAvailableBanks: true
-      };
-  
-      if (bvn) payload.bvn = bvn;
-      if (nin) payload.nin = nin;
-  
-      const response = await axios.post(
-        `${process.env.MONNIFY_BASE_URL}/api/v2/bank-transfer/reserved-accounts`,
-        payload,
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json"
+        const customerResponse = await axios.post(
+          'https://api.budpay.com/api/v2/customer',
+          {
+            email: user.email,
+            first_name: user.firstName,
+            last_name: user.lastName,
+            phone: user.phoneNumber
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${process.env.BUDPAY_SECRET_KEY}`,
+              'Content-Type': 'application/json'
+            }
           }
-        }
-      );
-  
-      const accounts = response.data.responseBody.accounts;
-  
-      const wallet = await Wallet.create({
-        user: user._id,
-        balance: 0,
-        currency: "NGN",
-        locked: false,
-        totalFunded: 0,
-        totalSpent: 0,
-        monnifyAccounts: accounts.map((acc, index) => ({
-          bankName: acc.bankName,
-          accountNumber: acc.accountNumber,
-          accountName: acc.accountName,
-          bankCode: acc.bankCode,
-          isDefault: index === 0
-        }))
-      });
-  
-      logger.info(`Monnify virtual account created for user ${user._id}`);
-  
-      return wallet;
-  
-    } catch (error) {
-  
-      if (
-        error.response?.data?.responseMessage?.includes(
-          "cannot reserve more than"
-        )
-      ) {
-        const wallet = await Wallet.findOne({ user: user._id });
-  
-        if (wallet) {
-          logger.info(`Fetched existing wallet from DB for user ${user._id}`);
-          return wallet;
-        }
-      }
-  
-      logger.error(
-        "Monnify wallet creation error:",
-        error.response?.data || error.message
-      );
-  
-      throw new Error(
-        error.response?.data?.responseMessage || "Failed to create wallet"
-      );
-    }
-  }
-
-  static async getMonnifyToken() {
-
-    const auth = Buffer.from(
-      `${process.env.MONNIFY_API_KEY}:${process.env.MONNIFY_SECRET_KEY}`
-    ).toString('base64');
-
-    const response = await axios.post(
-      `${process.env.MONNIFY_BASE_URL}/api/v1/auth/login`,
-      {},
-      {
-        headers: {
-          Authorization: `Basic ${auth}`
-        }
-      }
-    );
-
-    return response.data.responseBody.accessToken;
-  }
-
-  static async getAccountDetailsByEmail(email) {
-    try {
-      const authToken = await this.getAccessToken();
-      if (!authToken) {
-        throw new AppError('Failed to get Monnify access token', 500);
-      }
-  
-      const monnify = this.getMonnifyClient();
-      
-      logger.info(`Fetching account details for email: ${email}`);
-      
-      const user = await User.findOne({ email }).select('+monnifyAccountReference');
-      
-      if (user && user.monnifyAccountReference) {
-        const [status, response] = await monnify.reservedAccount.getReservedAccountDetails(
-          authToken, 
-          user.monnifyAccountReference
         );
-        
-        if (status === 200) {
-          return {
-            success: true,
-            accounts: response.responseBody?.accounts || [],
-            accountReference: user.monnifyAccountReference,
-            collectionChannel: response.responseBody?.collectionChannel,
-            reservationReference: response.responseBody?.reservationReference
-          };
+  
+        if (!customerResponse.data.status) {
+          throw new Error('Failed to create BudPay customer');
         }
+  
+        const customerCode = customerResponse.data.data.customer_code;
+  
+        const accountResponse = await axios.post(
+          'https://api.budpay.com/api/v2/dedicated_virtual_account',
+          { customer: customerCode },
+          {
+            headers: {
+              Authorization: `Bearer ${process.env.BUDPAY_SECRET_KEY}`,
+              'Content-Type': 'application/json'
+            }
+          }
+        );
+  
+        if (!accountResponse.data.status) {
+          throw new Error('Failed to create virtual account');
+        }
+  
+        const accountData = accountResponse.data.data;
+  
+        const wallet = await Wallet.create({
+          user: user._id,
+          balance: 0,
+          currency: 'NGN',
+          locked: false,
+          totalFunded: 0,
+          totalSpent: 0,
+          budpayCustomerCode: customerCode,
+          virtualAccount: {
+            bankName: accountData.bank.name,
+            accountNumber: accountData.account_number,
+            accountName: accountData.account_name,
+            bankCode: accountData.bank.bank_code,
+            reference: accountData.reference
+          }
+        });
+  
+        logger.info(`wallet created for user ${user._id}`);
+  
+        return wallet;
+  
+      } catch (error) {
+        logger.error(
+          'wallet creation error:',
+          error.response?.data || error.message
+        );
+        throw new Error('Failed to create wallet');
       }
-      
-      logger.warn(`Could not fetch account details for email: ${email}`);
-      
-      return {
-        success: false,
-        accounts: [],
-        message: "Account exists but details need to be fetched from Monnify dashboard using accountReference"
-      };
-      
-    } catch (error) {
-      logger.error('Error getting account details by email:', error);
-      return {
-        success: false,
-        accounts: [],
-        error: error.message
-      };
-    }
+  
   }
-
+  
   static async walletExists(userId) {
     const wallet = await Wallet.findOne({ user: userId });
     return !!wallet;

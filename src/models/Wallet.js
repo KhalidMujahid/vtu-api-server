@@ -23,6 +23,15 @@ const walletSchema = new mongoose.Schema({
     type: Number,
     default: 0,
   },
+  budpayCustomerCode: String,
+
+virtualAccount: {
+  bankName: String,
+  accountNumber: String,
+  accountName: String,
+  bankCode: String,
+  reference: String
+},
   totalWithdrawn: {
     type: Number,
     default: 0,

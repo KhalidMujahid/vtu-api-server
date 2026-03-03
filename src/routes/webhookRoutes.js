@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const webhookController = require('../controllers/webhookController');
 
+router.post('/webhook/budpay', walletController.budpayWebhook);
+
 router.post('/paystack', express.raw({ type: 'application/json' }), webhookController.paystackWebhook);
 router.post('/monnify', express.raw({ type: 'application/json' }), webhookController.monnifyWebhook);
 router.post('/flutterwave', express.raw({ type: 'application/json' }), webhookController.flutterwaveWebhook);
