@@ -84,7 +84,7 @@ class WalletService {
       }
   
   }
-  
+
   static async walletExists(userId) {
     const wallet = await Wallet.findOne({ user: userId });
     return !!wallet;
@@ -109,20 +109,29 @@ class WalletService {
   static async getWalletWithAccounts(userId) {
     try {
       const wallet = await Wallet.findOne({ user: userId });
-      
+  
       if (!wallet) {
         return null;
       }
-      
+  
       return {
         balance: wallet.balance,
         currency: wallet.currency,
         locked: wallet.locked,
-        accounts: wallet.accountNumbers,
-        primaryAccount: wallet.primaryAccountNumber,
+  
+        virtualAccount: wallet.virtualAccount
+          ? {
+              bankName: wallet.virtualAccount.bankName,
+              accountNumber: wallet.virtualAccount.accountNumber,
+              accountName: wallet.virtualAccount.accountName,
+              bankCode: wallet.virtualAccount.bankCode,
+            }
+          : null,
       };
+  
     } catch (error) {
       if (error instanceof AppError) throw error;
+  
       logger.error('Error getting wallet with accounts:', error);
       throw new AppError('Failed to get wallet details', 500);
     }
