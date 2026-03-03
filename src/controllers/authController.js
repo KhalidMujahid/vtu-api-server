@@ -94,35 +94,44 @@ exports.register = async (req, res, next) => {
 exports.login = async (req, res, next) => {
   try {
     const { email, password, deviceInfo } = req.body;
-    
+
     if (!email || !password) {
       return next(new AppError('Please provide email and password', 400));
     }
-    
-    const user = await User.findOne({ email }).select('+password +failedLoginAttempts +lockUntil');
-    
+
+    const user = await User.findOne({ email })
+      .select('+password +failedLoginAttempts +lockUntil');
+
     if (!user || !(await user.comparePassword(password))) {
       if (user) {
         await user.incrementLoginAttempts();
       }
-      
       return next(new AppError('Incorrect email or password', 401));
     }
-    
+
     if (user.isLocked()) {
-      return next(new AppError('Account is locked. Please try again later or contact support.', 401));
+      return next(
+        new AppError(
+          'Account is locked. Please try again later or contact support.',
+          401
+        )
+      );
     }
-    
+
     if (!user.isActive) {
-      return next(new AppError('Your account has been deactivated. Please contact support.', 401));
+      return next(
+        new AppError(
+          'Your account has been deactivated. Please contact support.',
+          401
+        )
+      );
     }
-    
+
     if (user.failedLoginAttempts > 0) {
       user.failedLoginAttempts = 0;
       user.lockUntil = undefined;
-      await user.save();
     }
-    
+
     user.lastLogin = new Date();
     user.lastLoginIp = req.ip;
     user.lastLoginDevice = req.get('user-agent');
@@ -131,12 +140,11 @@ exports.login = async (req, res, next) => {
     let wallet = null;
 
     try {
+      await WalletService.createWallet(user);
       wallet = await WalletService.getWalletWithAccounts(user._id);
     } catch (err) {
       logger.warn('Wallet fetch failed during login:', err);
     }
-    
-    // createSendToken(user, 200, res);
 
     const token = signToken(user._id);
     const refreshToken = signRefreshToken(user._id);
@@ -150,15 +158,19 @@ exports.login = async (req, res, next) => {
       refreshToken,
       data: {
         user,
-        wallet: wallet ? {
-          balance: wallet.balance,
-          accounts: wallet.accounts,
-          primaryAccount: wallet.primaryAccount,
-        } : null,
+        wallet: wallet
+          ? {
+              balance: wallet.balance,
+              currency: wallet.currency,
+              locked: wallet.locked,
+              virtualAccount: wallet.virtualAccount,
+            }
+          : null,
       },
     });
-    
+
     logger.info(`User logged in: ${user.email}`);
+
   } catch (error) {
     next(error);
   }
