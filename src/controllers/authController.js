@@ -2,7 +2,7 @@ const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const WalletService = require('../services/walletService');
-const { sendOTPEmail, sendOTPSMS } = require('../utils/emailService');
+const { sendOTPEmail, sendOTPSMS,sendWelcomeEmail,sendPasswordResetEmail } = require('../utils/emailService');
 const { AppError } = require('../middlewares/errorHandler');
 const logger = require('../utils/logger');
 const { normalizePhone } = require('../utils/normalizePhone');
@@ -83,6 +83,8 @@ exports.register = async (req, res, next) => {
     user.verificationToken = verificationToken;
     user.verificationTokenExpires = Date.now() + 10 * 60 * 1000;
     await user.save();
+
+    await sendWelcomeEmail(user.email, user.firstName);
 
     createSendToken(user, 201, res);
 
@@ -178,49 +180,60 @@ exports.login = async (req, res, next) => {
 
 exports.verifyOTP = async (req, res, next) => {
   try {
-    const { email, otp, verificationType = 'email' } = req.body;
-    
+    const { email, otp, verificationType = "email" } = req.body;
+
     if (!email || !otp) {
-      return next(new AppError('Please provide email and OTP', 400));
+      return next(new AppError("Please provide email and OTP", 400));
     }
-    
+
     const user = await User.findOne({ email });
-    
+
     if (!user) {
-      return next(new AppError('User not found', 404));
+      return next(new AppError("User not found", 404));
     }
-    
-    const hashedToken = crypto
-      .createHash('sha256')
-      .update(otp)
-      .digest('hex');
-    
+
+    if (user.otpBlockedUntil && user.otpBlockedUntil > Date.now()) {
+      return next(new AppError("Too many attempts. Try again later.", 429));
+    }
+
+    const hashedToken = crypto.createHash("sha256").update(otp).digest("hex");
+
     if (
       user.verificationToken !== hashedToken ||
       user.verificationTokenExpires < Date.now()
     ) {
-      return next(new AppError('Invalid or expired OTP', 400));
+      user.otpAttempts += 1;
+
+      if (user.otpAttempts >= 5) {
+        user.otpBlockedUntil = Date.now() + 15 * 60 * 1000;
+      }
+
+      await user.save();
+
+      return next(new AppError("Invalid or expired OTP", 400));
     }
-    
-    if (verificationType === 'email') {
+
+    user.otpAttempts = 0;
+    user.otpBlockedUntil = undefined;
+
+    if (verificationType === "email") {
       user.isEmailVerified = true;
-    } else if (verificationType === 'phone') {
+    }
+
+    if (verificationType === "phone") {
       user.isPhoneVerified = true;
     }
-    
+
     user.verificationToken = undefined;
     user.verificationTokenExpires = undefined;
+
     await user.save();
-    
+
     res.status(200).json({
-      status: 'success',
-      message: 'OTP verified successfully',
-      data: {
-        isEmailVerified: user.isEmailVerified,
-        isPhoneVerified: user.isPhoneVerified,
-      },
+      status: "success",
+      message: "OTP verified successfully",
     });
-    
+
     logger.info(`User verified ${verificationType}: ${user.email}`);
   } catch (error) {
     next(error);
@@ -229,35 +242,47 @@ exports.verifyOTP = async (req, res, next) => {
 
 exports.resendOTP = async (req, res, next) => {
   try {
-    const { email, verificationType = 'email' } = req.body;
-    
+    const { email, verificationType = "email" } = req.body;
+
     const user = await User.findOne({ email });
-    
+
     if (!user) {
-      return next(new AppError('User not found', 404));
+      return next(new AppError("User not found", 404));
     }
-    
+
+    if (user.otpResendAfter && user.otpResendAfter > Date.now()) {
+      return next(
+        new AppError("Please wait before requesting another OTP", 429)
+      );
+    }
+
     const otp = generateOTP();
+
     const verificationToken = crypto
-      .createHash('sha256')
+      .createHash("sha256")
       .update(otp)
-      .digest('hex');
-    
+      .digest("hex");
+
     user.verificationToken = verificationToken;
-    user.verificationTokenExpires = Date.now() + 10 * 60 * 1000; 
+    user.verificationTokenExpires = Date.now() + 5 * 60 * 1000;
+
+    user.otpResendAfter = Date.now() + 60 * 1000;
+
     await user.save();
-    
-    if (verificationType === 'email') {
+
+    if (verificationType === "email") {
       await sendOTPEmail(user.email, otp);
-    } else if (verificationType === 'phone') {
+    }
+
+    if (verificationType === "phone") {
       await sendOTPSMS(user.phoneNumber, otp);
     }
-    
+
     res.status(200).json({
-      status: 'success',
-      message: 'OTP sent successfully',
+      status: "success",
+      message: "OTP sent successfully",
     });
-    
+
     logger.info(`OTP resent to ${verificationType}: ${user.email}`);
   } catch (error) {
     next(error);
@@ -267,31 +292,30 @@ exports.resendOTP = async (req, res, next) => {
 exports.forgotPassword = async (req, res, next) => {
   try {
     const { email } = req.body;
-    
+
     const user = await User.findOne({ email });
-    
+
     if (!user) {
-      return next(new AppError('User not found', 404));
+      return next(new AppError("User not found", 404));
     }
-    
-    const resetToken = crypto.randomBytes(32).toString('hex');
-    const passwordResetToken = crypto
-      .createHash('sha256')
-      .update(resetToken)
-      .digest('hex');
-    
-    user.resetPasswordToken = passwordResetToken;
-    user.resetPasswordExpires = Date.now() + 10 * 60 * 1000; 
+
+    const otp = generateOTP();
+
+    const hashedOTP = crypto.createHash("sha256").update(otp).digest("hex");
+
+    user.resetPasswordToken = hashedOTP;
+    user.resetPasswordExpires = Date.now() + 5 * 60 * 1000;
+
     await user.save();
-    
-    const resetURL = `${req.protocol}://${req.get('host')}/api/v1/auth/reset-password/${resetToken}`;
-    
-    logger.info(`Password reset URL: ${resetURL}`);
-    
+
+    await sendOTPEmail(user.email, otp);
+
     res.status(200).json({
-      status: 'success',
-      message: 'Password reset token sent to email',
+      status: "success",
+      message: "Password reset OTP sent to email",
     });
+
+    logger.info(`Password reset OTP sent: ${user.email}`);
   } catch (error) {
     next(error);
   }
@@ -299,31 +323,29 @@ exports.forgotPassword = async (req, res, next) => {
 
 exports.resetPassword = async (req, res, next) => {
   try {
-    const { token } = req.params;
-    const { password } = req.body;
-    
-    const hashedToken = crypto
-      .createHash('sha256')
-      .update(token)
-      .digest('hex');
-    
+    const { email, otp, password } = req.body;
+
+    const hashedOTP = crypto.createHash("sha256").update(otp).digest("hex");
+
     const user = await User.findOne({
-      resetPasswordToken: hashedToken,
+      email,
+      resetPasswordToken: hashedOTP,
       resetPasswordExpires: { $gt: Date.now() },
     });
-    
+
     if (!user) {
-      return next(new AppError('Token is invalid or has expired', 400));
+      return next(new AppError("Invalid or expired OTP", 400));
     }
-    
+
     user.password = password;
     user.resetPasswordToken = undefined;
     user.resetPasswordExpires = undefined;
+
     await user.save();
-    
+
     createSendToken(user, 200, res);
-    
-    logger.info(`Password reset for user: ${user.email}`);
+
+    logger.info(`Password reset successful: ${user.email}`);
   } catch (error) {
     next(error);
   }
@@ -332,25 +354,27 @@ exports.resetPassword = async (req, res, next) => {
 exports.setTransactionPin = async (req, res, next) => {
   try {
     const { transactionPin } = req.body;
-    
-    if (!transactionPin || transactionPin.length !== 4) {
-      return next(new AppError('Transaction PIN must be 4 digits', 400));
+
+    if (!/^\d{4}$/.test(transactionPin)) {
+      return next(new AppError("PIN must be 4 digits", 400));
     }
-    
+
     const user = await User.findById(req.user.id);
-    
+
     if (user.transactionPin) {
-      return next(new AppError('Transaction PIN already set', 400));
+      return next(new AppError("Transaction PIN already set", 400));
     }
-    
+
     user.transactionPin = transactionPin;
+    user.pin = true;
+
     await user.save();
-    
+
     res.status(200).json({
-      status: 'success',
-      message: 'Transaction PIN set successfully',
+      status: "success",
+      message: "Transaction PIN set successfully",
     });
-    
+
     logger.info(`Transaction PIN set for user: ${user.email}`);
   } catch (error) {
     next(error);

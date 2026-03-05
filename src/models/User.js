@@ -51,6 +51,16 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+  pin: {
+    type: Boolean,
+    default: false
+  },
+  otpAttempts: {
+    type: Number,
+    default: 0
+  },
+  otpBlockedUntil: Date,
+  otpResendAfter: Date,
   verificationToken: String,
   verificationTokenExpires: Date,
   resetPasswordToken: String,
@@ -96,7 +106,7 @@ const userSchema = new mongoose.Schema({
       type: Number,
       default: 0,
       min: 0,
-      max: 50, // Maximum 50% commission
+      max: 50,
     },
     totalCommissionEarned: {
       type: Number,

@@ -123,3 +123,53 @@ exports.sendOTPSMS = async (phoneNumber, otp) => {
     throw error;
   }
 };
+
+exports.sendWelcomeEmail = async (email, firstName) => {
+  try {
+    const mailOptions = {
+      from: `"Yareema Data Hub" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: "Welcome to Yareema Data Hub",
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width:600px; margin:auto;">
+          <h2 style="color:#333;">Welcome to Yareema Data Hub</h2>
+
+          <p style="font-size:16px;">
+            Hi <strong>${firstName}</strong>,
+          </p>
+
+          <p style="font-size:16px;">
+            Your account has been successfully created on 
+            <strong>Yareema Data Hub</strong>.
+          </p>
+
+          <p style="font-size:16px;">
+            You can now enjoy our services such as:
+          </p>
+
+          <ul style="font-size:16px;">
+            <li>📶 Buy Data</li>
+            <li>📱 Buy Airtime</li>
+            <li>💳 Fast Transactions</li>
+            <li>🔒 Secure Wallet</li>
+          </ul>
+
+          <p style="font-size:16px;">
+            If you did not create this account, please contact support immediately.
+          </p>
+
+          <hr/>
+
+          <p style="font-size:14px;color:#777;">
+            Thank you for choosing Yareema Data Hub.
+          </p>
+        </div>
+      `,
+    };
+
+    await transporter.sendMail(mailOptions);
+    logger.info(`Welcome email sent to ${email}`);
+  } catch (error) {
+    logger.error("Error sending welcome email:", error);
+  }
+};
