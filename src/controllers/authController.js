@@ -142,7 +142,7 @@ exports.login = async (req, res, next) => {
     let wallet = null;
 
     try {
-      await WalletService.createWallet(user);
+      await NotificationService.login(user._id);
       wallet = await WalletService.getWalletWithAccounts(user._id);
     } catch (err) {
       logger.warn('Wallet fetch failed during login:', err);

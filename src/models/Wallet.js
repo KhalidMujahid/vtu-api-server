@@ -131,6 +131,6 @@ walletSchema.virtual('accountNumbers').get(function() {
   return [];
 });
 
-const Wallet = mongoose.model('Wallet', walletSchema);
+const Wallet = mongoose.models.Wallet || mongoose.model('Wallet', walletSchema);
 
 module.exports = Wallet;

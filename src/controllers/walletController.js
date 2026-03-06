@@ -367,47 +367,31 @@ exports.getTransactionHistory = async (req, res, next) => {
 exports.createWallet = async (req, res, next) => {
   try {
     const userId = req.user.id;
-    const { nin, bvn } = req.body;
-
-    const verificationId = bvn || nin;
-
-    if (!verificationId) {
-      return next(new AppError('BVN or NIN is required to create a wallet', 400));
-    }
-
-    if (!/^\d{11}$/.test(verificationId)) {
-      return next(new AppError('BVN/NIN must be exactly 11 digits', 400));
-    }
 
     const user = await User.findById(userId);
-    if (!user) {
-      return next(new AppError('User not found', 404));
-    }
+    if (!user) return next(new AppError('User not found', 404));
 
-    const existingWallet = await Wallet.findOne({ user: userId });
-    if (existingWallet) {
-      return next(new AppError('Wallet already exists for this user', 400));
-    }
+    logger.info(`Fetching or creating wallet for user: ${userId}`);
 
-    logger.info(`Creating wallet for user: ${userId}`);
+    const wallet = await WalletService.createWallet(user);
 
-    const wallet = await WalletService.createWallet(user, { bvn, nin });
-
-    res.status(201).json({
+    res.status(200).json({
       status: 'success',
-      message: 'Wallet created successfully',
+      message: 'Wallet fetched successfully',
       data: {
         wallet: {
           balance: wallet.balance,
           currency: wallet.currency,
           locked: wallet.locked,
-          accounts: wallet.monnifyAccounts.map(acc => ({
-            bankName: acc.bankName,
-            accountNumber: acc.accountNumber,
-            accountName: acc.accountName,
-            isDefault: acc.isDefault
-          })),
-          primaryAccount: wallet.monnifyAccounts.find(a => a.isDefault)?.accountNumber,
+          virtualAccount: wallet.virtualAccount
+            ? {
+                bankName: wallet.virtualAccount.bankName,
+                accountNumber: wallet.virtualAccount.accountNumber,
+                accountName: wallet.virtualAccount.accountName,
+                bankCode: wallet.virtualAccount.bankCode,
+                reference: wallet.virtualAccount.reference
+              }
+            : null,
           totalFunded: wallet.totalFunded,
           totalSpent: wallet.totalSpent,
           createdAt: wallet.createdAt
@@ -417,12 +401,7 @@ exports.createWallet = async (req, res, next) => {
 
   } catch (error) {
     logger.error('Error creating wallet:', error);
-
-    if (error.message.includes('Monnify')) {
-      return next(new AppError('Unable to create wallet at this time. Please try again later.', 503));
-    }
-
-    next(error);
+    return next(new AppError('Unable to fetch wallet at this time', 503));
   }
 };
 

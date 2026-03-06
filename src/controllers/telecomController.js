@@ -4,6 +4,7 @@ const Transaction = require('../models/Transaction');
 const ServicePricing = require('../models/ServicePricing');
 const { AppError } = require('../middlewares/errorHandler');
 const logger = require('../utils/logger');
+const NotificationService = require('../services/NotificationService');
 const crypto = require('crypto');
 
 function generateReference(prefix = 'TX') {
@@ -65,6 +66,13 @@ exports.purchaseData = async (req, res, next) => {
 
     user.walletBalance -= plan.sellingPrice;
     await user.save();
+
+    await NotificationService.dataPurchase(
+      user._id,
+      network,
+      size,
+      phoneNumber
+    );
 
     const reference = generateReference('DATA');
     const transaction = await Transaction.create({
@@ -157,6 +165,13 @@ exports.purchaseAirtime = async (req, res, next) => {
 
     user.walletBalance -= amount;
     await user.save();
+
+    await NotificationService.airtimePurchase(
+      user._id,
+      network,
+      amount,
+      phoneNumber
+    );
 
     const transaction = await Transaction.create({
       reference: requestId,

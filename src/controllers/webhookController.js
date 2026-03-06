@@ -9,21 +9,21 @@ exports.budpayWebhook = async (req, res) => {
   try {
     const secret = process.env.BUDPAY_SECRET_KEY;
 
-    const signature = req.headers['x-budpay-signature'];
+    const signature = req.headers["x-budpay-signature"];
 
     const hash = crypto
-      .createHmac('sha512', secret)
-      .update(req.body)
-      .digest('hex');
+      .createHmac("sha512", secret)
+      .update(JSON.stringify(req.body))
+      .digest("hex");
 
     if (hash !== signature) {
-      return res.status(401).send('Invalid signature');
+      return res.status(401).send("Invalid signature");
     }
 
-    const event = JSON.parse(req.body.toString());
+    const event = req.body;
 
-    if (event.type !== 'dedicated.account.transaction') {
-      return res.status(200).send('Event ignored');
+    if (event.type !== "dedicated.account.transaction") {
+      return res.status(200).send("Event ignored");
     }
 
     const data = event.data;
@@ -31,55 +31,60 @@ exports.budpayWebhook = async (req, res) => {
     const {
       amount,
       account_number,
-      customer_code,
       reference,
-      status,
+      status
     } = data;
 
-    if (status !== 'success') {
-      return res.status(200).send('Payment not successful');
+    if (status !== "success") {
+      return res.status(200).send("Payment not successful");
     }
 
     const existingTx = await Transaction.findOne({ reference });
+
     if (existingTx) {
-      return res.status(200).send('Already processed');
+      return res.status(200).send("Already processed");
     }
 
     const wallet = await Wallet.findOne({
-      'virtualAccount.accountNumber': account_number,
+      "accountNumbers.accountNumber": account_number,
     });
 
     if (!wallet) {
-      return res.status(404).send('Wallet not found');
+      return res.status(404).send("Wallet not found");
     }
 
-    wallet.balance += amount;
-    wallet.totalFunded += amount;
-    await wallet.save();
+    await Wallet.updateOne(
+      { _id: wallet._id },
+      {
+        $inc: {
+          balance: amount,
+          totalFunded: amount,
+        },
+      }
+    );
 
     await Transaction.create({
       reference,
       user: wallet.user,
-      type: 'wallet_funding',
-      category: 'deposit',
+      type: "wallet_funding",
+      category: "deposit",
       amount,
       totalAmount: amount,
-      status: 'successful',
-      description: 'Wallet funded successfully',
+      status: "successful",
+      description: "Wallet funded via BudPay virtual account",
       statusHistory: [
         {
-          status: 'successful',
-          note: 'Funding confirmed from webhook',
+          status: "successful",
+          note: "Funding confirmed from BudPay webhook",
           timestamp: new Date(),
         },
       ],
     });
 
-    return res.status(200).send('OK');
-
+    return res.status(200).send("OK");
   } catch (error) {
-    console.error(error);
-    return res.status(500).send('Webhook error');
+    console.error("BudPay Webhook Error:", error);
+    return res.status(500).send("Webhook error");
   }
 };
 
