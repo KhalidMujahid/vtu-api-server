@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 const WalletService = require('../services/walletService');
 const Transaction = require('../models/Transaction');
-const Wallet = require('../models/wallet');
+const Wallet = require('../models/Wallet');
 const { AppError } = require('../middlewares/errorHandler');
 const logger = require('../utils/logger');
 
