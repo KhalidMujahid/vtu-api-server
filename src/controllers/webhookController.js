@@ -7,18 +7,6 @@ const logger = require('../utils/logger');
 
 exports.budpayWebhook = async (req, res) => {
   try {
-    const secret = process.env.BUDPAY_SECRET_KEY;
-
-    const signature = req.headers["x-budpay-signature"];
-
-    const hash = crypto
-      .createHmac("sha512", secret)
-      .update(JSON.stringify(req.body))
-      .digest("hex");
-
-    if (hash !== signature) {
-      return res.status(401).send("Invalid signature");
-    }
 
     const event = req.body;
 
@@ -46,7 +34,7 @@ exports.budpayWebhook = async (req, res) => {
     }
 
     const wallet = await Wallet.findOne({
-      "accountNumbers.accountNumber": account_number,
+      "virtualAccount.accountNumber": account_number
     });
 
     if (!wallet) {
@@ -58,30 +46,24 @@ exports.budpayWebhook = async (req, res) => {
       {
         $inc: {
           balance: amount,
-          totalFunded: amount,
-        },
+          totalFunded: amount
+        }
       }
     );
 
     await Transaction.create({
       reference,
       user: wallet.user,
-      type: "wallet_funding",
-      category: "deposit",
+      type: "fund_wallet",
+      category: "funding",
       amount,
       totalAmount: amount,
       status: "successful",
-      description: "Wallet funded via BudPay virtual account",
-      statusHistory: [
-        {
-          status: "successful",
-          note: "Funding confirmed from BudPay webhook",
-          timestamp: new Date(),
-        },
-      ],
+      description: "Wallet funded via BudPay",
     });
 
     return res.status(200).send("OK");
+
   } catch (error) {
     console.error("BudPay Webhook Error:", error);
     return res.status(500).send("Webhook error");

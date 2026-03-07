@@ -22,9 +22,9 @@ const seedAdmin = async () => {
     const admin = await User.create({
       firstName: 'Admin',
       lastName: 'User',
-      email: process.env.DEFAULT_ADMIN_EMAIL,
+      email: "admin@yareemadata.com",
       phoneNumber: '+2348000000000',
-      password: process.env.DEFAULT_ADMIN_PASSWORD,
+      password: "admin@1234",
       isEmailVerified: true,
       isPhoneVerified: true,
       role: 'super_admin',
@@ -74,7 +74,7 @@ const seedAdmin = async () => {
       },
     ];
     
-    await ProviderStatus.insertMany(telecomProviders);
+    // await ProviderStatus.insertMany(telecomProviders);
     
     const electricityProviders = [
       {
@@ -107,7 +107,7 @@ const seedAdmin = async () => {
       },
     ];
     
-    await ProviderStatus.insertMany(electricityProviders);
+    // await ProviderStatus.insertMany(electricityProviders);
     
     console.log('Seeding sample data plans...');
     
@@ -192,7 +192,7 @@ const seedAdmin = async () => {
       },
     ];
     
-    await ServicePricing.insertMany(sampleDataPlans);
+    // await ServicePricing.insertMany(sampleDataPlans);
     
     console.log('Database seeded successfully!');
     process.exit(0);

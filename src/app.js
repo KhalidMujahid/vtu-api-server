@@ -25,30 +25,30 @@ app.use(xss());
 app.use(mongoSanitize());
 
 
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
 app.use(
-  "/api/webhooks/budpay",
+  "/api/v1/webhook/budpay",
   express.raw({ type: "application/json" })
 );
 
 app.use((req, res, next) => {
   logger.info(`${req.method} ${req.url}`, {
     ip: req.ip,
-    userAgent: req.get('user-agent'),
+    userAgent: req.get("user-agent"),
   });
   next();
 });
 
-app.use('/api/v1/auth', authRoutes);
-app.use('/api/v1/wallet', walletRoutes);
-app.use('/api/v1/telecom', telecomRoutes);
-app.use('/api/v1/bills', billsRoutes);
-app.use('/api/v1/admin', adminRoutes);
-app.use('/api/v1/agent', agentRoutes);
-app.use('/api/v1/webhook', webhookRoutes);
-app.use('/api/v1/payments', paymentRoutes);
+app.use("/api/v1/auth", authRoutes);
+app.use("/api/v1/wallet", walletRoutes);
+app.use("/api/v1/telecom", telecomRoutes);
+app.use("/api/v1/bills", billsRoutes);
+app.use("/api/v1/admin", adminRoutes);
+app.use("/api/v1/agent", agentRoutes);
+app.use("/api/v1/webhook", webhookRoutes);
+app.use("/api/v1/payments", paymentRoutes);
 
 app.get('/api/v1/health', (req, res) => {
   res.status(200).json({
