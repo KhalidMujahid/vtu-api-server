@@ -8,24 +8,23 @@ const logger = require('../utils/logger');
 exports.budpayWebhook = async (req, res) => {
   try {
 
+    console.log("BudPay webhook:", req.body);
+
     const event = req.body;
 
-    if (event.type !== "dedicated.account.transaction") {
-      return res.status(200).send("Event ignored");
+    if (event.notify !== "transaction") {
+      return res.status(200).send("Ignored");
     }
 
-    const data = event.data;
-
-    const {
-      amount,
-      account_number,
-      reference,
-      status
-    } = data;
-
-    if (status !== "success") {
-      return res.status(200).send("Payment not successful");
+    if (event.notifyType !== "successful") {
+      return res.status(200).send("Transaction not successful");
     }
+
+    const data = event.transferDetails;
+
+    const amount = Number(data.amount);
+    const accountNumber = data.craccount;
+    const reference = data.paymentReference;
 
     const existingTx = await Transaction.findOne({ reference });
 
@@ -34,10 +33,11 @@ exports.budpayWebhook = async (req, res) => {
     }
 
     const wallet = await Wallet.findOne({
-      "virtualAccount.accountNumber": account_number
+      "virtualAccount.accountNumber": accountNumber
     });
 
     if (!wallet) {
+      console.log("Wallet not found for:", accountNumber);
       return res.status(404).send("Wallet not found");
     }
 
@@ -59,7 +59,14 @@ exports.budpayWebhook = async (req, res) => {
       amount,
       totalAmount: amount,
       status: "successful",
-      description: "Wallet funded via BudPay",
+      description: "Wallet funded via BudPay virtual account",
+      statusHistory: [
+        {
+          status: "successful",
+          note: "Funding confirmed from BudPay webhook",
+          timestamp: new Date()
+        }
+      ]
     });
 
     return res.status(200).send("OK");
