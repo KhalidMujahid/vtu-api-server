@@ -2,6 +2,7 @@ const axios = require('axios');
 const User = require('../models/User');
 const Transaction = require('../models/Transaction');
 const ServicePricing = require('../models/ServicePricing');
+const Wallet = require("../models/Wallet");
 const { AppError } = require('../middlewares/errorHandler');
 const logger = require('../utils/logger');
 const NotificationService = require('../services/NotificationService');
