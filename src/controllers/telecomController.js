@@ -132,7 +132,7 @@ const networkMap = {
 };
 
 const profitConfig = {
-  MTN: 3,      
+  MTN: 3,
   GLO: 4,
   AIRTEL: 3,
   '9MOBILE': 2,
@@ -142,36 +142,33 @@ exports.purchaseAirtime = async (req, res, next) => {
   try {
     const { phoneNumber, network, amount, transactionPin } = req.body;
 
-    if (!phoneNumber || !network || !amount || !transactionPin)
+    if (!phoneNumber || !network || !amount || !transactionPin) {
       return next(new AppError('All fields required', 400));
+    }
 
-    const user = await User.findById(req.user.id)
-      .select('+transactionPin walletBalance');
+    const user = await User.findById(req.user.id).select('+transactionPin');
 
-    if (!(await user.compareTransactionPin(transactionPin)))
+    if (!(await user.compareTransactionPin(transactionPin))) {
       return next(new AppError('Invalid transaction PIN', 401));
+    }
 
-    if (user.walletBalance < amount)
-      return next(new AppError('Insufficient balance', 400));
+    const wallet = await Wallet.findOne({ user: user._id });
+
+    if (!wallet || wallet.balance < amount) {
+      return next(new AppError('Insufficient wallet balance', 400));
+    }
 
     const networkCode = networkMap[network.toUpperCase()];
-    if (!networkCode)
+    if (!networkCode) {
       return next(new AppError('Invalid network selected', 400));
+    }
 
     const requestId = `AIR-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
 
     const profitPercent = profitConfig[network.toUpperCase()] || 0;
     const profit = (profitPercent / 100) * amount;
 
-    user.walletBalance -= amount;
-    await user.save();
-
-    await NotificationService.airtimePurchase(
-      user._id,
-      network,
-      amount,
-      phoneNumber
-    );
+    await wallet.debit(amount, "Airtime purchase");
 
     const transaction = await Transaction.create({
       reference: requestId,
@@ -185,59 +182,114 @@ exports.purchaseAirtime = async (req, res, next) => {
       description: `${network} airtime for ${phoneNumber}`,
       service: { provider: network, phoneNumber },
       statusHistory: [
-        { status: 'pending', note: 'Transaction initiated', timestamp: new Date() },
+        {
+          status: 'pending',
+          note: 'Transaction initiated',
+          timestamp: new Date(),
+        },
       ],
     });
 
-    let apiResponse;
-    let attempts = 0;
-    const maxAttempts = 3;
-
-    while (attempts < maxAttempts) {
-      try {
-        attempts++;
-
-        apiResponse = await axios.get(
-          'https://www.nellobytesystems.com/APIAirtimeV1.asp',
-          {
-            params: {
-              UserID: process.env.NELLO_USER_ID,
-              APIKey: process.env.NELLO_API_KEY,
-              MobileNetwork: networkCode,
-              Amount: amount,
-              MobileNumber: phoneNumber,
-              RequestID: requestId,
-              CallBackURL: process.env.AIRTIME_CALLBACK_URL,
-            },
-            timeout: 10000,
-          }
-        );
-
-        break;
-      } catch (err) {
-        if (attempts >= maxAttempts) throw err;
+    const apiResponse = await axios.get(
+      "https://www.nellobytesystems.com/APIAirtimeV1.asp",
+      {
+        params: {
+          UserID: process.env.NELLO_USER_ID,
+          APIKey: process.env.NELLO_API_KEY,
+          MobileNetwork: networkCode,
+          Amount: amount,
+          MobileNumber: phoneNumber,
+          RequestID: requestId,
+          CallBackURL: process.env.AIRTIME_CALLBACK_URL,
+        },
+        timeout: 10000,
       }
-    }
+    );
 
-    if (apiResponse?.data?.includes?.('SUCCESS')) {
-      transaction.status = 'successful';
+    if (apiResponse.data.includes("SUCCESS")) {
+      transaction.status = "successful";
+
       transaction.statusHistory.push({
-        status: 'successful',
-        note: 'Provider instant success',
+        status: "successful",
+        note: "Provider instant success",
         timestamp: new Date(),
       });
+
       await transaction.save();
     }
 
     res.status(200).json({
-      status: 'success',
-      message: 'Airtime request submitted',
-      data: { reference: requestId },
+      status: "success",
+      message: "Airtime purchase processing",
+      data: {
+        reference: requestId,
+      },
     });
 
   } catch (error) {
     next(error);
   }
+};
+
+exports.airtimeCallback = async (req, res) => {
+  try {
+
+    const { requestid, status } = req.query;
+
+    const transaction = await Transaction.findOne({ reference: requestid });
+
+    if (!transaction) return res.send("Transaction not found");
+
+    if (transaction.status === "successful") {
+      return res.send("Already processed");
+    }
+
+    if (status === "SUCCESS") {
+
+      transaction.status = "successful";
+
+      transaction.statusHistory.push({
+        status: "successful",
+        note: "Callback confirmation from provider",
+        timestamp: new Date()
+      });
+
+    } else {
+
+      transaction.status = "failed";
+
+      transaction.statusHistory.push({
+        status: "failed",
+        note: "Provider callback failure",
+        timestamp: new Date()
+      });
+
+    }
+
+    await transaction.save();
+
+    res.send("OK");
+
+  } catch (error) {
+    console.error(error);
+    res.send("error");
+  }
+};
+
+exports.queryAirtimeStatus = async (requestId) => {
+
+  const response = await axios.get(
+    "https://www.nellobytesystems.com/APIQueryV1.asp",
+    {
+      params: {
+        UserID: process.env.NELLO_USER_ID,
+        APIKey: process.env.NELLO_API_KEY,
+        RequestID: requestId,
+      },
+    }
+  );
+
+  return response.data;
 };
 
 exports.airtimeWebhook = async (req, res) => {

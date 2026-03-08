@@ -1,72 +1,63 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
-const walletSchema = new mongoose.Schema({
+const walletSchema = new mongoose.Schema(
+{
   user: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
+    ref: "User",
     required: true,
     unique: true,
   },
+
   balance: {
     type: Number,
     default: 0,
     min: 0,
   },
+
+  currency: {
+    type: String,
+    default: "NGN",
+    enum: ["NGN"],
+  },
+
   locked: {
     type: Boolean,
     default: false,
   },
+
   lockReason: String,
-  lockedAt: Date,
-  unlockedAt: Date,
+
   totalFunded: {
     type: Number,
     default: 0,
   },
-  budpayCustomerCode: String,
 
-virtualAccount: {
-  bankName: String,
-  accountNumber: String,
-  accountName: String,
-  bankCode: String,
-  reference: String
-},
-  totalWithdrawn: {
-    type: Number,
-    default: 0,
-  },
   totalSpent: {
     type: Number,
     default: 0,
   },
-  lastTransaction: Date,
-  currency: {
-    type: String,
-    default: 'NGN',
-    enum: ['NGN'],
+
+  totalWithdrawn: {
+    type: Number,
+    default: 0,
   },
-  
-  monnifyAccounts: [{
+
+  lastTransaction: Date,
+
+  budpayCustomerCode: String,
+
+  virtualAccount: {
     bankName: String,
-    accountNumber: String,
+    accountNumber: {
+      type: String,
+      index: true
+    },
     accountName: String,
     bankCode: String,
-    isDefault: {
-      type: Boolean,
-      default: false,
-    },
-    accountReference: String,
-    createdAt: {
-      type: Date,
-      default: Date.now,
-    },
-  }],
-  
-  accountReference: String,
-  collectionChannel: String,
-  reservationReference: String,
-  
+    reference: String,
+  },
+
   virtualCard: {
     cardId: String,
     cardNumber: String,
@@ -74,63 +65,65 @@ virtualAccount: {
     expiry: String,
     status: String,
   },
-}, {
-  timestamps: true,
-  toJSON: { virtuals: true },
-  toObject: { virtuals: true },
-});
+},
+{
+  timestamps: true
+}
+);
 
 walletSchema.index({ user: 1 });
-walletSchema.index({ balance: 1 });
-walletSchema.index({ 'monnifyAccounts.accountNumber': 1 });
 
-walletSchema.methods.canDebit = function(amount) {
+walletSchema.methods.canDebit = function (amount) {
   if (this.locked) return false;
   if (this.balance < amount) return false;
   return true;
 };
 
-walletSchema.methods.debit = async function(amount, reason) {
+walletSchema.methods.debit = async function (amount) {
+
   if (!this.canDebit(amount)) {
-    throw new Error('Insufficient balance or wallet locked');
+    throw new Error("Insufficient balance or wallet locked");
   }
-  
+
   this.balance -= amount;
   this.totalSpent += amount;
   this.lastTransaction = Date.now();
-  
+
   await this.save();
   return this;
 };
 
-walletSchema.methods.credit = async function(amount, reason) {
+walletSchema.methods.credit = async function (amount) {
+
   this.balance += amount;
   this.totalFunded += amount;
   this.lastTransaction = Date.now();
-  
+
   await this.save();
   return this;
 };
 
-walletSchema.virtual('primaryAccountNumber').get(function() {
-  if (this.monnifyAccounts && this.monnifyAccounts.length > 0) {
-    const defaultAccount = this.monnifyAccounts.find(acc => acc.isDefault);
-    return defaultAccount ? defaultAccount.accountNumber : this.monnifyAccounts[0].accountNumber;
-  }
-  return null;
-});
+walletSchema.methods.safeDebit = async function(amount) {
 
-walletSchema.virtual('accountNumbers').get(function() {
-  if (this.monnifyAccounts && this.monnifyAccounts.length > 0) {
-    return this.monnifyAccounts.map(acc => ({
-      bankName: acc.bankName,
-      accountNumber: acc.accountNumber,
-      accountName: acc.accountName,
-    }));
-  }
-  return [];
-});
+  const wallet = await this.constructor.findOneAndUpdate(
+    {
+      _id: this._id,
+      balance: { $gte: amount },
+      locked: false
+    },
+    {
+      $inc: { balance: -amount, totalSpent: amount },
+      $set: { lastTransaction: new Date() }
+    },
+    { new: true }
+  );
 
-const Wallet = mongoose.models.Wallet || mongoose.model('Wallet', walletSchema);
+  if (!wallet) throw new Error("Insufficient balance");
+
+  return wallet;
+};
+
+const Wallet =
+  mongoose.models.Wallet || mongoose.model("Wallet", walletSchema);
 
 module.exports = Wallet;

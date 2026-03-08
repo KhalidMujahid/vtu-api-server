@@ -4,6 +4,7 @@ const telecomController = require('../controllers/telecomController');
 
 const { protect, requireTransactionPin } = require('../middlewares/auth');
 router.post('/webhook/smedata', telecomController.smedataWebhook);
+router.get('/nellobyte/callback', telecomController.airtimeCallback);
 
 router.use(protect);
 

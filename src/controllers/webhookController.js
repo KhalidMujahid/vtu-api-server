@@ -8,8 +8,6 @@ const logger = require('../utils/logger');
 exports.budpayWebhook = async (req, res) => {
   try {
 
-    console.log("BudPay webhook:", req.body);
-
     const event = req.body;
 
     if (event.notify !== "transaction") {

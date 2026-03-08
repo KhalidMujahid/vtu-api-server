@@ -58,7 +58,6 @@ class AgentController {
       const skip = (parseInt(page) - 1) * parseInt(limit);
       const query = { role: 'agent' };
       
-      // Search by name, email, phone, or agent ID
       if (search) {
         query.$or = [
           { firstName: { $regex: search, $options: 'i' } },
@@ -447,10 +446,8 @@ class AgentController {
         return next(new AppError(`Document type '${documentType}' not found`, 404));
       }
       
-      // Update document verification status
       agent.agentInfo.verificationDocuments[documentIndex].verified = status === 'approved';
       
-      // Update overall agent verification status if all documents are verified
       const allDocumentsVerified = agent.agentInfo.verificationDocuments.every(
         doc => doc.verified === true
       );
@@ -462,7 +459,6 @@ class AgentController {
       
       await agent.save();
       
-      // Log the action
       await AdminLog.log({
         admin: req.admin._id,
         adminEmail: req.admin.email,
@@ -505,11 +501,10 @@ class AgentController {
     }
   }
 
-  // Get agent performance report
   static async getAgentPerformance(req, res, next) {
     try {
       const { id } = req.params;
-      const { period = 'monthly' } = req.query; // daily, weekly, monthly, yearly
+      const { period = 'monthly' } = req.query;
       
       const agent = await User.findOne({ _id: id, role: 'agent' });
       
@@ -517,7 +512,6 @@ class AgentController {
         return next(new AppError('Agent not found', 404));
       }
       
-      // Calculate date range based on period
       let startDate;
       const endDate = new Date();
       
@@ -538,10 +532,9 @@ class AgentController {
           startDate.setFullYear(startDate.getFullYear() - 1);
           break;
         default:
-          startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000); // Default to 30 days
+          startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
       }
       
-      // Get transaction statistics for the period
       const transactionStats = await Transaction.aggregate([
         {
           $match: {
@@ -564,7 +557,6 @@ class AgentController {
         },
       ]);
       
-      // Get daily transaction trend
       const dailyTrend = await Transaction.aggregate([
         {
           $match: {
@@ -585,7 +577,6 @@ class AgentController {
         { $sort: { _id: 1 } },
       ]);
       
-      // Get transaction breakdown by type
       const typeBreakdown = await Transaction.aggregate([
         {
           $match: {
@@ -604,7 +595,6 @@ class AgentController {
         { $sort: { amount: -1 } },
       ]);
       
-      // Calculate commission earned
       const commissionEarned = (transactionStats[0]?.totalAmount || 0) * (agent.agentInfo.commissionRate / 100);
       
       res.status(200).json({
@@ -649,7 +639,6 @@ class AgentController {
     }
   }
 
-  // Get agent commission report
   static async getAgentCommissionReport(req, res, next) {
     try {
       const { id } = req.params;
@@ -663,12 +652,10 @@ class AgentController {
       
       const skip = (parseInt(page) - 1) * parseInt(limit);
       
-      // Build date filter
       const dateFilter = {};
       if (startDate) dateFilter.$gte = new Date(startDate);
       if (endDate) dateFilter.$lte = new Date(endDate);
       
-      // Get commission-earning transactions
       const query = {
         user: agent._id,
         status: 'successful',
@@ -688,7 +675,6 @@ class AgentController {
         Transaction.countDocuments(query),
       ]);
       
-      // Calculate total commission for the period
       const commissionStats = await Transaction.aggregate([
         { $match: query },
         {
@@ -701,7 +687,6 @@ class AgentController {
         },
       ]);
       
-      // Get monthly commission trend
       const monthlyTrend = await Transaction.aggregate([
         { $match: query },
         {
@@ -754,7 +739,6 @@ class AgentController {
     }
   }
 
-  // Process agent commission withdrawal (Admin only)
   static async processCommissionWithdrawal(req, res, next) {
     try {
       const { id } = req.params;
@@ -778,10 +762,8 @@ class AgentController {
         return next(new AppError('Insufficient available commission', 400));
       }
       
-      // Generate transaction reference
       const transactionReference = reference || `COM-WDL-${Date.now()}`;
       
-      // Create withdrawal transaction
       const transaction = await Transaction.create({
         reference: transactionReference,
         user: agent._id,
@@ -830,7 +812,6 @@ class AgentController {
         },
       });
       
-      // Simulate payment processing
       setTimeout(async () => {
         try {
           await Transaction.findByIdAndUpdate(transaction._id, {
@@ -880,7 +861,6 @@ class AgentController {
     }
   }
 
-    // Agent Login
     static async login(req, res, next) {
         try {
           const { email, phoneNumber, password } = req.body;
@@ -907,7 +887,6 @@ class AgentController {
             return next(new AppError('Your account is deactivated. Please contact support.', 403));
           }
           
-          // Check password
           const isPasswordValid = await agent.comparePassword(password);
           if (!isPasswordValid) {
             return next(new AppError('Invalid credentials', 401));
@@ -921,7 +900,6 @@ class AgentController {
           
           await agent.save({ validateBeforeSave: false });
           
-          // Log the login
           await AdminLog.log({
             admin: agent._id,
             adminEmail: agent.email,
