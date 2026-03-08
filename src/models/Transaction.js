@@ -72,7 +72,9 @@ const transactionSchema = new mongoose.Schema({
   
   service: {
     provider: String, 
-    plan: String,     
+    plan: String,
+    network: String,
+    orderId: String,   
     phoneNumber: String,
     meterNumber: String,
     smartCardNumber: String,

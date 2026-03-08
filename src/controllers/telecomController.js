@@ -125,18 +125,18 @@ exports.purchaseData = async (req, res, next) => {
 };
 
 const networkMap = {
-  MTN: 1,
-  GLO: 2,
-  AIRTEL: 4,
-  '9MOBILE': 3,
-  ETISALAT: 3,
+  MTN: "01",
+  GLO: "02",
+  AIRTEL: "04",
+  "9MOBILE": "03",
+  ETISALAT: "03",
 };
 
 const profitConfig = {
   MTN: 3,
   GLO: 4,
   AIRTEL: 3,
-  '9MOBILE': 2,
+  "9MOBILE": 2,
 };
 
 exports.purchaseAirtime = async (req, res, next) => {
@@ -144,27 +144,38 @@ exports.purchaseAirtime = async (req, res, next) => {
     const { phoneNumber, network, amount, transactionPin } = req.body;
 
     if (!phoneNumber || !network || !amount || !transactionPin) {
-      return next(new AppError('All fields required', 400));
+      return next(new AppError("All fields required", 400));
     }
 
-    const user = await User.findById(req.user.id).select('+transactionPin');
+    const user = await User.findById(req.user.id).select("+transactionPin");
 
-    if (!(await user.compareTransactionPin(transactionPin))) {
-      return next(new AppError('Invalid transaction PIN', 401));
+    if (!user) {
+      return next(new AppError("User not found", 404));
+    }
+
+    const isValidPin = await user.compareTransactionPin(transactionPin);
+    if (!isValidPin) {
+      return next(new AppError("Invalid transaction PIN", 401));
     }
 
     const wallet = await Wallet.findOne({ user: user._id });
 
-    if (!wallet || wallet.balance < amount) {
-      return next(new AppError('Insufficient wallet balance', 400));
+    if (!wallet) {
+      return next(new AppError("Wallet not found", 404));
+    }
+
+    if (wallet.balance < amount) {
+      return next(new AppError("Insufficient wallet balance", 400));
     }
 
     const networkCode = networkMap[network.toUpperCase()];
     if (!networkCode) {
-      return next(new AppError('Invalid network selected', 400));
+      return next(new AppError("Invalid network selected", 400));
     }
 
-    const requestId = `AIR-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
+    const requestId = `AIR-${Date.now()}-${crypto
+      .randomBytes(3)
+      .toString("hex")}`;
 
     const profitPercent = profitConfig[network.toUpperCase()] || 0;
     const profit = (profitPercent / 100) * amount;
@@ -174,18 +185,22 @@ exports.purchaseAirtime = async (req, res, next) => {
     const transaction = await Transaction.create({
       reference: requestId,
       user: user._id,
-      type: 'airtime_recharge',
-      category: 'telecom',
+      type: "airtime_recharge",
+      category: "telecom",
       amount,
       profit,
       totalAmount: amount,
-      status: 'pending',
+      status: "pending",
       description: `${network} airtime for ${phoneNumber}`,
-      service: { provider: network, phoneNumber },
+      service: {
+        provider: "nellobytes",
+        network,
+        phoneNumber,
+      },
       statusHistory: [
         {
-          status: 'pending',
-          note: 'Transaction initiated',
+          status: "pending",
+          note: "Transaction initiated",
           timestamp: new Date(),
         },
       ],
@@ -207,16 +222,36 @@ exports.purchaseAirtime = async (req, res, next) => {
       }
     );
 
-    if (apiResponse.data.includes("SUCCESS")) {
-      transaction.status = "successful";
+    const responseData = apiResponse.data;
+
+    if (responseData.status === "ORDER_RECEIVED") {
+      transaction.status = "pending";
+
+      transaction.service = {
+        ...transaction.service,
+        orderId: responseData.orderid
+      };
 
       transaction.statusHistory.push({
-        status: "successful",
-        note: "Provider instant success",
+        status: "pending",
+        note: "Order received by provider",
+        timestamp: new Date(),
+      });
+
+
+      await transaction.save();
+    } else {
+      transaction.status = "failed";
+
+      transaction.statusHistory.push({
+        status: "failed",
+        note: responseData.status || "Provider rejected request",
         timestamp: new Date(),
       });
 
       await transaction.save();
+
+      await wallet.credit(amount, "Airtime refund");
     }
 
     res.status(200).json({
@@ -224,10 +259,11 @@ exports.purchaseAirtime = async (req, res, next) => {
       message: "Airtime purchase processing",
       data: {
         reference: requestId,
+        providerResponse: responseData,
       },
     });
-
   } catch (error) {
+    console.error("Airtime Error:", error);
     next(error);
   }
 };
@@ -235,23 +271,27 @@ exports.purchaseAirtime = async (req, res, next) => {
 exports.airtimeCallback = async (req, res) => {
   try {
 
-    const { requestid, status } = req.query;
+    const { orderid, orderstatus, statuscode, orderremark } = req.query;
 
-    const transaction = await Transaction.findOne({ reference: requestid });
+    const transaction = await Transaction.findOne({
+      "service.orderId": orderid
+    });
 
-    if (!transaction) return res.send("Transaction not found");
+    if (!transaction) {
+      return res.send("Transaction not found");
+    }
 
     if (transaction.status === "successful") {
       return res.send("Already processed");
     }
 
-    if (status === "SUCCESS") {
+    if (orderstatus === "ORDER_COMPLETED" || statuscode === "200") {
 
       transaction.status = "successful";
 
       transaction.statusHistory.push({
         status: "successful",
-        note: "Callback confirmation from provider",
+        note: orderremark || "Airtime delivered successfully",
         timestamp: new Date()
       });
 
@@ -261,7 +301,7 @@ exports.airtimeCallback = async (req, res) => {
 
       transaction.statusHistory.push({
         status: "failed",
-        note: "Provider callback failure",
+        note: orderremark || "Provider reported failure",
         timestamp: new Date()
       });
 
@@ -272,8 +312,8 @@ exports.airtimeCallback = async (req, res) => {
     res.send("OK");
 
   } catch (error) {
-    console.error(error);
-    res.send("error");
+    console.error("Callback Error:", error);
+    res.send("OK");
   }
 };
 
