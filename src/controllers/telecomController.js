@@ -6,7 +6,10 @@ const Wallet = require("../models/Wallet");
 const { AppError } = require('../middlewares/errorHandler');
 const logger = require('../utils/logger');
 const NotificationService = require('../services/NotificationService');
+const NelloBytesService = require('../services/nelloBytesService');
 const crypto = require('crypto');
+
+const SERVER_URL = process.env.SERVER_URL || 'https://api.yareemadata.com';
 
 function generateReference(prefix = 'TX') {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
@@ -14,7 +17,19 @@ function generateReference(prefix = 'TX') {
 
 exports.getDataPlans = async (req, res, next) => {
   try {
-    const { network } = req.query;
+    const { network, source } = req.query;
+    
+    // If source is 'nellobytes', fetch from NelloBytes API
+    if (source === 'nellobytes') {
+      const plans = await NelloBytesService.getDataPlans(network);
+      return res.status(200).json({
+        status: 'success',
+        data: plans,
+        source: 'nellobytes',
+      });
+    }
+    
+    // Default: fetch from database
     const query = { serviceType: 'data_recharge', isActive: true, isAvailable: true };
 
     if (network) {
@@ -34,6 +49,7 @@ exports.getDataPlans = async (req, res, next) => {
       acc[plan.network] = acc[plan.network] || [];
       acc[plan.network].push({
         id: plan._id,
+        planCode: plan.planCode,
         planName: plan.planName,
         size: plan.size,
         price: plan.sellingPrice,
@@ -42,7 +58,7 @@ exports.getDataPlans = async (req, res, next) => {
       return acc;
     }, {});
 
-    res.status(200).json({ status: 'success', results: dataPlans.length, data: groupedPlans });
+    res.status(200).json({ status: 'success', results: dataPlans.length, data: groupedPlans, source: 'database' });
   } catch (error) {
     next(error);
   }
@@ -50,74 +66,121 @@ exports.getDataPlans = async (req, res, next) => {
 
 exports.purchaseData = async (req, res, next) => {
   try {
-    const { phoneNumber, network, size, transactionPin } = req.body;
-    if (!phoneNumber || !network || !size || !transactionPin) return next(new AppError('All fields required', 400));
+    const { phoneNumber, network, dataPlan, transactionPin } = req.body;
+    
+    if (!phoneNumber || !network || !dataPlan || !transactionPin) {
+      return next(new AppError('All fields required: phoneNumber, network, dataPlan, transactionPin', 400));
+    }
 
-    if (!/^(?:\+234|0)[789][01]\d{8}$/.test(phoneNumber)) return next(new AppError('Invalid phone number', 400));
+    if (!/^(?:\+234|0)[789][01]\d{8}$/.test(phoneNumber)) {
+      return next(new AppError('Invalid phone number', 400));
+    }
 
-    const user = await User.findById(req.user.id).select('+transactionPin walletBalance');
-    if (!user) return next(new AppError('User not found', 404));
+    const user = await User.findById(req.user.id).select('+transactionPin');
+    if (!user) {
+      return next(new AppError('User not found', 404));
+    }
 
-    if (!(await user.compareTransactionPin(transactionPin))) return next(new AppError('Invalid transaction PIN', 401));
+    const isPinValid = await user.compareTransactionPin(transactionPin);
+    if (!isPinValid) {
+      return next(new AppError('Invalid transaction PIN', 401));
+    }
 
-    const plan = await ServicePricing.findOne({ network: network.toLowerCase(),isActive: true });
-    if (!plan) return next(new AppError('Plan not available', 404));
+    const wallet = await Wallet.findOne({ user: user._id });
+    if (!wallet) {
+      return next(new AppError('Wallet not found', 404));
+    }
 
-    if (user.walletBalance < plan.sellingPrice) return next(new AppError('Insufficient balance', 400));
+    // Get pricing from database
+    const pricing = await ServicePricing.findOne({
+      serviceType: 'data_recharge',
+      network: network.toLowerCase(),
+      planCode: dataPlan,
+      isActive: true,
+      isAvailable: true,
+    });
 
-    user.walletBalance -= plan.sellingPrice;
-    await user.save();
+    if (!pricing) {
+      return next(new AppError('Data plan not available', 404));
+    }
 
-    await NotificationService.dataPurchase(
-      user._id,
-      network,
-      size,
-      phoneNumber
-    );
+    if (wallet.balance < pricing.sellingPrice) {
+      return next(new AppError('Insufficient wallet balance', 400));
+    }
+
+    // Debit wallet
+    await wallet.debit(pricing.sellingPrice, `Data purchase: ${network} ${dataPlan}`);
 
     const reference = generateReference('DATA');
+    const callbackUrl = `${SERVER_URL}/api/v1/telecom/webhook/nellobytes`;
+
     const transaction = await Transaction.create({
       reference,
       user: user._id,
       type: 'data_recharge',
       category: 'telecom',
-      amount: plan.sellingPrice,
-      totalAmount: plan.sellingPrice,
+      amount: pricing.sellingPrice,
+      totalAmount: pricing.sellingPrice,
+      previousBalance: wallet.balance + pricing.sellingPrice,
+      newBalance: wallet.balance,
       status: 'pending',
-      description: `${network.toUpperCase()} ${size} for ${phoneNumber}`,
-      service: { provider: network, phoneNumber, plan: size },
+      description: `${network.toUpperCase()} ${dataPlan} for ${phoneNumber}`,
+      service: {
+        provider: 'nellobytes',
+        network: network.toLowerCase(),
+        plan: dataPlan,
+        phoneNumber,
+      },
       statusHistory: [{ status: 'pending', note: 'Purchase initiated', timestamp: new Date() }],
     });
 
     try {
-      const apiResponse = await axios.post('https://smedata.ng/wp-json/api/v1/data', {
-        network: network.toUpperCase(),
-        phone: phoneNumber,
-        size,
-        reference,
-      }, { timeout: 30000 });
-
-      transaction.status = 'successful';
-      transaction.providerResponse = apiResponse.data;
-      transaction.statusHistory.push({ status: 'successful', note: 'Data purchase successful', timestamp: new Date() });
-      await transaction.save();
-
-      res.status(200).json({
-        status: 'success',
-        message: 'Data purchased successfully',
-        data: { reference, phoneNumber, network, size, amount: plan.sellingPrice },
+      // Call NelloBytes API
+      const apiResponse = await NelloBytesService.purchaseData({
+        network: network.toLowerCase(),
+        dataPlan: dataPlan,
+        mobileNumber: phoneNumber,
+        callBackURL: callbackUrl,
       });
+
+      if (apiResponse.success || apiResponse.statusCode === '100') {
+        transaction.status = 'pending';
+        transaction.service.orderId = apiResponse.orderId;
+        transaction.providerResponse = apiResponse.response;
+        transaction.statusHistory.push({ 
+          status: 'pending', 
+          note: `Order received: ${apiResponse.orderId}`, 
+          timestamp: new Date() 
+        });
+        await transaction.save();
+
+        res.status(200).json({
+          status: 'success',
+          message: 'Data purchase initiated successfully',
+          data: {
+            reference,
+            orderId: apiResponse.orderId,
+            phoneNumber,
+            network,
+            dataPlan,
+            amount: pricing.sellingPrice,
+            status: 'pending',
+          },
+        });
+      } else {
+        throw new AppError(apiResponse.response?.status || 'Purchase failed', 400);
+      }
     } catch (err) {
-      user.walletBalance += plan.sellingPrice;
-      await user.save();
+      // Refund wallet on failure
+      await wallet.credit(pricing.sellingPrice, 'Data purchase refund');
 
       transaction.status = 'failed';
       transaction.failureReason = err.message;
-      transaction.statusHistory.push({ status: 'failed', note: 'API failed', timestamp: new Date() });
+      transaction.statusHistory.push({ status: 'failed', note: err.message, timestamp: new Date() });
       await transaction.save();
 
       logger.error(`Data purchase failed → ${err.message}`);
-      return next(new AppError('Data purchase failed. Wallet refunded.', 500));
+      return next(new AppError(`Data purchase failed: ${err.message}`, 500));
     }
   } catch (error) {
     next(error);
@@ -465,6 +528,125 @@ exports.smedataWebhook = async (req, res, next) => {
     res.status(200).json({ status: 'success', message: 'Webhook processed' });
   } catch (error) {
     logger.error('Webhook processing error:', error);
+    next(error);
+  }
+};
+
+/**
+ * NelloBytes Webhook Handler
+ * Handles callbacks from NelloBytes for data, cable TV, electricity, EPIN, WAEC, JAMB
+ */
+exports.nelloBytesWebhook = async (req, res, next) => {
+  try {
+    // NelloBytes sends data as query string or JSON body
+    const queryData = req.query;
+    const bodyData = req.body;
+    
+    // Merge both - query params take precedence
+    const data = { ...bodyData, ...queryData };
+    
+    const { orderid, orderstatus, statuscode, orderremark, orderdate } = data;
+
+    if (!orderid) {
+      logger.warn('NelloBytes webhook received without orderid');
+      return res.status(400).send('Missing orderid');
+    }
+
+    logger.info(`NelloBytes webhook received: ${orderid}`, { data });
+
+    // Find transaction by orderId
+    const transaction = await Transaction.findOne({
+      $or: [
+        { 'service.orderId': orderid },
+        { reference: orderid }
+      ]
+    });
+
+    if (!transaction) {
+      logger.warn(`Transaction not found for orderid: ${orderid}`);
+      return res.status(404).send('Transaction not found');
+    }
+
+    // Skip if already processed
+    if (transaction.status === 'successful' || transaction.status === 'failed') {
+      logger.info(`Transaction ${transaction.reference} already processed`);
+      return res.status(200).send('Already processed');
+    }
+
+    const user = await User.findById(transaction.user);
+
+    // Handle different status codes
+    if (statuscode === '200' || orderstatus === 'ORDER_COMPLETED') {
+      // Success
+      transaction.status = 'successful';
+      transaction.statusHistory.push({
+        status: 'successful',
+        note: orderremark || 'Transaction completed successfully',
+        timestamp: new Date(),
+      });
+      await transaction.save();
+      
+      logger.info(`Transaction ${transaction.reference} marked as successful`);
+      
+    } else if (statuscode === '100' || orderstatus === 'ORDER_RECEIVED') {
+      // Order received, still processing
+      transaction.status = 'pending';
+      transaction.statusHistory.push({
+        status: 'pending',
+        note: orderremark || 'Order received, processing',
+        timestamp: new Date(),
+      });
+      await transaction.save();
+      
+    } else if (orderstatus === 'ORDER_ONHOLD') {
+      // Order on hold
+      transaction.status = 'pending';
+      transaction.statusHistory.push({
+        status: 'pending',
+        note: orderremark || 'Order on hold',
+        timestamp: new Date(),
+      });
+      await transaction.save();
+      
+    } else {
+      // Failed - refund wallet
+      if (user) {
+        const wallet = await Wallet.findOne({ user: user._id });
+        if (wallet) {
+          await wallet.credit(transaction.amount, 'Transaction failed - refund');
+        }
+      }
+
+      transaction.status = 'failed';
+      transaction.statusHistory.push({
+        status: 'failed',
+        note: orderremark || 'Transaction failed',
+        timestamp: new Date(),
+      });
+      await transaction.save();
+      
+      logger.info(`Transaction ${transaction.reference} marked as failed, wallet refunded`);
+    }
+
+    res.status(200).send('OK');
+  } catch (error) {
+    logger.error('NelloBytes webhook error:', error);
+    res.status(500).send('Webhook error');
+  }
+};
+
+/**
+ * Get EPIN Plans (from NelloBytes)
+ */
+exports.getEPINPlans = async (req, res, next) => {
+  try {
+    const plans = await NelloBytesService.getEPINDiscount();
+    
+    res.status(200).json({
+      status: 'success',
+      data: plans,
+    });
+  } catch (error) {
     next(error);
   }
 };

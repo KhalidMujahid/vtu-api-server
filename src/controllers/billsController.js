@@ -4,15 +4,44 @@ const { AppError } = require('../middlewares/errorHandler');
 const logger = require('../utils/logger');
 const Transaction = require('../models/Transaction');
 const User = require('../models/User');
+const Wallet = require('../models/Wallet');
+const NelloBytesService = require('../services/nelloBytesService');
+
+const SERVER_URL = process.env.SERVER_URL || 'https://api.yareemadata.com';
 
 exports.verifyElectricityCustomer = async (req, res, next) => {
   try {
-    const { meterNumber, disco, meterType } = req.body;
+    const { meterNumber, disco, meterType = 'prepaid', source } = req.body;
     
     if (!meterNumber || !disco) {
       return next(new AppError('Please provide meter number and DISCO', 400));
     }
     
+    if (source === 'nellobytes') {
+      try {
+        const result = await NelloBytesService.verifyElectricityMeter({
+          electricCompany: disco,
+          meterNo: meterNumber,
+          meterType,
+        });
+        
+        return res.status(200).json({
+          status: 'success',
+          message: 'Customer verification successful',
+          data: {
+            meterNumber,
+            disco,
+            customerName: result.customerName,
+            verified: result.valid,
+          },
+        });
+      } catch (error) {
+        logger.error(`NelloBytes electricity verification error: ${error.message}`);
+        return next(new AppError('Unable to verify meter number', 500));
+      }
+    }
+    
+    // Default: mock response
     const mockCustomerInfo = {
       customerName: 'JOHN DOE',
       customerAddress: '123 TEST STREET, ABUJA',
@@ -40,7 +69,7 @@ exports.verifyElectricityCustomer = async (req, res, next) => {
 
 exports.purchaseElectricity = async (req, res, next) => {
   try {
-    const { meterNumber, disco, amount, phoneNumber, transactionPin } = req.body;
+    const { meterNumber, disco, amount, phoneNumber, meterType = 'prepaid', transactionPin, source } = req.body;
     
     if (!meterNumber || !disco || !amount || !transactionPin) {
       return next(new AppError('Please provide all required fields', 400));
@@ -57,58 +86,120 @@ exports.purchaseElectricity = async (req, res, next) => {
       return next(new AppError('Invalid transaction PIN', 401));
     }
     
-    const pricing = await ServicePricing.findOne({
-      serviceType: 'electricity',
-      disco,
-      isActive: true,
-    });
-    
-    if (!pricing) {
-      return next(new AppError('Service temporarily unavailable for this DISCO', 503));
+    const wallet = await Wallet.findOne({ user: user._id });
+    if (!wallet) {
+      return next(new AppError('Wallet not found', 404));
     }
     
-    const reference = Transaction.generateReference();
-    const transaction = await TransactionService.createTransaction({
+    if (wallet.balance < amount) {
+      return next(new AppError('Insufficient wallet balance', 400));
+    }
+    
+    // Debit wallet
+    await wallet.debit(amount, `Electricity bill payment: ${disco}`);
+    
+    const reference = `ELEC-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+    const callbackUrl = `${SERVER_URL}/api/v1/bills/webhook/nellobytes`;
+    
+    const transaction = await Transaction.create({
       reference,
-      user: req.user.id,
+      user: user._id,
       type: 'electricity',
       category: 'bills',
       amount,
-      fee: 0,
       totalAmount: amount,
-      previousBalance: 0,
-      newBalance: 0,
+      previousBalance: wallet.balance + amount,
+      newBalance: wallet.balance,
       status: 'pending',
       description: `${disco.toUpperCase()} electricity bill payment of ₦${amount} for meter ${meterNumber}`,
       service: {
-        provider: disco,
+        provider: 'nellobytes',
+        disco,
         meterNumber,
+        meterType,
         phoneNumber,
-        disco,
       },
-      metadata: {
-        disco,
-        amount,
-        meterNumber,
-      },
+      statusHistory: [{ status: 'pending', note: 'Payment initiated', timestamp: new Date() }],
     });
     
-    const processedTransaction = await TransactionService.processTelecomTransaction(
-      transaction._id,
-      disco
-    );
-    
-    res.status(200).json({
-      status: 'success',
-      message: 'Electricity bill payment initiated',
-      data: {
-        reference,
-        meterNumber,
+    try {
+      // Call NelloBytes API if source is 'nellobytes' or default
+      if (source === 'nellobytes' || !source) {
+        const apiResponse = await NelloBytesService.payElectricityBill({
+          electricCompany: disco,
+          meterNo: meterNumber,
+          meterType,
+          amount,
+          phoneNumber: phoneNumber || user.phoneNumber,
+          callBackURL: callbackUrl,
+        });
+        
+        if (apiResponse.success || apiResponse.statusCode === '100') {
+          transaction.status = 'pending';
+          transaction.service.orderId = apiResponse.orderId;
+          transaction.providerResponse = apiResponse.response;
+          transaction.statusHistory.push({ 
+            status: 'pending', 
+            note: `Order received: ${apiResponse.orderId}`, 
+            timestamp: new Date() 
+          });
+          await transaction.save();
+          
+          return res.status(200).json({
+            status: 'success',
+            message: 'Electricity bill payment initiated',
+            data: {
+              reference,
+              orderId: apiResponse.orderId,
+              meterNumber,
+              disco,
+              amount,
+              status: 'pending',
+            },
+          });
+        }
+        throw new Error(apiResponse.response?.status || 'Payment failed');
+      }
+      
+      // Fallback: use database pricing
+      const pricing = await ServicePricing.findOne({
+        serviceType: 'electricity',
         disco,
-        amount,
-        transaction: processedTransaction,
-      },
-    });
+        isActive: true,
+      });
+      
+      if (!pricing) {
+        throw new Error('Service temporarily unavailable for this DISCO');
+      }
+      
+      transaction.status = 'successful';
+      transaction.statusHistory.push({ status: 'successful', note: 'Payment successful', timestamp: new Date() });
+      await transaction.save();
+      
+      res.status(200).json({
+        status: 'success',
+        message: 'Electricity bill payment successful',
+        data: {
+          reference,
+          meterNumber,
+          disco,
+          amount,
+          status: 'successful',
+        },
+      });
+      
+    } catch (err) {
+      // Refund wallet on failure
+      await wallet.credit(amount, 'Electricity payment refund');
+      
+      transaction.status = 'failed';
+      transaction.failureReason = err.message;
+      transaction.statusHistory.push({ status: 'failed', note: err.message, timestamp: new Date() });
+      await transaction.save();
+      
+      logger.error(`Electricity payment failed: ${err.message}`);
+      return next(new AppError(`Payment failed: ${err.message}`, 500));
+    }
     
     logger.info(`Electricity purchase: User ${req.user.id}, ${disco} ₦${amount} for meter ${meterNumber}`);
   } catch (error) {
@@ -118,8 +209,19 @@ exports.purchaseElectricity = async (req, res, next) => {
 
 exports.getCablePlans = async (req, res, next) => {
   try {
-    const { provider } = req.query;
+    const { provider, source } = req.query;
     
+    // If source is 'nellobytes', fetch from NelloBytes API
+    if (source === 'nellobytes') {
+      const plans = await NelloBytesService.getCablePackages(provider);
+      return res.status(200).json({
+        status: 'success',
+        data: plans,
+        source: 'nellobytes',
+      });
+    }
+    
+    // Default: fetch from database
     const query = {
       serviceType: 'cable_tv',
       isActive: true,
@@ -148,6 +250,7 @@ exports.getCablePlans = async (req, res, next) => {
       data: {
         plans: groupedPlans,
       },
+      source: 'database',
     });
   } catch (error) {
     next(error);
@@ -156,9 +259,9 @@ exports.getCablePlans = async (req, res, next) => {
 
 exports.purchaseCableTV = async (req, res, next) => {
   try {
-    const { smartCardNumber, provider, planId, months = 1, transactionPin } = req.body;
+    const { smartCardNumber, provider, planId, months = 1, transactionPin, source } = req.body;
     
-    if (!smartCardNumber || !provider || !planId || !transactionPin) {
+    if (!smartCardNumber || !provider || !planId && !months && !transactionPin) {
       return next(new AppError('Please provide all required fields', 400));
     }
     
@@ -169,7 +272,120 @@ exports.purchaseCableTV = async (req, res, next) => {
       return next(new AppError('Invalid transaction PIN', 401));
     }
     
-    const plan = await ServicePricing.findOne({
+    const wallet = await Wallet.findOne({ user: user._id });
+    if (!wallet) {
+      return next(new AppError('Wallet not found', 404));
+    }
+    
+    let totalAmount;
+    let plan;
+    
+    // If using NelloBytes
+    if (source === 'nellobytes' || !source) {
+      try {
+        // First verify smartcard
+        const verifyResult = await NelloBytesService.verifyCableSmartCard({
+          cableTV: provider,
+          smartCardNo: smartCardNumber,
+        });
+        
+        if (!verifyResult.valid) {
+          return next(new AppError('Invalid smartcard number', 400));
+        }
+        
+        // Get packages to find the price
+        const packages = await NelloBytesService.getCablePackages(provider);
+        plan = packages[provider]?.find(p => p.code === planId || p.variation_code === planId);
+        
+        if (!plan) {
+          return next(new AppError('Plan not found', 404));
+        }
+        
+        totalAmount = plan.sellingPrice * months;
+        
+        if (wallet.balance < totalAmount) {
+          return next(new AppError('Insufficient wallet balance', 400));
+        }
+        
+        // Debit wallet
+        await wallet.debit(totalAmount, `Cable TV: ${provider}`);
+        
+        const reference = `CABLE-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+        const callbackUrl = `${SERVER_URL}/api/v1/bills/webhook/nellobytes`;
+        
+        const transaction = await Transaction.create({
+          reference,
+          user: user._id,
+          type: 'cable_tv',
+          category: 'bills',
+          amount: totalAmount,
+          totalAmount,
+          previousBalance: wallet.balance + totalAmount,
+          newBalance: wallet.balance,
+          status: 'pending',
+          description: `${provider.toUpperCase()} subscription for ${smartCardNumber}`,
+          service: {
+            provider: 'nellobytes',
+            cableProvider: provider,
+            smartCardNumber,
+            package: planId,
+            customerName: verifyResult.customerName,
+            months,
+          },
+          statusHistory: [{ status: 'pending', note: 'Subscription initiated', timestamp: new Date() }],
+        });
+        
+        // Purchase from NelloBytes
+        const apiResponse = await NelloBytesService.purchaseCableTV({
+          cableTV: provider,
+          packageCode: planId,
+          smartCardNo: smartCardNumber,
+          phoneNo: user.phoneNumber,
+          callBackURL: callbackUrl,
+        });
+        
+        if (apiResponse.success || apiResponse.statusCode === '100') {
+          transaction.status = 'pending';
+          transaction.service.orderId = apiResponse.orderId;
+          transaction.providerResponse = apiResponse.response;
+          transaction.statusHistory.push({ 
+            status: 'pending', 
+            note: `Order received: ${apiResponse.orderId}`, 
+            timestamp: new Date() 
+          });
+          await transaction.save();
+          
+          return res.status(200).json({
+            status: 'success',
+            message: 'Cable TV subscription initiated',
+            data: {
+              reference,
+              orderId: apiResponse.orderId,
+              smartCardNumber,
+              provider,
+              customerName: verifyResult.customerName,
+              months,
+              amount: totalAmount,
+              status: 'pending',
+            },
+          });
+        }
+        
+        throw new Error(apiResponse.response?.status || 'Purchase failed');
+        
+      } catch (error) {
+        // Refund wallet on failure
+        if (wallet) {
+          await wallet.credit(totalAmount, 'Cable TV refund');
+        }
+        
+        logger.error(`Cable TV purchase failed: ${error.message}`);
+        return next(new AppError(`Purchase failed: ${error.message}`, 500));
+      }
+    }
+    
+    // Default: use database pricing
+    plan = await ServicePricing.findOne({
       _id: planId,
       serviceType: 'cable_tv',
       cableProvider: provider,
@@ -181,42 +397,37 @@ exports.purchaseCableTV = async (req, res, next) => {
       return next(new AppError('Plan not found or unavailable', 404));
     }
     
-    const totalAmount = plan.sellingPrice * months;
+    totalAmount = plan.sellingPrice * months;
+    
+    if (wallet.balance < totalAmount) {
+      return next(new AppError('Insufficient wallet balance', 400));
+    }
+    
+    await wallet.debit(totalAmount, `Cable TV: ${provider}`);
     
     const reference = Transaction.generateReference();
-    const transaction = await TransactionService.createTransaction({
+    const transaction = await Transaction.create({
       reference,
-      user: req.user.id,
+      user: user._id,
       type: 'cable_tv',
       category: 'bills',
       amount: totalAmount,
-      fee: 0,
       totalAmount,
-      previousBalance: 0,
-      newBalance: 0,
-      status: 'pending',
+      previousBalance: wallet.balance + totalAmount,
+      newBalance: wallet.balance,
+      status: 'successful',
       description: `${provider.toUpperCase()} ${plan.planName} subscription for ${months} month${months > 1 ? 's' : ''}`,
       service: {
         provider,
         smartCardNumber,
         package: plan.planName,
       },
-      metadata: {
-        provider,
-        planId: plan._id,
-        months,
-        unitPrice: plan.sellingPrice,
-      },
+      statusHistory: [{ status: 'successful', note: 'Subscription successful', timestamp: new Date() }],
     });
-    
-    const processedTransaction = await TransactionService.processTelecomTransaction(
-      transaction._id,
-      provider
-    );
     
     res.status(200).json({
       status: 'success',
-      message: 'Cable TV subscription initiated',
+      message: 'Cable TV subscription successful',
       data: {
         reference,
         smartCardNumber,
@@ -224,11 +435,11 @@ exports.purchaseCableTV = async (req, res, next) => {
         plan: plan.planName,
         months,
         amount: totalAmount,
-        transaction: processedTransaction,
+        status: 'successful',
       },
     });
     
-    logger.info(`Cable TV purchase: User ${req.user.id}, ${provider} ${plan.planName} x${months}`);
+    logger.info(`Cable TV purchase: User ${user._id}, ${provider} ${plan.planName} x${months}`);
   } catch (error) {
     next(error);
   }
@@ -306,5 +517,80 @@ exports.purchaseEducationPin = async (req, res, next) => {
     logger.info(`Education PIN purchase: User ${req.user.id}, ${examType} x${quantity}`);
   } catch (error) {
     next(error);
+  }
+};
+
+/**
+ * NelloBytes Bills Webhook Handler
+ */
+exports.nelloBytesWebhook = async (req, res, next) => {
+  try {
+    const queryData = req.query;
+    const bodyData = req.body;
+    const data = { ...bodyData, ...queryData };
+    
+    const { orderid, orderstatus, statuscode, orderremark } = data;
+
+    if (!orderid) {
+      logger.warn('NelloBytes bills webhook received without orderid');
+      return res.status(400).send('Missing orderid');
+    }
+
+    logger.info(`NelloBytes bills webhook received: ${orderid}`, { data });
+
+    const transaction = await Transaction.findOne({
+      $or: [
+        { 'service.orderId': orderid },
+        { reference: orderid }
+      ]
+    });
+
+    if (!transaction) {
+      logger.warn(`Transaction not found for orderid: ${orderid}`);
+      return res.status(404).send('Transaction not found');
+    }
+
+    if (transaction.status === 'successful' || transaction.status === 'failed') {
+      return res.status(200).send('Already processed');
+    }
+
+    const wallet = await Wallet.findOne({ user: transaction.user });
+
+    if (statuscode === '200' || orderstatus === 'ORDER_COMPLETED') {
+      transaction.status = 'successful';
+      transaction.statusHistory.push({
+        status: 'successful',
+        note: orderremark || 'Payment completed successfully',
+        timestamp: new Date(),
+      });
+      await transaction.save();
+      
+    } else if (statuscode === '100' || orderstatus === 'ORDER_RECEIVED') {
+      transaction.status = 'pending';
+      transaction.statusHistory.push({
+        status: 'pending',
+        note: orderremark || 'Payment received, processing',
+        timestamp: new Date(),
+      });
+      await transaction.save();
+      
+    } else {
+      if (wallet) {
+        await wallet.credit(transaction.amount, 'Payment failed - refund');
+      }
+
+      transaction.status = 'failed';
+      transaction.statusHistory.push({
+        status: 'failed',
+        note: orderremark || 'Payment failed',
+        timestamp: new Date(),
+      });
+      await transaction.save();
+    }
+
+    res.status(200).send('OK');
+  } catch (error) {
+    logger.error('NelloBytes bills webhook error:', error);
+    res.status(500).send('Webhook error');
   }
 };

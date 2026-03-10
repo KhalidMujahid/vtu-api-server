@@ -3,6 +3,9 @@ const router = express.Router();
 const billsController = require('../controllers/billsController');
 
 const { protect, requireTransactionPin } = require('../middlewares/auth');
+
+router.post('/webhook/nellobytes', billsController.nelloBytesWebhook);
+
 router.use(protect);
 
 router.post('/electricity/verify', billsController.verifyElectricityCustomer);
