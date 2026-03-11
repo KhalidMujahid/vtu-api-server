@@ -43,6 +43,23 @@ module.exports = {
         });
       }
       
+      if (user.isAccountLocked) {
+        return res.status(401).json({
+          status: 'error',
+          message: 'Your account has been locked by an administrator. Please contact support.',
+        });
+      }
+      
+      // Check if agent is approved
+      if (user.role === 'agent' || (user.roles && user.roles.includes('agent'))) {
+        if (!user.isApproved) {
+          return res.status(401).json({
+            status: 'error',
+            message: 'Your agent account is pending approval. Please contact admin for approval.',
+          });
+        }
+      }
+
       user.lastLogin = new Date();
       user.lastLoginIp = req.ip;
       user.lastLoginDevice = req.get('user-agent');

@@ -120,6 +120,27 @@ exports.login = async (req, res, next) => {
       );
     }
 
+    if (user.isAccountLocked) {
+      return next(
+        new AppError(
+          'Your account has been locked by an administrator. Please contact support.',
+          401
+        )
+      );
+    }
+
+    // Check if agent is approved
+    if (user.role === 'agent' || (user.roles && user.roles.includes('agent'))) {
+      if (!user.isApproved) {
+        return next(
+          new AppError(
+            'Your agent account is pending approval. Please contact admin for approval.',
+            401
+          )
+        );
+      }
+    }
+
     if (!user.isActive) {
       return next(
         new AppError(

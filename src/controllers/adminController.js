@@ -404,6 +404,376 @@ class AdminController {
     }
   }
 
+  // Get Pending Agents
+  static async getPendingAgents(req, res, next) {
+    try {
+      const { page = 1, limit = 20 } = req.query;
+      const skip = (parseInt(page) - 1) * parseInt(limit);
+      
+      // Find agents that are not approved
+      const query = {
+        $or: [
+          { role: 'agent' },
+          { roles: 'agent' }
+        ],
+        isApproved: false,
+      };
+      
+      const total = await User.countDocuments(query);
+      const pendingAgents = await User.find(query)
+        .select('-password -transactionPin -verificationToken -resetPasswordToken')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(parseInt(limit))
+        .lean();
+      
+      res.status(200).json({
+        status: 'success',
+        data: {
+          pendingAgents,
+          pagination: {
+            total,
+            page: parseInt(page),
+            pages: Math.ceil(total / parseInt(limit)),
+            limit: parseInt(limit),
+          },
+        },
+      });
+      
+    } catch (error) {
+      logger.error('Error getting pending agents:', error);
+      next(error);
+    }
+  }
+
+  // Role Management
+  static async assignRole(req, res, next) {
+    try {
+      const { id } = req.params;
+      const { roles, role } = req.body;
+      
+      const user = await User.findById(id);
+      
+      if (!user) {
+        return next(new AppError('User not found', 404));
+      }
+      
+      // Handle single role or array of roles
+      let newRoles = [];
+      if (roles && Array.isArray(roles)) {
+        newRoles = roles;
+      } else if (role) {
+        newRoles = [role];
+      } else {
+        return next(new AppError('Please provide role or roles to assign', 400));
+      }
+      
+      // Validate roles
+      const validRoles = ['client', 'agent', 'staff', 'admin', 'super_admin'];
+      for (const r of newRoles) {
+        if (!validRoles.includes(r)) {
+          return next(new AppError(`Invalid role: ${r}. Valid roles are: ${validRoles.join(', ')}`, 400));
+        }
+      }
+      
+      // Update roles
+      user.roles = newRoles;
+      
+      // Update legacy role field for backward compatibility
+      if (newRoles.includes('admin') || newRoles.includes('super_admin')) {
+        user.role = newRoles.includes('super_admin') ? 'super_admin' : 'admin';
+      } else if (newRoles.includes('agent')) {
+        user.role = 'agent';
+        // Agents need approval unless they already have it
+        if (!user.isApproved) {
+          user.isApproved = false;
+        }
+      } else if (newRoles.includes('staff')) {
+        user.role = 'staff';
+      } else {
+        user.role = 'user';
+      }
+      
+      await user.save();
+      
+      // Log the action
+      await AdminLog.log({
+        admin: req.admin._id,
+        adminEmail: req.admin.email,
+        adminRole: req.admin.role,
+        action: 'assign_role',
+        entity: 'user',
+        entityId: id,
+        description: `Roles ${newRoles.join(', ')} assigned to user ${user.email} by ${req.admin.email}`,
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+        status: 'success',
+        metadata: { roles: newRoles },
+      });
+      
+      res.status(200).json({
+        status: 'success',
+        message: 'Role(s) assigned successfully',
+        data: {
+          user: {
+            id: user._id,
+            email: user.email,
+            role: user.role,
+            roles: user.roles,
+          },
+        },
+      });
+      
+      logger.info(`Roles assigned: ${newRoles.join(', ')} to ${user.email} by ${req.admin.email}`);
+      
+    } catch (error) {
+      logger.error('Error assigning role:', error);
+      next(error);
+    }
+  }
+
+  static async approveAgent(req, res, next) {
+    try {
+      const { id } = req.params;
+      
+      const user = await User.findById(id);
+      
+      if (!user) {
+        return next(new AppError('User not found', 404));
+      }
+      
+      // Check if user has agent role
+      if (user.role !== 'agent' && (!user.roles || !user.roles.includes('agent'))) {
+        return next(new AppError('User does not have agent role', 400));
+      }
+      
+      if (user.isApproved) {
+        return next(new AppError('Agent is already approved', 400));
+      }
+      
+      // Approve agent
+      user.isApproved = true;
+      user.approvedBy = req.admin._id;
+      user.approvedAt = new Date();
+      await user.save();
+      
+      // Log the action
+      await AdminLog.log({
+        admin: req.admin._id,
+        adminEmail: req.admin.email,
+        adminRole: req.admin.role,
+        action: 'approve_agent',
+        entity: 'user',
+        entityId: id,
+        description: `Agent ${user.email} approved by ${req.admin.email}`,
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+        status: 'success',
+      });
+      
+      res.status(200).json({
+        status: 'success',
+        message: 'Agent approved successfully',
+        data: {
+          user: {
+            id: user._id,
+            email: user.email,
+            isApproved: user.isApproved,
+            approvedAt: user.approvedAt,
+          },
+        },
+      });
+      
+      logger.info(`Agent approved: ${user.email} by ${req.admin.email}`);
+      
+    } catch (error) {
+      logger.error('Error approving agent:', error);
+      next(error);
+    }
+  }
+
+  static async rejectAgent(req, res, next) {
+    try {
+      const { id } = req.params;
+      const { reason } = req.body;
+      
+      const user = await User.findById(id);
+      
+      if (!user) {
+        return next(new AppError('User not found', 404));
+      }
+      
+      // Check if user has agent role
+      if (user.role !== 'agent' && (!user.roles || !user.roles.includes('agent'))) {
+        return next(new AppError('User does not have agent role', 400));
+      }
+      
+      // Deactivate the agent account
+      user.isActive = false;
+      user.isApproved = false;
+      await user.save();
+      
+      // Log the action
+      await AdminLog.log({
+        admin: req.admin._id,
+        adminEmail: req.admin.email,
+        adminRole: req.admin.role,
+        action: 'reject_agent',
+        entity: 'user',
+        entityId: id,
+        description: `Agent ${user.email} rejected by ${req.admin.email}. Reason: ${reason || 'Not specified'}`,
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+        status: 'success',
+        metadata: { reason },
+      });
+      
+      res.status(200).json({
+        status: 'success',
+        message: 'Agent rejected successfully',
+        data: {
+          user: {
+            id: user._id,
+            email: user.email,
+            isActive: user.isActive,
+            isApproved: user.isApproved,
+          },
+        },
+      });
+      
+      logger.info(`Agent rejected: ${user.email} by ${req.admin.email}`);
+      
+    } catch (error) {
+      logger.error('Error rejecting agent:', error);
+      next(error);
+    }
+  }
+
+  static async lockAccount(req, res, next) {
+    try {
+      const { id } = req.params;
+      const { reason } = req.body;
+      
+      const user = await User.findById(id);
+      
+      if (!user) {
+        return next(new AppError('User not found', 404));
+      }
+      
+      if (user.isAccountLocked) {
+        return next(new AppError('User account is already locked', 400));
+      }
+      
+      // Check if trying to lock admin/super_admin
+      if (user.role === 'super_admin') {
+        return next(new AppError('Cannot lock super admin account', 400));
+      }
+      
+      // Lock the account
+      user.isAccountLocked = true;
+      user.lockedBy = req.admin._id;
+      user.lockedAt = new Date();
+      user.lockReason = reason || 'Locked by administrator';
+      await user.save();
+      
+      // Lock user's wallet
+      await WalletService.lockWallet(id, `User account locked by admin: ${user.lockReason}`);
+      
+      // Log the action
+      await AdminLog.log({
+        admin: req.admin._id,
+        adminEmail: req.admin.email,
+        adminRole: req.admin.role,
+        action: 'lock_account',
+        entity: 'user',
+        entityId: id,
+        description: `User ${user.email} account locked by ${req.admin.email}. Reason: ${user.lockReason}`,
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+        status: 'success',
+        metadata: { reason: user.lockReason },
+      });
+      
+      res.status(200).json({
+        status: 'success',
+        message: 'User account locked successfully',
+        data: {
+          user: {
+            id: user._id,
+            email: user.email,
+            isAccountLocked: user.isAccountLocked,
+            lockedAt: user.lockedAt,
+            lockReason: user.lockReason,
+          },
+        },
+      });
+      
+      logger.info(`User account locked: ${user.email} by ${req.admin.email}`);
+      
+    } catch (error) {
+      logger.error('Error locking account:', error);
+      next(error);
+    }
+  }
+
+  static async unlockAccount(req, res, next) {
+    try {
+      const { id } = req.params;
+      
+      const user = await User.findById(id);
+      
+      if (!user) {
+        return next(new AppError('User not found', 404));
+      }
+      
+      if (!user.isAccountLocked) {
+        return next(new AppError('User account is not locked', 400));
+      }
+      
+      // Unlock the account
+      user.isAccountLocked = false;
+      user.lockedBy = undefined;
+      user.lockedAt = undefined;
+      user.lockReason = undefined;
+      await user.save();
+      
+      // Unlock user's wallet
+      await WalletService.unlockWallet(id);
+      
+      // Log the action
+      await AdminLog.log({
+        admin: req.admin._id,
+        adminEmail: req.admin.email,
+        adminRole: req.admin.role,
+        action: 'unlock_account',
+        entity: 'user',
+        entityId: id,
+        description: `User ${user.email} account unlocked by ${req.admin.email}`,
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+        status: 'success',
+      });
+      
+      res.status(200).json({
+        status: 'success',
+        message: 'User account unlocked successfully',
+        data: {
+          user: {
+            id: user._id,
+            email: user.email,
+            isAccountLocked: user.isAccountLocked,
+          },
+        },
+      });
+      
+      logger.info(`User account unlocked: ${user.email} by ${req.admin.email}`);
+      
+    } catch (error) {
+      logger.error('Error unlocking account:', error);
+      next(error);
+    }
+  }
+
   static async resetTransactionPin(req, res, next) {
     try {
       const { id } = req.params;
@@ -1970,9 +2340,17 @@ module.exports = {
   // User Management
   getUsers: AdminController.getUsers,
   getUser: AdminController.getUser,
+  getPendingAgents: AdminController.getPendingAgents,
   suspendUser: AdminController.suspendUser,
   activateUser: AdminController.activateUser,
   resetTransactionPin: AdminController.resetTransactionPin,
+  
+  // Role Management
+  assignRole: AdminController.assignRole,
+  approveAgent: AdminController.approveAgent,
+  rejectAgent: AdminController.rejectAgent,
+  lockAccount: AdminController.lockAccount,
+  unlockAccount: AdminController.unlockAccount,
   
   // Wallet Management
   getWallets: AdminController.getWallets,

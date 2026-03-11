@@ -90,6 +90,30 @@ const userSchema = new mongoose.Schema({
     enum: ['user', 'agent', 'staff', 'admin', 'super_admin'],
     default: 'user',
   },
+  roles: {
+    type: [String],
+    enum: ['client', 'agent', 'staff', 'admin', 'super_admin'],
+    default: ['client'],
+  },
+  isApproved: {
+    type: Boolean,
+    default: false,
+  },
+  approvedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+  },
+  approvedAt: Date,
+  isAccountLocked: {
+    type: Boolean,
+    default: false,
+  },
+  lockedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+  },
+  lockedAt: Date,
+  lockReason: String,
   isActive: {
     type: Boolean,
     default: true,
@@ -223,6 +247,17 @@ userSchema.pre('save', async function(next) {
     this.referralCode = Math.random().toString(36).substring(2, 8).toUpperCase();
   }
   
+  // Set default roles based on role field
+  if (this.role === 'agent' && (!this.roles || this.roles.length === 0)) {
+    this.roles = ['agent'];
+    // Agents need approval by default
+    if (!this.isApproved) {
+      this.isApproved = false;
+    }
+  } else if (this.role === 'user' && (!this.roles || this.roles.length === 0)) {
+    this.roles = ['client'];
+  }
+  
   if (this.role === 'agent' && !this.agentInfo?.agentId) {
     this.agentInfo = this.agentInfo || {};
     const timestamp = Date.now().toString().slice(-6);
@@ -273,7 +308,15 @@ userSchema.virtual('fullName').get(function() {
 });
 
 userSchema.virtual('isAgent').get(function() {
-  return this.role === 'agent';
+  return this.role === 'agent' || this.roles.includes('agent');
+});
+
+userSchema.virtual('isClient').get(function() {
+  return this.role === 'user' || this.roles.includes('client');
+});
+
+userSchema.virtual('isApprovedAgent').get(function() {
+  return (this.role === 'agent' || this.roles.includes('agent')) && this.isApproved;
 });
 
 

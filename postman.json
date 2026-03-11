@@ -343,6 +343,259 @@
           "response": []
         },
         {
+          "name": "Agent: Create Wallet",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{agent_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/agents/wallet/create",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "agents", "wallet", "create"]
+            },
+            "description": "Create wallet for agent"
+          },
+          "response": []
+        },
+        {
+          "name": "Agent: Check Wallet Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{agent_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/agents/wallet/status",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "agents", "wallet", "status"]
+            },
+            "description": "Check if agent has a wallet"
+          },
+          "response": []
+        },
+        {
+          "name": "Agent: Get Wallet Balance",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{agent_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/agents/wallet/balance",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "agents", "wallet", "balance"]
+            },
+            "description": "Get agent wallet balance"
+          },
+          "response": []
+        },
+        {
+          "name": "Agent: Fund Wallet",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{agent_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 5000\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/agents/wallet/fund",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "agents", "wallet", "fund"]
+            },
+            "description": "Fund agent wallet"
+          },
+          "response": []
+        },
+        {
+          "name": "Agent: Transfer Funds",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{agent_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recipientPhone\": \"08012345678\",\n  \"amount\": 1000,\n  \"transactionPin\": \"1234\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/agents/wallet/transfer",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "agents", "wallet", "transfer"]
+            },
+            "description": "Transfer funds to another user"
+          },
+          "response": []
+        },
+        {
+          "name": "Agent: Withdraw to Bank",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{agent_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 5000,\n  \"bankCode\": \"058\",\n  \"accountNumber\": \"1234567890\",\n  \"transactionPin\": \"1234\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/agents/wallet/withdraw",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "agents", "wallet", "withdraw"]
+            },
+            "description": "Withdraw funds to bank account"
+          },
+          "response": []
+        },
+        {
+          "name": "Agent: Get Transactions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{agent_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/agents/wallet/transactions?page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "agents", "wallet", "transactions"]
+            },
+            "description": "Get agent transaction history"
+          },
+          "response": []
+        },
+        {
+          "name": "Agent: Get Wallet Accounts",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{agent_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/agents/wallet/accounts",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "agents", "wallet", "accounts"]
+            },
+            "description": "Get agent virtual bank accounts"
+          },
+          "response": []
+        },
+        {
+          "name": "Agent: Set Transaction PIN",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{agent_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transactionPin\": \"1234\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/agents/wallet/set-pin",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "agents", "wallet", "set-pin"]
+            },
+            "description": "Set agent transaction PIN"
+          },
+          "response": []
+        },
+        {
+          "name": "Agent: Get Commission",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{agent_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/agents/commission",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "agents", "commission"]
+            },
+            "description": "Get agent commission balance"
+          },
+          "response": []
+        },
+        {
+          "name": "Agent: Withdraw Commission",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{agent_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 5000\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/agents/commission/withdraw",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "agents", "commission", "withdraw"]
+            },
+            "description": "Withdraw agent commission to bank account"
+          },
+          "response": []
+        },
+        {
           "name": "Purchase Airtime (Agent)",
           "request": {
             "method": "POST",
@@ -1401,6 +1654,200 @@
               ]
             },
             "description": "Reset user's transaction PIN"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Pending Agents",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/pending-agents?page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "pending-agents"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Get list of pending agent approvals"
+          },
+          "response": []
+        },
+        {
+          "name": "Assign Role",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roles\": [\"client\", \"agent\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/users/:id/assign-role",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "users", ":id", "assign-role"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "user_id_here"
+                }
+              ]
+            },
+            "description": "Assign roles to user (client, agent, or both)"
+          },
+          "response": []
+        },
+        {
+          "name": "Approve Agent",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/users/:id/approve-agent",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "users", ":id", "approve-agent"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "agent_id_here"
+                }
+              ]
+            },
+            "description": "Approve agent account to allow login"
+          },
+          "response": []
+        },
+        {
+          "name": "Reject Agent",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Incomplete documentation\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/users/:id/reject-agent",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "users", ":id", "reject-agent"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "agent_id_here"
+                }
+              ]
+            },
+            "description": "Reject agent account"
+          },
+          "response": []
+        },
+        {
+          "name": "Lock Account",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Violation of terms\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/users/:id/lock",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "users", ":id", "lock"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "user_id_here"
+                }
+              ]
+            },
+            "description": "Lock user account"
+          },
+          "response": []
+        },
+        {
+          "name": "Unlock Account",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/users/:id/unlock",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "users", ":id", "unlock"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "user_id_here"
+                }
+              ]
+            },
+            "description": "Unlock user account"
           },
           "response": []
         },

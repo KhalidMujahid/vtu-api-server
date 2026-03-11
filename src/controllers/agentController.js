@@ -257,16 +257,18 @@ class AgentController {
         phoneNumber,
         password: password || `Agent@${Date.now().toString().slice(-6)}`,
         role: 'agent',
+        roles: ['agent'],
         isEmailVerified: true,
         isPhoneVerified: true,
         isActive: true,
+        isApproved: false, // Agents need admin approval
         kycStatus: 'verified',
         agentInfo: {
           commissionRate,
           assignedArea: assignedArea || {},
           bankDetails: bankDetails || {},
           activationDate: new Date(),
-          isVerified: true,
+          isVerified: false, // Will be verified after approval
         },
       };
       
@@ -739,6 +741,135 @@ class AgentController {
     }
   }
 
+  static async getAgentCommission(req, res, next) {
+    try {
+      const agent = req.user;
+      
+      // Get commission transactions
+      const transactions = await Transaction.find({
+        user: agent._id,
+        'metadata.commissionWithdrawal': true,
+      })
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .lean();
+      
+      res.status(200).json({
+        status: 'success',
+        data: {
+          commission: {
+            totalEarned: agent.agentInfo.totalCommissionEarned || 0,
+            available: agent.agentInfo.availableCommission || 0,
+            currency: 'NGN',
+          },
+          recentWithdrawals: transactions,
+        },
+      });
+      
+    } catch (error) {
+      logger.error('Error getting agent commission:', error);
+      next(error);
+    }
+  }
+
+  static async withdrawCommission(req, res, next) {
+    try {
+      const { amount, bankCode, accountNumber } = req.body;
+      
+      if (!amount || amount <= 0) {
+        return next(new AppError('Please provide a valid amount', 400));
+      }
+      
+      const agent = req.user;
+      
+      // Check if agent has bank details
+      let bankDetails = agent.agentInfo?.bankDetails;
+      
+      // If new bank details provided, use those
+      if (bankCode && accountNumber) {
+        bankDetails = {
+          bankName: '',
+          accountNumber: accountNumber,
+          accountName: '', // Would need verification in production
+          isVerified: false,
+        };
+      }
+      
+      if (!bankDetails || !bankDetails.accountNumber) {
+        return next(new AppError('No bank account set up. Please contact support or provide bank details.', 400));
+      }
+      
+      if (agent.agentInfo.availableCommission < amount) {
+        return next(new AppError('Insufficient available commission', 400));
+      }
+      
+      const transactionReference = `COM-WDL-${Date.now()}`;
+      
+      const transaction = await Transaction.create({
+        reference: transactionReference,
+        user: agent._id,
+        type: 'commission_withdrawal',
+        category: 'commission',
+        amount,
+        fee: 0,
+        totalAmount: amount,
+        previousBalance: agent.agentInfo.availableCommission,
+        newBalance: agent.agentInfo.availableCommission - amount,
+        status: 'processing',
+        description: `Commission withdrawal to ${bankDetails.bankName || 'bank'} - ${bankDetails.accountNumber}`,
+        metadata: {
+          bankDetails,
+          commissionWithdrawal: true,
+        },
+      });
+      
+      // Update agent's commission
+      agent.agentInfo.availableCommission -= amount;
+      agent.agentInfo.lastCommissionWithdrawal = new Date();
+      await agent.save();
+      
+      // Simulate processing (in production, this would call a payment API)
+      setTimeout(async () => {
+        try {
+          await Transaction.findByIdAndUpdate(transaction._id, {
+            status: 'successful',
+            statusHistory: [
+              {
+                status: 'successful',
+                note: 'Commission payment processed',
+                timestamp: new Date(),
+              },
+            ],
+            completedAt: new Date(),
+          });
+        } catch (error) {
+          logger.error('Error updating commission transaction:', error);
+        }
+      }, 5000);
+      
+      res.status(200).json({
+        status: 'success',
+        message: 'Commission withdrawal request submitted',
+        data: {
+          transaction: {
+            id: transaction._id,
+            reference: transaction.reference,
+            amount: transaction.amount,
+            status: transaction.status,
+            createdAt: transaction.createdAt,
+          },
+          remainingCommission: agent.agentInfo.availableCommission,
+        },
+      });
+      
+      logger.info(`Commission withdrawal: ${agent.email}, Amount: ${amount}`);
+      
+    } catch (error) {
+      logger.error('Error withdrawing commission:', error);
+      next(error);
+    }
+  }
+
   static async processCommissionWithdrawal(req, res, next) {
     try {
       const { id } = req.params;
@@ -991,9 +1122,11 @@ class AgentController {
             phoneNumber,
             password,
             role: 'agent',
+            roles: ['agent'],
             isEmailVerified: false,
             isPhoneVerified: false,
             isActive: false,
+            isApproved: false, // Needs admin approval
             kycStatus: 'pending',
             referredBy: referringAgent?._id,
             agentInfo: {

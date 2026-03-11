@@ -9,9 +9,17 @@ router.get('/dashboard', adminController.getDashboardStats);
 
 router.get('/users', adminController.getUsers);
 router.get('/users/:id', adminController.getUser);
+router.get('/pending-agents', adminController.getPendingAgents);
 router.put('/users/:id/suspend', logAction('suspend', 'user'), adminController.suspendUser);
 router.put('/users/:id/activate', logAction('activate', 'user'), adminController.activateUser);
 router.put('/users/:id/reset-pin', logAction('update', 'user'), adminController.resetTransactionPin);
+
+// Role Management
+router.put('/users/:id/assign-role', logAction('assign_role', 'user'), adminController.assignRole);
+router.put('/users/:id/approve-agent', logAction('approve_agent', 'user'), adminController.approveAgent);
+router.put('/users/:id/reject-agent', logAction('reject_agent', 'user'), adminController.rejectAgent);
+router.put('/users/:id/lock', logAction('lock_account', 'user'), adminController.lockAccount);
+router.put('/users/:id/unlock', logAction('unlock_account', 'user'), adminController.unlockAccount);
 
 router.get('/wallets', adminController.getWallets);
 router.get('/wallets/:userId', adminController.getUserWallet);
