@@ -6,6 +6,7 @@ const Transaction = require('../models/Transaction');
 const User = require('../models/User');
 const Wallet = require('../models/Wallet');
 const NelloBytesService = require('../services/nelloBytesService');
+const NotificationService = require('../services/NotificationService');
 
 const SERVER_URL = process.env.SERVER_URL || 'https://api.yareemadata.com';
 
@@ -41,7 +42,6 @@ exports.verifyElectricityCustomer = async (req, res, next) => {
       }
     }
     
-    // Default: mock response
     const mockCustomerInfo = {
       customerName: 'JOHN DOE',
       customerAddress: '123 TEST STREET, ABUJA',
@@ -161,7 +161,6 @@ exports.purchaseElectricity = async (req, res, next) => {
         throw new Error(apiResponse.response?.status || 'Payment failed');
       }
       
-      // Fallback: use database pricing
       const pricing = await ServicePricing.findOne({
         serviceType: 'electricity',
         disco,
@@ -565,6 +564,25 @@ exports.nelloBytesWebhook = async (req, res, next) => {
       });
       await transaction.save();
       
+      // Send notification based on transaction type
+      if (transaction.type === 'electricity') {
+        await NotificationService.create({
+          user: transaction.user,
+          title: 'Electricity Payment Successful',
+          message: `Your electricity payment of ₦${transaction.amount} was successful.`,
+          type: 'electricity',
+          reference: transaction.reference,
+        });
+      } else if (transaction.type === 'cable_tv') {
+        await NotificationService.create({
+          user: transaction.user,
+          title: 'Cable TV Subscription Successful',
+          message: `Your cable TV subscription of ₦${transaction.amount} was successful.`,
+          type: 'cable_tv',
+          reference: transaction.reference,
+        });
+      }
+      
     } else if (statuscode === '100' || orderstatus === 'ORDER_RECEIVED') {
       transaction.status = 'pending';
       transaction.statusHistory.push({
@@ -586,6 +604,15 @@ exports.nelloBytesWebhook = async (req, res, next) => {
         timestamp: new Date(),
       });
       await transaction.save();
+      
+      // Send failure notification
+      await NotificationService.create({
+        user: transaction.user,
+        title: 'Payment Failed',
+        message: `Your ${transaction.type || 'payment'} of ₦${transaction.amount} failed. Amount has been refunded.`,
+        type: 'payment_failed',
+        reference: transaction.reference,
+      });
     }
 
     res.status(200).send('OK');

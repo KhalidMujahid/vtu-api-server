@@ -5,6 +5,132 @@ const KYC = require('../models/KYC');
 const { AppError } = require('../middlewares/errorHandler');
 const logger = require('../utils/logger');
 
+/**
+ * Get User's Own Transaction Report
+ */
+exports.getMyReport = async (req, res, next) => {
+  try {
+    const { 
+      type = 'daily',
+      startDate, 
+      endDate,
+      status,
+      category,
+      page = 1,
+      limit = 20
+    } = req.query;
+
+    const userId = req.user.id;
+
+    let dateFilter = {};
+    const now = new Date();
+
+    switch (type) {
+      case 'daily':
+        const startOfDay = new Date(now);
+        startOfDay.setHours(0, 0, 0, 0);
+        const endOfDay = new Date(now);
+        endOfDay.setHours(23, 59, 59, 999);
+        dateFilter = { createdAt: { $gte: startOfDay, $lte: endOfDay } };
+        break;
+      case 'weekly':
+        const startOfWeek = new Date(now);
+        startOfWeek.setDate(now.getDate() - 7);
+        dateFilter = { createdAt: { $gte: startOfWeek, $lte: new Date() } };
+        break;
+      case 'monthly':
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        dateFilter = { createdAt: { $gte: startOfMonth, $lte: new Date() } };
+        break;
+      case 'custom':
+        if (!startDate || !endDate) {
+          return next(new AppError('Please provide startDate and endDate for custom range', 400));
+        }
+        dateFilter = { 
+          createdAt: { 
+            $gte: new Date(startDate), 
+            $lte: new Date(endDate) 
+          } 
+        };
+        break;
+    }
+
+    // Build query for user
+    const query = { 
+      user: userId,
+      ...dateFilter 
+    };
+    if (status) query.status = status;
+    if (category) query.category = category;
+
+    // Get transactions with pagination
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const transactions = await Transaction.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    const total = await Transaction.countDocuments(query);
+
+    // Get summary statistics for user
+    const summary = await Transaction.aggregate([
+      { $match: query },
+      {
+        $group: {
+          _id: null,
+          totalTransactions: { $sum: 1 },
+          totalSpent: { $sum: '$totalAmount' },
+          successfulTransactions: {
+            $sum: { $cond: [{ $eq: ['$status', 'successful'] }, 1, 0] }
+          },
+          failedTransactions: {
+            $sum: { $cond: [{ $eq: ['$status', 'failed'] }, 1, 0] }
+          },
+          pendingTransactions: {
+            $sum: { $cond: [{ $eq: ['$status', 'pending'] }, 1, 0] }
+          }
+        }
+      }
+    ]);
+
+    // Get spending by category
+    const byCategory = await Transaction.aggregate([
+      { $match: { ...query, status: 'successful' } },
+      {
+        $group: {
+          _id: '$category',
+          count: { $sum: 1 },
+          total: { $sum: '$totalAmount' }
+        }
+      }
+    ]);
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        summary: summary[0] || {
+          totalTransactions: 0,
+          totalSpent: 0,
+          successfulTransactions: 0,
+          failedTransactions: 0,
+          pendingTransactions: 0
+        },
+        byCategory,
+        transactions,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total,
+          pages: Math.ceil(total / parseInt(limit))
+        }
+      }
+    });
+  } catch (error) {
+    logger.error('User report error:', error);
+    next(error);
+  }
+};
+
 
 exports.getTransactionReport = async (req, res, next) => {
   try {

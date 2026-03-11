@@ -65,13 +65,42 @@ const walletSchema = new mongoose.Schema(
     expiry: String,
     status: String,
   },
+
+  accountReference: String,
 },
 {
-  timestamps: true
+  timestamps: true,
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true }
 }
 );
 
 walletSchema.index({ user: 1 });
+
+walletSchema.virtual('accountNumbers').get(function() {
+  if (!this.virtualAccount) {
+    return [];
+  }
+  return [{
+    bankName: this.virtualAccount.bankName,
+    accountNumber: this.virtualAccount.accountNumber,
+    accountName: this.virtualAccount.accountName,
+    bankCode: this.virtualAccount.bankCode,
+    isDefault: true,
+  }];
+});
+
+walletSchema.virtual('primaryAccountNumber').get(function() {
+  if (!this.virtualAccount) {
+    return null;
+  }
+  return {
+    bankName: this.virtualAccount.bankName,
+    accountNumber: this.virtualAccount.accountNumber,
+    accountName: this.virtualAccount.accountName,
+    bankCode: this.virtualAccount.bankCode,
+  };
+});
 
 walletSchema.methods.canDebit = function (amount) {
   if (this.locked) return false;

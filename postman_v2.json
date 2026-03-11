@@ -153,7 +153,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"phoneNumber\": \"08012345678\",\n  \"network\": \"mtn\",\n  \"dataPlan\": \"1000\",\n  \"transactionPin\": \"1234\"\n}"
+              "raw": "{\n  \"phoneNumber\": \"08012345678\",\n  \"network\": \"mtn\",\n  \"dataPlan\": \"1000\",\n  \"transactionPin\": \"1234\",\n  \"amount\": 567\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/telecom/data/purchase",
@@ -659,6 +659,29 @@
     {
       "name": "Reports",
       "item": [
+        {
+          "name": "My Report (User)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/my-report?type=monthly",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "my-report"],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "monthly"
+                }
+              ]
+            }
+          }
+        },
         {
           "name": "Dashboard Summary",
           "request": {
