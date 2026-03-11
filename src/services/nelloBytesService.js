@@ -725,15 +725,6 @@ const { v4: uuidv4 } = require('uuid');
 const logger = require('../utils/logger');
 const { AppError } = require('../middlewares/errorHandler');
 
-/**
- * NelloBytes API Service
- * Documentation: https://www.nellobytesystems.com
- * 
- * API Credentials from .env:
- * - NELLO_USER_ID=CK101269269
- * - NELLO_API_KEY=1N6P675ASG2341TWAMI0979GVVTMCCGI83AZ54I6H5JBN2WE1E467642F15HG661
- */
-
 class NelloBytesService {
   static config = {
     baseUrl: 'https://www.nellobytesystems.com',
@@ -742,7 +733,6 @@ class NelloBytesService {
     timeout: 45000,
   };
 
-  // Network codes mapping
   static networkCodes = {
     mtn: '01',
     glo: '02',
@@ -750,7 +740,6 @@ class NelloBytesService {
     airtel: '04',
   };
 
-  // Cable TV codes
   static cableCodes = {
     dstv: 'dstv',
     gotv: 'gotv',
@@ -758,27 +747,22 @@ class NelloBytesService {
     showmax: 'showmax',
   };
 
-  // Electricity Disco codes
   static electricityCodes = {
-    ekedc: '01',  // Eko Electric
-    ikedc: '02',  // Ikeja Electric
-    aedc: '03',   // Abuja Electric
-    kaedc: '04',  // Kaduna Electric
-    phedc: '05',  // Port Harcourt Electric
-    jedc: '06',   // Jos Electric
-    ibedc: '07',  // Ibadan Electric
-    bedc: '08',   // Benin Electric
+    ekedc: '01',
+    ikedc: '02',
+    aedc: '03',
+    kaedc: '04',
+    phedc: '05',
+    jedc: '06',
+    ibedc: '07',
+    bedc: '08',
   };
 
-  // Meter types
   static meterTypes = {
     prepaid: '01',
     postpaid: '02',
   };
 
-  /**
-   * Make HTTP request to NelloBytes API
-   */
   static async request(endpoint, params = {}) {
     const defaultParams = {
       UserID: this.config.userId,
@@ -818,10 +802,8 @@ class NelloBytesService {
     const endpoint = '/APIDatabundlePlansV2.asp';
     const response = await this.request(endpoint);
     
-    // Filter by network if specified
     if (network && this.networkCodes[network.toLowerCase()]) {
       const networkCode = this.networkCodes[network.toLowerCase()];
-      // Plans are returned in a format that needs parsing
       return this.parseDataPlansResponse(response, networkCode);
     }
     
@@ -832,8 +814,6 @@ class NelloBytesService {
    * Parse data plans response
    */
   static parseDataPlansResponse(response, networkCode) {
-    // The API returns plans in a special format
-    // This method parses and organizes them
     if (typeof response === 'string') {
       // Parse the response if it's a string
       const plans = {};
@@ -869,7 +849,7 @@ class NelloBytesService {
     const response = await this.request(endpoint, {
       MobileNetwork: networkCode,
       DataPlan: dataPlan,
-      MobileNumber: mobileNumber.replace(/^0/, '').replace(/^\+234/, ''),
+      MobileNumber: mobileNumber ? mobileNumber.replace(/^0/, '').replace(/^\+234/, '') : '',
       RequestID: requestId,
       CallBackURL: callBackURL || '',
     });
@@ -992,7 +972,7 @@ class NelloBytesService {
       CableTV: cableCode,
       Package: packageCode,
       SmartCardNo: smartCardNo,
-      PhoneNo: phoneNo.replace(/^0/, '').replace(/^\+234/, ''),
+      PhoneNo: phoneNo ? phoneNo.replace(/^0/, '').replace(/^\+234/, '') : '',
       RequestID: requestId,
       CallBackURL: callBackURL || '',
     });
@@ -1103,7 +1083,7 @@ class NelloBytesService {
       MeterNo: meterNo,
       MeterType: typeCode,
       Amount: amount,
-      PhoneNo: phoneNo.replace(/^0/, '').replace(/^\+234/, ''),
+      PhoneNo: phoneNo ? phoneNo.replace(/^0/, '').replace(/^\+234/, '') : '',
       RequestID: requestId,
       CallBackURL: callBackURL || '',
     });
@@ -1263,7 +1243,7 @@ class NelloBytesService {
 
     const response = await this.request(endpoint, {
       ExamType: examType,
-      PhoneNo: phoneNo.replace(/^0/, '').replace(/^\+234/, ''),
+      PhoneNo: phoneNo ? phoneNo.replace(/^0/, '').replace(/^\+234/, '') : '',
       RequestID: requestId,
       CallBackURL: callBackURL || '',
     });
@@ -1360,7 +1340,7 @@ class NelloBytesService {
 
     const response = await this.request(endpoint, {
       ExamType: examType,
-      PhoneNo: phoneNo.replace(/^0/, '').replace(/^\+234/, ''),
+      PhoneNo: phoneNo ? phoneNo.replace(/^0/, '').replace(/^\+234/, '') : '',
       RequestID: requestId,
       CallBackURL: callBackURL || '',
     });

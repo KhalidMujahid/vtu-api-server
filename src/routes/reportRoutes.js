@@ -30,6 +30,9 @@ const { protect, restrictTo } = require('../middlewares/auth');
 
 router.use(protect);
 
+// User's own report - accessible by any authenticated user
+router.get('/my-report', reportController.getMyReport);
+
 router.get('/dashboard', reportController.getDashboardSummary);
 
 router.get('/transactions', restrictTo('admin', 'super_admin', 'staff'), reportController.getTransactionReport);

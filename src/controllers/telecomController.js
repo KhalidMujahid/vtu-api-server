@@ -754,6 +754,7 @@ const NelloBytesService = require('../services/nelloBytesService');
 const crypto = require('crypto');
 
 const SERVER_URL = process.env.SERVER_URL || 'https://api.yareemadata.com';
+const AIRTIME_CALLBACK_URL = process.env.AIRTIME_CALLBACK_URL || `${SERVER_URL}/api/v1/telecom/airtime/webhook`;
 
 function generateReference(prefix = 'TX') {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
@@ -810,10 +811,20 @@ exports.getDataPlans = async (req, res, next) => {
 
 exports.purchaseData = async (req, res, next) => {
   try {
-    const { phoneNumber, network, dataPlan, transactionPin } = req.body;
+    const { phoneNumber, network, dataPlan, transactionPin, amount } = req.body;
     
-    if (!phoneNumber || !network || !dataPlan || !transactionPin) {
-      return next(new AppError('All fields required: phoneNumber, network, dataPlan, transactionPin', 400));
+    // More specific validation
+    if (!phoneNumber) {
+      return next(new AppError('Phone number is required', 400));
+    }
+    if (!network) {
+      return next(new AppError('Network is required', 400));
+    }
+    if (!dataPlan) {
+      return next(new AppError('Data plan is required', 400));
+    }
+    if (!transactionPin) {
+      return next(new AppError('Transaction PIN is required', 400));
     }
 
     if (!/^(?:\+234|0)[789][01]\d{8}$/.test(phoneNumber)) {
@@ -835,25 +846,36 @@ exports.purchaseData = async (req, res, next) => {
       return next(new AppError('Wallet not found', 404));
     }
 
-    // Get pricing from database
-    const pricing = await ServicePricing.findOne({
-      serviceType: 'data_recharge',
-      network: network.toLowerCase(),
-      planCode: dataPlan,
-      isActive: true,
-      isAvailable: true,
-    });
+    // Get pricing from database or use provided amount
+    let pricing = null;
+    let sellingPrice = 0;
 
-    if (!pricing) {
-      return next(new AppError('Data plan not available', 404));
+    if (amount && !isNaN(amount) && parseFloat(amount) > 0) {
+      // Use amount provided by user
+      sellingPrice = parseFloat(amount);
+      pricing = { sellingPrice };
+    } else {
+      // Try to get pricing from database
+      pricing = await ServicePricing.findOne({
+        serviceType: 'data_recharge',
+        network: network.toLowerCase(),
+        planCode: dataPlan,
+        isActive: true,
+        isAvailable: true,
+      });
+
+      if (!pricing) {
+        return next(new AppError('Data plan not available. Please check the plan ID or provide an amount.', 404));
+      }
+      sellingPrice = pricing.sellingPrice;
     }
 
-    if (wallet.balance < pricing.sellingPrice) {
+    if (wallet.balance < sellingPrice) {
       return next(new AppError('Insufficient wallet balance', 400));
     }
 
     // Debit wallet
-    await wallet.debit(pricing.sellingPrice, `Data purchase: ${network} ${dataPlan}`);
+    await wallet.debit(sellingPrice, `Data purchase: ${network} ${dataPlan}`);
 
     const reference = generateReference('DATA');
     const callbackUrl = `${SERVER_URL}/api/v1/telecom/webhook/nellobytes`;
@@ -863,9 +885,9 @@ exports.purchaseData = async (req, res, next) => {
       user: user._id,
       type: 'data_recharge',
       category: 'telecom',
-      amount: pricing.sellingPrice,
-      totalAmount: pricing.sellingPrice,
-      previousBalance: wallet.balance + pricing.sellingPrice,
+      amount: sellingPrice,
+      totalAmount: sellingPrice,
+      previousBalance: wallet.balance + sellingPrice,
       newBalance: wallet.balance,
       status: 'pending',
       description: `${network.toUpperCase()} ${dataPlan} for ${phoneNumber}`,
@@ -907,7 +929,7 @@ exports.purchaseData = async (req, res, next) => {
             phoneNumber,
             network,
             dataPlan,
-            amount: pricing.sellingPrice,
+            amount: sellingPrice,
             status: 'pending',
           },
         });
@@ -916,7 +938,7 @@ exports.purchaseData = async (req, res, next) => {
       }
     } catch (err) {
       // Refund wallet on failure
-      await wallet.credit(pricing.sellingPrice, 'Data purchase refund');
+      await wallet.credit(sellingPrice, 'Data purchase refund');
 
       transaction.status = 'failed';
       transaction.failureReason = err.message;
@@ -1023,7 +1045,7 @@ exports.purchaseAirtime = async (req, res, next) => {
           Amount: amount,
           MobileNumber: phoneNumber,
           RequestID: requestId,
-          CallBackURL: process.env.AIRTIME_CALLBACK_URL,
+          CallBackURL: AIRTIME_CALLBACK_URL,
         },
         timeout: 10000,
       }
@@ -1102,6 +1124,16 @@ exports.airtimeCallback = async (req, res) => {
         timestamp: new Date()
       });
 
+      await transaction.save();
+      
+      // Send notification
+      await NotificationService.airtimePurchase(
+        transaction.user,
+        transaction.service?.network,
+        transaction.amount,
+        transaction.service?.phoneNumber
+      );
+
     } else {
 
       transaction.status = "failed";
@@ -1112,9 +1144,23 @@ exports.airtimeCallback = async (req, res) => {
         timestamp: new Date()
       });
 
-    }
+      await transaction.save();
+      
+      // Refund wallet and send notification
+      const wallet = await Wallet.findOne({ user: transaction.user });
+      if (wallet) {
+        await wallet.credit(transaction.amount, 'Airtime purchase refund');
+      }
+      
+      await NotificationService.create({
+        user: transaction.user,
+        title: 'Airtime Purchase Failed',
+        message: `Your airtime purchase of ₦${transaction.amount} to ${transaction.service?.phoneNumber} failed. Amount has been refunded.`,
+        type: 'airtime_failed',
+        reference: transaction.reference,
+      });
 
-    await transaction.save();
+    }
 
     res.send("OK");
 
@@ -1167,6 +1213,14 @@ exports.airtimeWebhook = async (req, res) => {
         timestamp: new Date(),
       });
 
+      // Send notification for successful airtime purchase
+      await NotificationService.airtimePurchase(
+        transaction.user,
+        transaction.service?.network,
+        transaction.amount,
+        transaction.service?.phoneNumber
+      );
+
     } else {
       transaction.status = 'failed';
       transaction.statusHistory.push({
@@ -1175,9 +1229,20 @@ exports.airtimeWebhook = async (req, res) => {
         timestamp: new Date(),
       });
 
-      const user = await User.findById(transaction.user);
-      user.walletBalance += transaction.amount;
-      await user.save();
+      // Refund wallet on failure
+      const wallet = await Wallet.findOne({ user: transaction.user });
+      if (wallet) {
+        await wallet.credit(transaction.amount, 'Airtime purchase refund');
+      }
+
+      // Send notification for failed airtime purchase
+      await NotificationService.create({
+        user: transaction.user,
+        title: 'Airtime Purchase Failed',
+        message: `Your airtime purchase of ₦${transaction.amount} to ${transaction.service?.phoneNumber} failed. Amount has been refunded.`,
+        type: 'airtime_failed',
+        reference: transaction.reference,
+      });
     }
 
     await transaction.save();
@@ -1330,6 +1395,23 @@ exports.nelloBytesWebhook = async (req, res, next) => {
       });
       await transaction.save();
       
+      // Send notification based on transaction type
+      if (transaction.type === 'data_recharge') {
+        await NotificationService.dataPurchase(
+          transaction.user,
+          transaction.service?.network,
+          transaction.service?.plan,
+          transaction.service?.phoneNumber
+        );
+      } else if (transaction.type === 'airtime_recharge') {
+        await NotificationService.airtimePurchase(
+          transaction.user,
+          transaction.service?.network,
+          transaction.amount,
+          transaction.service?.phoneNumber
+        );
+      }
+      
       logger.info(`Transaction ${transaction.reference} marked as successful`);
       
     } else if (statuscode === '100' || orderstatus === 'ORDER_RECEIVED') {
@@ -1368,6 +1450,15 @@ exports.nelloBytesWebhook = async (req, res, next) => {
         timestamp: new Date(),
       });
       await transaction.save();
+
+      // Send failure notification
+      await NotificationService.create({
+        user: transaction.user,
+        title: 'Transaction Failed',
+        message: `Your ${transaction.type || 'transaction'} of ₦${transaction.amount} has failed. Amount has been refunded to your wallet.`,
+        type: 'transaction_failed',
+        reference: transaction.reference,
+      });
       
       logger.info(`Transaction ${transaction.reference} marked as failed, wallet refunded`);
     }
