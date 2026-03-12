@@ -5,23 +5,172 @@ const walletController = require('../controllers/walletController');
 const { protect, restrictTo, requireTransactionPin } = require('../middlewares/auth');
 const { hasWallet } = require('../middlewares/wallet');
 
-router.post('/login', agentController.login);
+/**
+ * @swagger
+ * /api/v1/agent/register:
+ *   post:
+ *     summary: Register as agent
+ *     tags: [Agents]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - firstName
+ *               - lastName
+ *               - email
+ *               - phoneNumber
+ *               - password
+ *             properties:
+ *               firstName:
+ *                 type: string
+ *               lastName:
+ *                 type: string
+ *               email:
+ *                 type: string
+ *               phoneNumber:
+ *                 type: string
+ *               password:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Agent registered
+ */
 router.post('/register', agentController.register);
 
+/**
+ * @swagger
+ * /api/v1/agent/login:
+ *   post:
+ *     summary: Agent login
+ *     tags: [Agents]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *               - password
+ *             properties:
+ *               email:
+ *                 type: string
+ *               password:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Login successful
+ */
+router.post('/login', agentController.login);
+
+/**
+ * @swagger
+ * /api/v1/agent/dashboard:
+ *   get:
+ *     summary: Get agent dashboard
+ *     tags: [Agents]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Dashboard stats
+ */
 router.get('/dashboard', protect, restrictTo('agent'), agentController.getDashboardStats);
 
-// Wallet routes for agents (same as client wallet)
-router.post('/wallet/create', protect, restrictTo('agent'), walletController.createWallet);
-router.get('/wallet/status', protect, restrictTo('agent'), walletController.checkWalletStatus);
+/**
+ * @swagger
+ * /api/v1/agent/commission:
+ *   get:
+ *     summary: Get agent commission
+ *     tags: [Agents - Commission]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Commission balance
+ */
+router.get('/commission', protect, restrictTo('agent'), agentController.getAgentCommission);
+
+/**
+ * @swagger
+ * /api/v1/agent/commission/withdraw:
+ *   post:
+ *     summary: Withdraw agent commission
+ *     tags: [Agents - Commission]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - amount
+ *             properties:
+ *               amount:
+ *                 type: number
+ *     responses:
+ *       200:
+ *         description: Withdrawal processed
+ */
+router.post('/commission/withdraw', protect, restrictTo('agent'), agentController.withdrawCommission);
+
+/**
+ * @swagger
+ * /api/v1/agent/wallet/balance:
+ *   get:
+ *     summary: Get agent wallet balance
+ *     tags: [Agents - Wallet]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Wallet balance
+ */
 router.get('/wallet/balance', protect, restrictTo('agent'), hasWallet, walletController.getWalletBalance);
+
+/**
+ * @swagger
+ * /api/v1/agent/wallet/fund:
+ *   post:
+ *     summary: Fund agent wallet
+ *     tags: [Agents - Wallet]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - amount
+ *             properties:
+ *               amount:
+ *                 type: number
+ *     responses:
+ *       200:
+ *         description: Wallet funded
+ */
 router.post('/wallet/fund', protect, restrictTo('agent'), hasWallet, walletController.fundWallet);
-router.post('/wallet/transfer', protect, restrictTo('agent'), hasWallet, requireTransactionPin, walletController.transferToUser);
-router.post('/wallet/withdraw', protect, restrictTo('agent'), hasWallet, requireTransactionPin, walletController.withdrawToBank);
+
+/**
+ * @swagger
+ * /api/v1/agent/wallet/transactions:
+ *   get:
+ *     summary: Get agent transactions
+ *     tags: [Agents - Wallet]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Transaction history
+ */
 router.get('/wallet/transactions', protect, restrictTo('agent'), hasWallet, walletController.getTransactionHistory);
-router.get('/wallet/accounts', protect, restrictTo('agent'), hasWallet, walletController.getWalletAccounts);
-router.post('/wallet/accounts/refresh', protect, restrictTo('agent'), hasWallet, walletController.refreshWalletAccounts);
-router.post('/wallet/set-pin', protect, restrictTo('agent'), walletController.setTransactionPin);
-router.post('/wallet/update-pin', protect, restrictTo('agent'), walletController.updateTransactionPin);
 
 router.get('/services', protect, restrictTo('agent'), agentController.getServices);
 

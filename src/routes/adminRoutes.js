@@ -5,21 +5,263 @@ const { adminAuth, logAction, superAdminOnly, staffOnly } = require('../middlewa
 
 router.use(adminAuth);
 
+/**
+ * @swagger
+ * /api/v1/admin/dashboard:
+ *   get:
+ *     summary: Get admin dashboard stats
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Dashboard statistics
+ */
 router.get('/dashboard', adminController.getDashboardStats);
 
+/**
+ * @swagger
+ * /api/v1/admin/users:
+ *   get:
+ *     summary: Get all users
+ *     tags: [Admin - Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Users list
+ */
 router.get('/users', adminController.getUsers);
-router.get('/users/:id', adminController.getUser);
-router.get('/pending-agents', adminController.getPendingAgents);
-router.put('/users/:id/suspend', logAction('suspend', 'user'), adminController.suspendUser);
-router.put('/users/:id/activate', logAction('activate', 'user'), adminController.activateUser);
-router.put('/users/:id/reset-pin', logAction('update', 'user'), adminController.resetTransactionPin);
 
-// Role Management
+/**
+ * @swagger
+ * /api/v1/admin/users/{id}:
+ *   get:
+ *     summary: Get user by ID
+ *     tags: [Admin - Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: User details
+ */
+router.get('/users/:id', adminController.getUser);
+
+/**
+ * @swagger
+ * /api/v1/admin/pending-agents:
+ *   get:
+ *     summary: Get pending agent approvals
+ *     tags: [Admin - Users]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Pending agents list
+ */
+router.get('/pending-agents', adminController.getPendingAgents);
+
+/**
+ * @swagger
+ * /api/v1/admin/users/{id}/assign-role:
+ *   put:
+ *     summary: Assign role to user
+ *     tags: [Admin - Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               roles:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *     responses:
+ *       200:
+ *         description: Role assigned
+ */
 router.put('/users/:id/assign-role', logAction('assign_role', 'user'), adminController.assignRole);
+
+/**
+ * @swagger
+ * /api/v1/admin/users/{id}/approve-agent:
+ *   put:
+ *     summary: Approve agent
+ *     tags: [Admin - Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Agent approved
+ */
 router.put('/users/:id/approve-agent', logAction('approve_agent', 'user'), adminController.approveAgent);
+
+/**
+ * @swagger
+ * /api/v1/admin/users/{id}/reject-agent:
+ *   put:
+ *     summary: Reject agent
+ *     tags: [Admin - Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               reason:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Agent rejected
+ */
 router.put('/users/:id/reject-agent', logAction('reject_agent', 'user'), adminController.rejectAgent);
+
+/**
+ * @swagger
+ * /api/v1/admin/users/{id}/lock:
+ *   put:
+ *     summary: Lock user account
+ *     tags: [Admin - Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               reason:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Account locked
+ */
 router.put('/users/:id/lock', logAction('lock_account', 'user'), adminController.lockAccount);
+
+/**
+ * @swagger
+ * /api/v1/admin/users/{id}/unlock:
+ *   put:
+ *     summary: Unlock user account
+ *     tags: [Admin - Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Account unlocked
+ */
 router.put('/users/:id/unlock', logAction('unlock_account', 'user'), adminController.unlockAccount);
+
+/**
+ * @swagger
+ * /api/v1/admin/users/{id}/suspend:
+ *   put:
+ *     summary: Suspend user
+ *     tags: [Admin - Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: User suspended
+ */
+router.put('/users/:id/suspend', logAction('suspend', 'user'), adminController.suspendUser);
+
+/**
+ * @swagger
+ * /api/v1/admin/users/{id}/activate:
+ *   put:
+ *     summary: Activate user
+ *     tags: [Admin - Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: User activated
+ */
+router.put('/users/:id/activate', logAction('activate', 'user'), adminController.activateUser);
+
+/**
+ * @swagger
+ * /api/v1/admin/users/{id}/reset-pin:
+ *   put:
+ *     summary: Reset user transaction PIN
+ *     tags: [Admin - Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: PIN reset
+ */
+router.put('/users/:id/reset-pin', logAction('update', 'user'), adminController.resetTransactionPin);
 
 router.get('/wallets', adminController.getWallets);
 router.get('/wallets/:userId', adminController.getUserWallet);

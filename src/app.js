@@ -4,7 +4,9 @@ const helmet = require('helmet');
 const mongoSanitize = require('express-mongo-sanitize');
 const xss = require('xss-clean');
 const rateLimit = require('express-rate-limit');
+const swaggerUi = require('swagger-ui-express');
 
+const { swaggerSpec } = require('./config/swagger');
 const authRoutes = require('./routes/authRoutes');
 const walletRoutes = require('./routes/walletRoutes');
 const telecomRoutes = require('./routes/telecomRoutes');
@@ -60,6 +62,12 @@ app.get('/api/v1/health', (req, res) => {
     message: 'Yareema Data Hub API is running',
     timestamp: new Date().toISOString(),
   });
+});
+
+// Swagger documentation
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.get('/api/v1/docs.json', (req, res) => {
+  res.json(swaggerSpec);
 });
 
 app.use(errorHandler);
