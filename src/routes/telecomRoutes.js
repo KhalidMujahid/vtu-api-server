@@ -30,6 +30,86 @@ router.post('/webhook/nellobytes', telecomController.nelloBytesWebhook);
 
 /**
  * @swagger
+ * /api/v1/telecom/webhook/airtimenigeria:
+ *   post:
+ *     summary: AirtimeNigeria webhook
+ *     tags: [Telecom - Webhooks]
+ *     responses:
+ *       200:
+ *         description: Webhook processed
+ */
+router.post('/webhook/airtimenigeria', telecomController.airtimeNigeriaWebhook);
+
+/**
+ * @swagger
+ * /api/v1/telecom/smeplug/networks:
+ *   get:
+ *     summary: Get SMEPlug networks
+ *     tags: [Telecom - SMEPlug]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Available networks
+ */
+router.get('/smeplug/networks', protect, telecomController.getSmePlugNetworks);
+
+/**
+ * @swagger
+ * /api/v1/telecom/smeplug/balance:
+ *   get:
+ *     summary: Get SMEPlug wallet balance
+ *     tags: [Telecom - SMEPlug]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Wallet balance
+ */
+router.get('/smeplug/balance', protect, telecomController.getSmePlugBalance);
+
+/**
+ * @swagger
+ * /api/v1/telecom/smeplug/data/purchase:
+ *   post:
+ *     summary: Purchase data via SMEPlug
+ *     tags: [Telecom - SMEPlug]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Data purchased
+ */
+router.post('/smeplug/data/purchase', protect, requireTransactionPin, telecomController.purchaseSmePlugData);
+
+/**
+ * @swagger
+ * /api/v1/telecom/smeplug/airtime/purchase:
+ *   post:
+ *     summary: Purchase airtime via SMEPlug
+ *     tags: [Telecom - SMEPlug]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Airtime purchased
+ */
+router.post('/smeplug/airtime/purchase', protect, requireTransactionPin, telecomController.purchaseSmePlugAirtime);
+
+/**
+ * @swagger
+ * /api/v1/telecom/webhook/smeplug:
+ *   post:
+ *     summary: SMEPlug webhook
+ *     tags: [Telecom - Webhooks]
+ *     responses:
+ *       200:
+ *         description: Webhook processed
+ */
+router.post('/webhook/smeplug', telecomController.smePlugWebhook);
+
+/**
+ * @swagger
  * /api/v1/telecom/nellobyte/callback:
  *   get:
  *     summary: NelloBytes callback
@@ -168,5 +248,75 @@ router.get('/epin/plans', telecomController.getEPINPlans);
  *         description: E-PIN purchased
  */
 router.post('/epin/purchase', requireTransactionPin, telecomController.purchaseRechargePin);
+
+/**
+ * @swagger
+ * /api/v1/telecom/provider:
+ *   get:
+ *     summary: Get current VTU provider
+ *     tags: [Telecom - Provider]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Current provider info
+ */
+router.get('/provider', protect, telecomController.getCurrentProvider);
+
+/**
+ * @swagger
+ * /api/v1/telecom/airtimenigeria/plans:
+ *   get:
+ *     summary: Get AirtimeNigeria data plans
+ *     tags: [Telecom - AirtimeNigeria]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Data plans from AirtimeNigeria
+ */
+router.get('/airtimenigeria/plans', protect, telecomController.getAirtimeNigeriaDataPlans);
+
+/**
+ * @swagger
+ * /api/v1/telecom/airtimenigeria/data/purchase:
+ *   post:
+ *     summary: Purchase data via AirtimeNigeria
+ *     tags: [Telecom - AirtimeNigeria]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Data purchased
+ */
+router.post('/airtimenigeria/data/purchase', protect, requireTransactionPin, telecomController.purchaseAirtimeNigeriaData);
+
+/**
+ * @swagger
+ * /api/v1/telecom/airtimenigeria/airtime/purchase:
+ *   post:
+ *     summary: Purchase airtime via AirtimeNigeria
+ *     tags: [Telecom - AirtimeNigeria]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Airtime purchased
+ */
+router.post('/airtimenigeria/airtime/purchase', protect, requireTransactionPin, telecomController.purchaseAirtimeNigeriaAirtime);
+
+/**
+ * @swagger
+ * /api/v1/telecom/airtimenigeria/balance:
+ *   get:
+ *     summary: Get AirtimeNigeria wallet balance
+ *     tags: [Telecom - AirtimeNigeria]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Wallet balance
+ */
+router.get('/airtimenigeria/balance', protect, telecomController.getAirtimeNigeriaBalance);
 
 module.exports = router;

@@ -1,0 +1,406 @@
+{
+  "info": {
+    "_postman_id": "yareema-frontend-api",
+    "name": "Yareema Data Hub - Frontend API",
+    "description": "Frontend API endpoints for VTU, Bills & Utilities",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "auth_token",
+      "value": "",
+      "type": "string",
+      "description": "User authentication token"
+    },
+    {
+      "key": "admin_token",
+      "value": "",
+      "type": "string",
+      "description": "Admin authentication token (required for API Console)"
+    }
+  ],
+  "item": [
+    {
+      "name": "API Console (Admin Only)",
+      "item": [
+        {
+          "name": "Get All Providers",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/console/providers",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "console", "providers"]
+            },
+            "description": "Get all VTU providers with status information. Requires ADMIN authentication."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Provider Config",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/console/providers/config",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "console", "providers", "config"]
+            },
+            "description": "Get provider configuration (public info - no auth required)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Provider Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/console/providers/clubkonnect",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "console", "providers", "clubkonnect"]
+            },
+            "description": "Get specific provider details. Provider IDs: clubkonnect, airtimenigeria, smeplug. Requires ADMIN authentication."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Provider Balance",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/console/providers/clubkonnect/balance",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "console", "providers", "clubkonnect", "balance"]
+            },
+            "description": "Get wallet balance for a specific provider. Requires ADMIN authentication."
+          },
+          "response": []
+        },
+        {
+          "name": "Switch Primary Provider",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"providerId\": \"clubkonnect\",\n  \"transactionPin\": \"1234\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/console/switch",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "console", "switch"]
+            },
+            "description": "Switch the primary VTU provider. Valid providerIds: clubkonnect, airtimenigeria, smeplug. Requires ADMIN authentication."
+          },
+          "response": []
+        },
+        {
+          "name": "Run Health Check (All)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/console/health",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "console", "health"]
+            },
+            "description": "Run health check on all VTU providers. Requires ADMIN authentication."
+          },
+          "response": []
+        },
+        {
+          "name": "Run Provider Health Check",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/console/providers/clubkonnect/health",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "console", "providers", "clubkonnect", "health"]
+            },
+            "description": "Run health check on a specific provider. Requires ADMIN authentication."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Telecom (VTU)",
+      "item": [
+        {
+          "name": "Get Data Plans",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/telecom/data/plans?network=mtn",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "telecom", "data", "plans"],
+              "query": [
+                {
+                  "key": "network",
+                  "value": "mtn"
+                }
+              ]
+            },
+            "description": "Get available data plans for a network. Use 'network' query param: mtn, glo, airtel, 9mobile"
+          },
+          "response": []
+        },
+        {
+          "name": "Purchase Data",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phoneNumber\": \"08012345678\",\n  \"planId\": \"mtn-500mb-30days\",\n  \"network\": \"mtn\",\n  \"transactionPin\": \"1234\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/telecom/data/purchase",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "telecom", "data", "purchase"]
+            },
+            "description": "Purchase data bundle. The system will automatically use the configured default provider."
+          },
+          "response": []
+        },
+        {
+          "name": "Purchase Airtime",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phoneNumber\": \"08012345678\",\n  \"amount\": 1000,\n  \"network\": \"mtn\",\n  \"transactionPin\": \"1234\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/telecom/airtime/purchase",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "telecom", "airtime", "purchase"]
+            },
+            "description": "Purchase airtime recharge. The system will automatically use the configured default provider."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Bills Payment",
+      "item": [
+        {
+          "name": "Electricity",
+          "item": [
+            {
+              "name": "Verify Meter Number",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{auth_token}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"meterNumber\": \"1234567890\",\n  \"disco\": \"eko\",\n  \"meterType\": \"prepaid\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/api/v1/bills/electricity/verify",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "v1", "bills", "electricity", "verify"]
+                },
+                "description": "Verify electricity meter number before purchase. DISCOs: eko, ikeja, abuja, portharcourt, ibadan, kaduna, kano, benin, enugu"
+              },
+              "response": []
+            },
+            {
+              "name": "Purchase Electricity",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{auth_token}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"meterNumber\": \"1234567890\",\n  \"disco\": \"eko\",\n  \"amount\": 5000,\n  \"meterType\": \"prepaid\",\n  \"phoneNumber\": \"08012345678\",\n  \"transactionPin\": \"1234\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/api/v1/bills/electricity/purchase",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "v1", "bills", "electricity", "purchase"]
+                },
+                "description": "Purchase electricity units. Default provider is SMEPlug (configurable via API Console)."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Cable TV",
+          "item": [
+            {
+              "name": "Get Cable Plans",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{auth_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/bills/cable/plans?provider=gotv",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "v1", "bills", "cable", "plans"],
+                  "query": [
+                    {
+                      "key": "provider",
+                      "value": "gotv"
+                    }
+                  ]
+                },
+                "description": "Get cable TV plans. Providers: dstv, gotv, startimes"
+              },
+              "response": []
+            },
+            {
+              "name": "Purchase Cable TV",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{auth_token}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"smartCardNumber\": \"1234567890\",\n  \"provider\": \"dstv\",\n  \"planId\": \"dstv-padi\",\n  \"months\": 1,\n  \"transactionPin\": \"1234\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/api/v1/bills/cable/purchase",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "v1", "bills", "cable", "purchase"]
+                },
+                "description": "Purchase cable TV subscription. Default provider is Club Konnect (configurable via API Console)."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Education",
+          "item": [
+            {
+              "name": "Purchase Education PIN",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{auth_token}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"examType\": \"waec\",\n  \"quantity\": 1,\n  \"transactionPin\": \"1234\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/api/v1/bills/education/purchase",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "v1", "bills", "education", "purchase"]
+                },
+                "description": "Purchase education PIN (WAEC, NECO, NABTEB)"
+              },
+              "response": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

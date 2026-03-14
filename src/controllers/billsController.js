@@ -7,6 +7,7 @@ const User = require('../models/User');
 const Wallet = require('../models/Wallet');
 const NelloBytesService = require('../services/nelloBytesService');
 const NotificationService = require('../services/NotificationService');
+const vtuConfig = require('../config/vtuProviders');
 
 const SERVER_URL = process.env.SERVER_URL || 'https://api.yareemadata.com';
 
@@ -71,6 +72,11 @@ exports.purchaseElectricity = async (req, res, next) => {
   try {
     const { meterNumber, disco, amount, phoneNumber, meterType = 'prepaid', transactionPin, source } = req.body;
     
+    // Get default provider for electricity from config
+    const electricityService = vtuConfig.billPaymentServices?.electricity;
+    const defaultProvider = electricityService?.defaultProvider || 'smeplug';
+    const activeProvider = source || defaultProvider;
+    
     if (!meterNumber || !disco || !amount || !transactionPin) {
       return next(new AppError('Please provide all required fields', 400));
     }
@@ -113,91 +119,63 @@ exports.purchaseElectricity = async (req, res, next) => {
       status: 'pending',
       description: `${disco.toUpperCase()} electricity bill payment of ₦${amount} for meter ${meterNumber}`,
       service: {
-        provider: 'nellobytes',
+        provider: activeProvider,
         disco,
         meterNumber,
         meterType,
         phoneNumber,
       },
-      statusHistory: [{ status: 'pending', note: 'Payment initiated', timestamp: new Date() }],
+      statusHistory: [{ status: 'pending', note: `Payment initiated via ${activeProvider}`, timestamp: new Date() }],
     });
     
     try {
-      // Call NelloBytes API if source is 'nellobytes' or default
-      if (source === 'nellobytes' || !source) {
-        const apiResponse = await NelloBytesService.payElectricityBill({
-          electricCompany: disco,
-          meterNo: meterNumber,
-          meterType,
-          amount,
-          phoneNumber: phoneNumber || user.phoneNumber,
-          callBackURL: callbackUrl,
+      // Call NelloBytes API (primary provider for electricity)
+      const apiResponse = await NelloBytesService.payElectricityBill({
+        electricCompany: disco,
+        meterNo: meterNumber,
+        meterType,
+        amount,
+        phoneNumber: phoneNumber || user.phoneNumber,
+        callBackURL: callbackUrl,
+      });
+      
+      if (apiResponse.success || apiResponse.statusCode === '100') {
+        transaction.status = 'pending';
+        transaction.service.orderId = apiResponse.orderId;
+        transaction.providerResponse = apiResponse.response;
+        transaction.statusHistory.push({ 
+          status: 'pending', 
+          note: `Order received: ${apiResponse.orderId}`, 
+          timestamp: new Date() 
         });
+        await transaction.save();
         
-        if (apiResponse.success || apiResponse.statusCode === '100') {
-          transaction.status = 'pending';
-          transaction.service.orderId = apiResponse.orderId;
-          transaction.providerResponse = apiResponse.response;
-          transaction.statusHistory.push({ 
-            status: 'pending', 
-            note: `Order received: ${apiResponse.orderId}`, 
-            timestamp: new Date() 
-          });
-          await transaction.save();
-          
-          return res.status(200).json({
-            status: 'success',
-            message: 'Electricity bill payment initiated',
-            data: {
-              reference,
-              orderId: apiResponse.orderId,
-              meterNumber,
-              disco,
-              amount,
-              status: 'pending',
-            },
-          });
-        }
-        throw new Error(apiResponse.response?.status || 'Payment failed');
+        return res.status(200).json({
+          status: 'success',
+          message: 'Electricity bill payment initiated',
+          data: {
+            reference,
+            orderId: apiResponse.orderId,
+            meterNumber,
+            disco,
+            amount,
+            status: 'pending',
+          },
+        });
       }
       
-      const pricing = await ServicePricing.findOne({
-        serviceType: 'electricity',
-        disco,
-        isActive: true,
-      });
-      
-      if (!pricing) {
-        throw new Error('Service temporarily unavailable for this DISCO');
-      }
-      
-      transaction.status = 'successful';
-      transaction.statusHistory.push({ status: 'successful', note: 'Payment successful', timestamp: new Date() });
-      await transaction.save();
-      
-      res.status(200).json({
-        status: 'success',
-        message: 'Electricity bill payment successful',
-        data: {
-          reference,
-          meterNumber,
-          disco,
-          amount,
-          status: 'successful',
-        },
-      });
-      
-    } catch (err) {
+      throw new Error(apiResponse.response?.status || 'Payment failed');
+    } catch (apiErr) {
       // Refund wallet on failure
       await wallet.credit(amount, 'Electricity payment refund');
       
       transaction.status = 'failed';
-      transaction.failureReason = err.message;
-      transaction.statusHistory.push({ status: 'failed', note: err.message, timestamp: new Date() });
+      transaction.failureReason = apiErr.message;
+      transaction.statusHistory.push({ status: 'failed', note: apiErr.message, timestamp: new Date() });
       await transaction.save();
       
-      logger.error(`Electricity payment failed: ${err.message}`);
-      return next(new AppError(`Payment failed: ${err.message}`, 500));
+      logger.error(`Electricity payment failed: ${apiErr.message}`);
+      return next(new AppError(`Payment failed: ${apiErr.message}`, 500));
     }
     
     logger.info(`Electricity purchase: User ${req.user.id}, ${disco} ₦${amount} for meter ${meterNumber}`);
@@ -260,6 +238,11 @@ exports.purchaseCableTV = async (req, res, next) => {
   try {
     const { smartCardNumber, provider, planId, months = 1, transactionPin, source } = req.body;
     
+    // Get default provider for cable TV from config
+    const cableService = vtuConfig.billPaymentServices?.cable_tv;
+    const defaultProvider = cableService?.defaultProvider || 'clubkonnect';
+    const activeProvider = source || defaultProvider;
+    
     if (!smartCardNumber || !provider || !planId && !months && !transactionPin) {
       return next(new AppError('Please provide all required fields', 400));
     }
@@ -279,8 +262,8 @@ exports.purchaseCableTV = async (req, res, next) => {
     let totalAmount;
     let plan;
     
-    // If using NelloBytes
-    if (source === 'nellobytes' || !source) {
+    // If using configured provider (default or specified)
+    if (activeProvider === 'nellobytes' || activeProvider === 'clubkonnect') {
       try {
         // First verify smartcard
         const verifyResult = await NelloBytesService.verifyCableSmartCard({
@@ -324,14 +307,14 @@ exports.purchaseCableTV = async (req, res, next) => {
           status: 'pending',
           description: `${provider.toUpperCase()} subscription for ${smartCardNumber}`,
           service: {
-            provider: 'nellobytes',
+            provider: activeProvider,
             cableProvider: provider,
             smartCardNumber,
             package: planId,
             customerName: verifyResult.customerName,
             months,
           },
-          statusHistory: [{ status: 'pending', note: 'Subscription initiated', timestamp: new Date() }],
+          statusHistory: [{ status: 'pending', note: `Subscription initiated via ${activeProvider}`, timestamp: new Date() }],
         });
         
         // Purchase from NelloBytes

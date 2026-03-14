@@ -44,6 +44,12 @@ module.exports = {
     NINE_MOBILE: '9mobile',
   },
 
+  VTU_PROVIDERS: {
+    CLUB_KONNECT: 'clubkonnect',
+    AIRTIME_NIGERIA: 'airtimenigeria',
+    SMEPLUG: 'smeplug',
+  },
+
   ELECTRICITY_DISCO: {
     AEDC: 'aedc',
     IKEDC: 'ikedc',

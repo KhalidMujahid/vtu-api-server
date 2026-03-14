@@ -7,6 +7,10 @@ const { AppError } = require('../middlewares/errorHandler');
 const logger = require('../utils/logger');
 const NotificationService = require('../services/NotificationService');
 const NelloBytesService = require('../services/nelloBytesService');
+const VtuProviderService = require('../services/vtuProviderService');
+const AirtimeNigeriaService = require('../services/airtimeNigeriaService');
+const SmePlugService = require('../services/smePlugService');
+const vtuConfig = require('../config/vtuProviders');
 const crypto = require('crypto');
 
 const SERVER_URL = process.env.SERVER_URL || 'https://api.yareemadata.com';
@@ -67,7 +71,11 @@ exports.getDataPlans = async (req, res, next) => {
 
 exports.purchaseData = async (req, res, next) => {
   try {
-    const { phoneNumber, network, dataPlan, transactionPin, amount } = req.body;
+    const { phoneNumber, network, dataPlan, transactionPin, amount, provider } = req.body;
+    
+    // Get default provider from config
+    const defaultProvider = vtuConfig.defaults.primaryProvider;
+    const activeProvider = provider || defaultProvider;
     
     // More specific validation
     if (!phoneNumber) {
@@ -148,30 +156,57 @@ exports.purchaseData = async (req, res, next) => {
       status: 'pending',
       description: `${network.toUpperCase()} ${dataPlan} for ${phoneNumber}`,
       service: {
-        provider: 'nellobytes',
+        provider: activeProvider,
         network: network.toLowerCase(),
         plan: dataPlan,
         phoneNumber,
       },
-      statusHistory: [{ status: 'pending', note: 'Purchase initiated', timestamp: new Date() }],
+      statusHistory: [{ status: 'pending', note: `Purchase initiated via ${activeProvider}`, timestamp: new Date() }],
     });
 
     try {
-      // Call NelloBytes API
-      const apiResponse = await NelloBytesService.purchaseData({
-        network: network.toLowerCase(),
-        dataPlan: dataPlan,
-        mobileNumber: phoneNumber,
-        callBackURL: callbackUrl,
-      });
+      let apiResponse;
+      
+      // Route to the appropriate provider
+      if (activeProvider === 'airtimenigeria') {
+        // Use AirtimeNigeria API
+        apiResponse = await AirtimeNigeriaService.purchaseData({
+          phone: phoneNumber,
+          packageCode: dataPlan,
+          callbackUrl,
+          customerReference: reference,
+        });
+        transaction.service.provider = 'airtimenigeria';
+        
+      } else if (activeProvider === 'smeplug') {
+        // Use SMEPlug API
+        apiResponse = await SmePlugService.purchaseData({
+          phone: phoneNumber,
+          network: network.toLowerCase(),
+          planId: dataPlan,
+          customerReference: reference,
+        });
+        transaction.service.provider = 'smeplug';
+        
+      } else {
+        // Default: Use NelloBytes (Club Konnect)
+        apiResponse = await NelloBytesService.purchaseData({
+          network: network.toLowerCase(),
+          dataPlan: dataPlan,
+          mobileNumber: phoneNumber,
+          callBackURL: callbackUrl,
+        });
+        transaction.service.provider = 'nellobytes';
+      }
 
-      if (apiResponse.success || apiResponse.statusCode === '100') {
+      // Check if successful
+      if (apiResponse.success || apiResponse.status === 'success' || apiResponse.statusCode === '100') {
         transaction.status = 'pending';
-        transaction.service.orderId = apiResponse.orderId;
-        transaction.providerResponse = apiResponse.response;
+        transaction.service.orderId = apiResponse.reference || apiResponse.orderId;
+        transaction.providerResponse = apiResponse;
         transaction.statusHistory.push({ 
           status: 'pending', 
-          note: `Order received: ${apiResponse.orderId}`, 
+          note: `Order received: ${apiResponse.reference || apiResponse.orderId}`, 
           timestamp: new Date() 
         });
         await transaction.save();
@@ -181,16 +216,17 @@ exports.purchaseData = async (req, res, next) => {
           message: 'Data purchase initiated successfully',
           data: {
             reference,
-            orderId: apiResponse.orderId,
+            orderId: apiResponse.reference || apiResponse.orderId,
             phoneNumber,
             network,
             dataPlan,
             amount: sellingPrice,
             status: 'pending',
+            provider: activeProvider,
           },
         });
       } else {
-        throw new AppError(apiResponse.response?.status || 'Purchase failed', 400);
+        throw new AppError(apiResponse.message || 'Purchase failed', 400);
       }
     } catch (err) {
       // Refund wallet on failure
@@ -226,11 +262,15 @@ const profitConfig = {
 
 exports.purchaseAirtime = async (req, res, next) => {
   try {
-    const { phoneNumber, network, amount, transactionPin } = req.body;
+    const { phoneNumber, network, amount, transactionPin, provider } = req.body;
 
     if (!phoneNumber || !network || !amount || !transactionPin) {
       return next(new AppError("All fields required", 400));
     }
+
+    // Get default provider from config
+    const defaultProvider = vtuConfig.defaults.primaryProvider;
+    const activeProvider = provider || defaultProvider;
 
     const user = await User.findById(req.user.id).select("+transactionPin");
 
@@ -278,43 +318,70 @@ exports.purchaseAirtime = async (req, res, next) => {
       status: "pending",
       description: `${network} airtime for ${phoneNumber}`,
       service: {
-        provider: "nellobytes",
+        provider: activeProvider,
         network,
         phoneNumber,
       },
       statusHistory: [
         {
           status: "pending",
-          note: "Transaction initiated",
+          note: `Transaction initiated via ${activeProvider}`,
           timestamp: new Date(),
         },
       ],
     });
 
-    const apiResponse = await axios.get(
-      "https://www.nellobytesystems.com/APIAirtimeV1.asp",
-      {
-        params: {
-          UserID: process.env.NELLO_USER_ID,
-          APIKey: process.env.NELLO_API_KEY,
-          MobileNetwork: networkCode,
-          Amount: amount,
-          MobileNumber: phoneNumber,
-          RequestID: requestId,
-          CallBackURL: AIRTIME_CALLBACK_URL,
-        },
-        timeout: 10000,
-      }
-    );
+    let apiResponse;
+    let responseData;
 
-    const responseData = apiResponse.data;
+    // Route to the appropriate provider
+    if (activeProvider === 'airtimenigeria') {
+      // Use AirtimeNigeria API
+      apiResponse = await AirtimeNigeriaService.purchaseAirtime({
+        network: network.toLowerCase(),
+        phone: phoneNumber,
+        amount: parseInt(amount),
+        maxAmount: parseInt(amount),
+        customerReference: requestId,
+      });
+      responseData = { status: apiResponse.status === 'success' ? 'ORDER_RECEIVED' : 'FAILED' };
+      
+    } else if (activeProvider === 'smeplug') {
+      // Use SMEPlug API
+      apiResponse = await SmePlugService.purchaseAirtime({
+        phone: phoneNumber,
+        network: network.toLowerCase(),
+        amount: parseInt(amount),
+        customerReference: requestId,
+      });
+      responseData = { status: apiResponse.status === 'success' ? 'ORDER_RECEIVED' : 'FAILED' };
+      
+    } else {
+      // Default: Use NelloBytes
+      apiResponse = await axios.get(
+        "https://www.nellobytesystems.com/APIAirtimeV1.asp",
+        {
+          params: {
+            UserID: process.env.NELLO_USER_ID,
+            APIKey: process.env.NELLO_API_KEY,
+            MobileNetwork: networkCode,
+            Amount: amount,
+            MobileNumber: phoneNumber,
+            RequestID: requestId,
+            CallBackURL: AIRTIME_CALLBACK_URL,
+          },
+          timeout: 10000,
+        }
+      );
+      responseData = apiResponse.data;
+    }
 
     if (responseData.status === "ORDER_RECEIVED") {
       transaction.status = "pending";
 
       transaction.service = {
         ...transaction.service,
-        orderId: responseData.orderid
+        orderId: apiResponse?.reference || responseData?.orderid || requestId
       };
 
       transaction.statusHistory.push({
@@ -322,7 +389,6 @@ exports.purchaseAirtime = async (req, res, next) => {
         note: "Order received by provider",
         timestamp: new Date(),
       });
-
 
       await transaction.save();
     } else {
@@ -344,6 +410,7 @@ exports.purchaseAirtime = async (req, res, next) => {
       message: "Airtime purchase processing",
       data: {
         reference: requestId,
+        provider: activeProvider,
         providerResponse: responseData,
       },
     });
@@ -739,5 +806,709 @@ exports.getEPINPlans = async (req, res, next) => {
     });
   } catch (error) {
     next(error);
+  }
+};
+
+/**
+ * Get current VTU provider (for frontend)
+ */
+exports.getCurrentProvider = async (req, res, next) => {
+  try {
+    const provider = await VtuProviderService.getPrimaryProvider();
+    const allProviders = await VtuProviderService.getAllProvidersWithStatus();
+    
+    res.status(200).json({
+      status: 'success',
+      data: {
+        currentProvider: provider,
+        providers: allProviders,
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get AirtimeNigeria data plans
+ */
+exports.getAirtimeNigeriaDataPlans = async (req, res, next) => {
+  try {
+    const { network } = req.query;
+    const plans = await AirtimeNigeriaService.getDataPlans(network);
+    
+    res.status(200).json({
+      status: 'success',
+      data: plans.data,
+      source: 'airtimenigeria',
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Purchase data using AirtimeNigeria
+ */
+exports.purchaseAirtimeNigeriaData = async (req, res, next) => {
+  try {
+    const { phoneNumber, network, packageCode, planId, transactionPin } = req.body;
+    
+    if (!phoneNumber || !network) {
+      return next(new AppError('Phone number and network are required', 400));
+    }
+    
+    if (!packageCode && !planId) {
+      return next(new AppError('Package code or plan ID is required', 400));
+    }
+    
+    if (!transactionPin) {
+      return next(new AppError('Transaction PIN is required', 400));
+    }
+
+    const user = await User.findById(req.user.id).select('+transactionPin');
+    if (!user) {
+      return next(new AppError('User not found', 404));
+    }
+
+    const isPinValid = await user.compareTransactionPin(transactionPin);
+    if (!isPinValid) {
+      return next(new AppError('Invalid transaction PIN', 401));
+    }
+
+    const wallet = await Wallet.findOne({ user: user._id });
+    if (!wallet) {
+      return next(new AppError('Wallet not found', 404));
+    }
+
+    // Get pricing - for now, we'll need to get the price from AirtimeNigeria
+    const plansResult = await AirtimeNigeriaService.getDataPlans(network);
+    let plan = null;
+    const networkPlans = plansResult.data[network.toLowerCase()] || [];
+    
+    if (packageCode) {
+      plan = networkPlans.find(p => p.planCode === packageCode);
+    } else if (planId) {
+      plan = networkPlans.find(p => p.planId === parseInt(planId));
+    }
+    
+    if (!plan) {
+      return next(new AppError('Data plan not found', 404));
+    }
+    
+    const sellingPrice = plan.price;
+    
+    if (wallet.balance < sellingPrice) {
+      return next(new AppError('Insufficient wallet balance', 400));
+    }
+
+    // Debit wallet
+    await wallet.debit(sellingPrice, `AirtimeNigeria Data: ${network} ${plan.planName}`);
+
+    const reference = `AN-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+    const callbackUrl = `${SERVER_URL}/api/v1/telecom/webhook/airtimenigeria`;
+
+    const transaction = await Transaction.create({
+      reference,
+      user: user._id,
+      type: 'data_recharge',
+      category: 'telecom',
+      amount: sellingPrice,
+      totalAmount: sellingPrice,
+      previousBalance: wallet.balance + sellingPrice,
+      newBalance: wallet.balance,
+      status: 'pending',
+      description: `${network.toUpperCase()} ${plan.planName} for ${phoneNumber}`,
+      service: {
+        provider: 'airtimenigeria',
+        network: network.toLowerCase(),
+        plan: packageCode || planId,
+        phoneNumber,
+      },
+      statusHistory: [{ status: 'pending', note: 'Purchase initiated via AirtimeNigeria', timestamp: new Date() }],
+    });
+
+    try {
+      const apiResponse = await AirtimeNigeriaService.purchaseData({
+        phone: phoneNumber,
+        packageCode,
+        planId: planId ? parseInt(planId) : undefined,
+        callbackUrl,
+        customerReference: reference,
+      });
+
+      transaction.status = 'pending';
+      transaction.service.orderId = apiResponse.reference;
+      transaction.providerResponse = apiResponse;
+      transaction.statusHistory.push({ 
+        status: 'pending', 
+        note: `Order received: ${apiResponse.reference}`, 
+        timestamp: new Date() 
+      });
+      await transaction.save();
+
+      res.status(200).json({
+        status: 'success',
+        message: 'Data purchase initiated successfully',
+        data: {
+          reference,
+          orderId: apiResponse.reference,
+          phoneNumber,
+          network,
+          plan: plan.planName,
+          amount: sellingPrice,
+          status: 'pending',
+          provider: 'airtimenigeria',
+        },
+      });
+    } catch (err) {
+      // Refund wallet on failure
+      await wallet.credit(sellingPrice, 'Data purchase refund');
+
+      transaction.status = 'failed';
+      transaction.failureReason = err.message;
+      transaction.statusHistory.push({ status: 'failed', note: err.message, timestamp: new Date() });
+      await transaction.save();
+
+      logger.error(`AirtimeNigeria data purchase failed → ${err.message}`);
+      return next(new AppError(`Data purchase failed: ${err.message}`, 500));
+    }
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Purchase airtime using AirtimeNigeria
+ */
+exports.purchaseAirtimeNigeriaAirtime = async (req, res, next) => {
+  try {
+    const { phoneNumber, network, amount, transactionPin } = req.body;
+    
+    if (!phoneNumber || !network || !amount) {
+      return next(new AppError('Phone number, network, and amount are required', 400));
+    }
+    
+    if (!transactionPin) {
+      return next(new AppError('Transaction PIN is required', 400));
+    }
+
+    const user = await User.findById(req.user.id).select('+transactionPin');
+    if (!user) {
+      return next(new AppError('User not found', 404));
+    }
+
+    const isPinValid = await user.compareTransactionPin(transactionPin);
+    if (!isPinValid) {
+      return next(new AppError('Invalid transaction PIN', 401));
+    }
+
+    const wallet = await Wallet.findOne({ user: user._id });
+    if (!wallet) {
+      return next(new AppError('Wallet not found', 404));
+    }
+
+    if (wallet.balance < amount) {
+      return next(new AppError('Insufficient wallet balance', 400));
+    }
+
+    // Debit wallet
+    await wallet.debit(amount, `AirtimeNigeria Airtime: ${network} ${amount}`);
+
+    const reference = `AN-AIR-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+    const callbackUrl = `${SERVER_URL}/api/v1/telecom/webhook/airtimenigeria`;
+
+    const transaction = await Transaction.create({
+      reference,
+      user: user._id,
+      type: 'airtime_recharge',
+      category: 'telecom',
+      amount,
+      totalAmount: amount,
+      previousBalance: wallet.balance + amount,
+      newBalance: wallet.balance,
+      status: 'pending',
+      description: `${network.toUpperCase()} ${amount} airtime for ${phoneNumber}`,
+      service: {
+        provider: 'airtimenigeria',
+        network: network.toLowerCase(),
+        phoneNumber,
+      },
+      statusHistory: [{ status: 'pending', note: 'Airtime purchase initiated via AirtimeNigeria', timestamp: new Date() }],
+    });
+
+    try {
+      const apiResponse = await AirtimeNigeriaService.purchaseAirtime({
+        network: network.toLowerCase(),
+        phone: phoneNumber,
+        amount: parseInt(amount),
+        maxAmount: parseInt(amount),
+        callbackUrl,
+        customerReference: reference,
+      });
+
+      transaction.status = 'pending';
+      transaction.service.orderId = apiResponse.reference;
+      transaction.providerResponse = apiResponse;
+      transaction.statusHistory.push({ 
+        status: 'pending', 
+        note: `Order received: ${apiResponse.reference}`, 
+        timestamp: new Date() 
+      });
+      await transaction.save();
+
+      res.status(200).json({
+        status: 'success',
+        message: 'Airtime purchase initiated successfully',
+        data: {
+          reference,
+          orderId: apiResponse.reference,
+          phoneNumber,
+          network,
+          amount,
+          status: 'pending',
+          provider: 'airtimenigeria',
+        },
+      });
+    } catch (err) {
+      // Refund wallet on failure
+      await wallet.credit(amount, 'Airtime purchase refund');
+
+      transaction.status = 'failed';
+      transaction.failureReason = err.message;
+      transaction.statusHistory.push({ status: 'failed', note: err.message, timestamp: new Date() });
+      await transaction.save();
+
+      logger.error(`AirtimeNigeria airtime purchase failed → ${err.message}`);
+      return next(new AppError(`Airtime purchase failed: ${err.message}`, 500));
+    }
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get AirtimeNigeria wallet balance
+ */
+exports.getAirtimeNigeriaBalance = async (req, res, next) => {
+  try {
+    const balance = await AirtimeNigeriaService.getWalletBalance();
+    
+    res.status(200).json({
+      status: 'success',
+      data: balance.data,
+      provider: 'airtimenigeria',
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * AirtimeNigeria Webhook Handler
+ */
+exports.airtimeNigeriaWebhook = async (req, res) => {
+  try {
+    const payload = req.body;
+    logger.info('AirtimeNigeria webhook received:', payload);
+    
+    // Parse the callback payload
+    const result = AirtimeNigeriaService.verifyCallback(payload);
+    
+    if (!result) {
+      return res.status(400).send('Invalid payload');
+    }
+    
+    // Find transaction by reference
+    const transaction = await Transaction.findOne({ 'service.orderId': result.reference });
+    
+    if (!transaction) {
+      logger.warn(`Transaction not found for reference: ${result.reference}`);
+      return res.status(200).send('OK');
+    }
+    
+    if (transaction.status === 'successful' || transaction.status === 'failed') {
+      return res.status(200).send('Already processed');
+    }
+    
+    // Update transaction based on delivery status
+    if (result.status === 'success') {
+      transaction.status = 'successful';
+      transaction.statusHistory.push({
+        status: 'successful',
+        note: result.message || 'Delivered successfully',
+        timestamp: new Date(),
+      });
+      
+      await transaction.save();
+      
+      // Send notification
+      await NotificationService.create({
+        user: transaction.user,
+        title: 'Purchase Successful',
+        message: `Your ${transaction.type} of ₦${transaction.amount} was successful.`,
+        type: 'purchase_success',
+        reference: transaction.reference,
+      });
+    } else {
+      transaction.status = 'failed';
+      transaction.statusHistory.push({
+        status: 'failed',
+        note: result.message || 'Delivery failed',
+        timestamp: new Date(),
+      });
+      
+      await transaction.save();
+      
+      // Refund wallet
+      const wallet = await Wallet.findOne({ user: transaction.user });
+      if (wallet) {
+        await wallet.credit(transaction.amount, 'Purchase refund due to failure');
+      }
+      
+      // Send notification
+      await NotificationService.create({
+        user: transaction.user,
+        title: 'Purchase Failed',
+        message: `Your ${transaction.type} of ₦${transaction.amount} failed. Amount has been refunded.`,
+        type: 'purchase_failed',
+        reference: transaction.reference,
+      });
+    }
+    
+    res.status(200).send('OK');
+  } catch (error) {
+    logger.error('AirtimeNigeria webhook error:', error);
+    res.status(200).send('OK'); // Always return OK to prevent retries
+  }
+};
+
+/**
+ * Get SMEPlug networks
+ */
+exports.getSmePlugNetworks = async (req, res, next) => {
+  try {
+    const networks = await SmePlugService.getNetworks();
+    
+    res.status(200).json({
+      status: 'success',
+      data: networks.networks,
+      provider: 'smeplug',
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get SMEPlug wallet balance
+ */
+exports.getSmePlugBalance = async (req, res, next) => {
+  try {
+    const balance = await SmePlugService.getWalletBalance();
+    
+    res.status(200).json({
+      status: 'success',
+      data: {
+        balance: balance.balance,
+        currency: balance.currency,
+      },
+      provider: 'smeplug',
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Purchase data using SMEPlug
+ */
+exports.purchaseSmePlugData = async (req, res, next) => {
+  try {
+    const { phoneNumber, network, planId, transactionPin } = req.body;
+    
+    if (!phoneNumber || !network || !planId) {
+      return next(new AppError('Phone number, network, and plan ID are required', 400));
+    }
+    
+    if (!transactionPin) {
+      return next(new AppError('Transaction PIN is required', 400));
+    }
+
+    const user = await User.findById(req.user.id).select('+transactionPin');
+    if (!user) {
+      return next(new AppError('User not found', 404));
+    }
+
+    const isPinValid = await user.compareTransactionPin(transactionPin);
+    if (!isPinValid) {
+      return next(new AppError('Invalid transaction PIN', 401));
+    }
+
+    const wallet = await Wallet.findOne({ user: user._id });
+    if (!wallet) {
+      return next(new AppError('Wallet not found', 404));
+    }
+
+    // For SMEPlug, we'll use a default price since we don't have the plan list
+    // In production, you should fetch the plan price first
+    const sellingPrice = 200; // Default placeholder - should fetch from API
+    
+    if (wallet.balance < sellingPrice) {
+      return next(new AppError('Insufficient wallet balance', 400));
+    }
+
+    // Debit wallet
+    await wallet.debit(sellingPrice, `SMEPlug Data: ${network} ${planId}`);
+
+    const reference = `SP-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+
+    const transaction = await Transaction.create({
+      reference,
+      user: user._id,
+      type: 'data_recharge',
+      category: 'telecom',
+      amount: sellingPrice,
+      totalAmount: sellingPrice,
+      previousBalance: wallet.balance + sellingPrice,
+      newBalance: wallet.balance,
+      status: 'pending',
+      description: `${network.toUpperCase()} data for ${phoneNumber}`,
+      service: {
+        provider: 'smeplug',
+        network: network.toLowerCase(),
+        plan: planId,
+        phoneNumber,
+      },
+      statusHistory: [{ status: 'pending', note: 'Purchase initiated via SMEPlug', timestamp: new Date() }],
+    });
+
+    try {
+      const apiResponse = await SmePlugService.purchaseData({
+        phone: phoneNumber,
+        network: network.toLowerCase(),
+        planId,
+        customerReference: reference,
+      });
+
+      transaction.status = 'pending';
+      transaction.service.orderId = apiResponse.reference;
+      transaction.providerResponse = apiResponse;
+      transaction.statusHistory.push({ 
+        status: 'pending', 
+        note: `Order received: ${apiResponse.reference}`, 
+        timestamp: new Date() 
+      });
+      await transaction.save();
+
+      res.status(200).json({
+        status: 'success',
+        message: 'Data purchase initiated successfully',
+        data: {
+          reference,
+          orderId: apiResponse.reference,
+          phoneNumber,
+          network,
+          planId,
+          amount: sellingPrice,
+          status: 'pending',
+          provider: 'smeplug',
+        },
+      });
+    } catch (err) {
+      // Refund wallet on failure
+      await wallet.credit(sellingPrice, 'Data purchase refund');
+
+      transaction.status = 'failed';
+      transaction.failureReason = err.message;
+      transaction.statusHistory.push({ status: 'failed', note: err.message, timestamp: new Date() });
+      await transaction.save();
+
+      logger.error(`SMEPlug data purchase failed → ${err.message}`);
+      return next(new AppError(`Data purchase failed: ${err.message}`, 500));
+    }
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Purchase airtime using SMEPlug
+ */
+exports.purchaseSmePlugAirtime = async (req, res, next) => {
+  try {
+    const { phoneNumber, network, amount, transactionPin } = req.body;
+    
+    if (!phoneNumber || !network || !amount) {
+      return next(new AppError('Phone number, network, and amount are required', 400));
+    }
+    
+    if (!transactionPin) {
+      return next(new AppError('Transaction PIN is required', 400));
+    }
+
+    const user = await User.findById(req.user.id).select('+transactionPin');
+    if (!user) {
+      return next(new AppError('User not found', 404));
+    }
+
+    const isPinValid = await user.compareTransactionPin(transactionPin);
+    if (!isPinValid) {
+      return next(new AppError('Invalid transaction PIN', 401));
+    }
+
+    const wallet = await Wallet.findOne({ user: user._id });
+    if (!wallet) {
+      return next(new AppError('Wallet not found', 404));
+    }
+
+    const sellingPrice = parseFloat(amount);
+    
+    if (wallet.balance < sellingPrice) {
+      return next(new AppError('Insufficient wallet balance', 400));
+    }
+
+    // Debit wallet
+    await wallet.debit(sellingPrice, `SMEPlug Airtime: ${network} ${amount}`);
+
+    const reference = `SP-AIR-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+
+    const transaction = await Transaction.create({
+      reference,
+      user: user._id,
+      type: 'airtime_recharge',
+      category: 'telecom',
+      amount: sellingPrice,
+      totalAmount: sellingPrice,
+      previousBalance: wallet.balance + sellingPrice,
+      newBalance: wallet.balance,
+      status: 'pending',
+      description: `${network.toUpperCase()} ${amount} airtime for ${phoneNumber}`,
+      service: {
+        provider: 'smeplug',
+        network: network.toLowerCase(),
+        phoneNumber,
+      },
+      statusHistory: [{ status: 'pending', note: 'Airtime purchase initiated via SMEPlug', timestamp: new Date() }],
+    });
+
+    try {
+      const apiResponse = await SmePlugService.purchaseAirtime({
+        phone: phoneNumber,
+        network: network.toLowerCase(),
+        amount: parseFloat(amount),
+        customerReference: reference,
+      });
+
+      transaction.status = 'pending';
+      transaction.service.orderId = apiResponse.reference;
+      transaction.providerResponse = apiResponse;
+      transaction.statusHistory.push({ 
+        status: 'pending', 
+        note: `Order received: ${apiResponse.reference}`, 
+        timestamp: new Date() 
+      });
+      await transaction.save();
+
+      res.status(200).json({
+        status: 'success',
+        message: 'Airtime purchase initiated successfully',
+        data: {
+          reference,
+          orderId: apiResponse.reference,
+          phoneNumber,
+          network,
+          amount: sellingPrice,
+          status: 'pending',
+          provider: 'smeplug',
+        },
+      });
+    } catch (err) {
+      // Refund wallet on failure
+      await wallet.credit(sellingPrice, 'Airtime purchase refund');
+
+      transaction.status = 'failed';
+      transaction.failureReason = err.message;
+      transaction.statusHistory.push({ status: 'failed', note: err.message, timestamp: new Date() });
+      await transaction.save();
+
+      logger.error(`SMEPlug airtime purchase failed → ${err.message}`);
+      return next(new AppError(`Airtime purchase failed: ${err.message}`, 500));
+    }
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * SMEPlug Webhook Handler
+ */
+exports.smePlugWebhook = async (req, res) => {
+  try {
+    const payload = req.body;
+    logger.info('SMEPlug webhook received:', payload);
+    
+    const result = SmePlugService.verifyCallback(payload);
+    
+    if (!result) {
+      return res.status(400).send('Invalid payload');
+    }
+    
+    const transaction = await Transaction.findOne({ 'service.orderId': result.reference });
+    
+    if (!transaction) {
+      logger.warn(`Transaction not found for reference: ${result.reference}`);
+      return res.status(200).send('OK');
+    }
+    
+    if (transaction.status === 'successful' || transaction.status === 'failed') {
+      return res.status(200).send('Already processed');
+    }
+    
+    if (result.status === 'success') {
+      transaction.status = 'successful';
+      transaction.statusHistory.push({
+        status: 'successful',
+        note: result.message || 'Delivered successfully',
+        timestamp: new Date(),
+      });
+      
+      await transaction.save();
+      
+      await NotificationService.create({
+        user: transaction.user,
+        title: 'Purchase Successful',
+        message: `Your ${transaction.type} of ₦${transaction.amount} was successful.`,
+        type: 'purchase_success',
+        reference: transaction.reference,
+      });
+    } else {
+      transaction.status = 'failed';
+      transaction.statusHistory.push({
+        status: 'failed',
+        note: result.message || 'Delivery failed',
+        timestamp: new Date(),
+      });
+      
+      await transaction.save();
+      
+      const wallet = await Wallet.findOne({ user: transaction.user });
+      if (wallet) {
+        await wallet.credit(transaction.amount, 'Purchase refund due to failure');
+      }
+      
+      await NotificationService.create({
+        user: transaction.user,
+        title: 'Purchase Failed',
+        message: `Your ${transaction.type} of ₦${transaction.amount} failed. Amount has been refunded.`,
+        type: 'purchase_failed',
+        reference: transaction.reference,
+      });
+    }
+    
+    res.status(200).send('OK');
+  } catch (error) {
+    logger.error('SMEPlug webhook error:', error);
+    res.status(200).send('OK');
   }
 };
