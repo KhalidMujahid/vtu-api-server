@@ -1,5 +1,110 @@
 const Notification = require("../models/Notification");
 const User = require("../models/User");
+const logger = require("../utils/logger");
+
+/**
+ * Broadcast notification to all users
+ */
+exports.broadcastNotification = async (req, res, next) => {
+  try {
+    const { title, message, type = 'broadcast' } = req.body;
+    
+    if (!title || !message) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Title and message are required'
+      });
+    }
+    
+    // Get all user IDs
+    const users = await User.find({ isActive: true }).select('_id');
+    const userIds = users.map(u => u._id);
+    
+    if (userIds.length === 0) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'No active users found'
+      });
+    }
+    
+    // Create broadcast notifications for all users
+    const notifications = userIds.map(userId => ({
+      user: userId,
+      title,
+      message,
+      type,
+      isBroadcast: true,
+      isRead: false,
+    }));
+    
+    // Insert in batches to avoid memory issues
+    const batchSize = 1000;
+    for (let i = 0; i < notifications.length; i += batchSize) {
+      const batch = notifications.slice(i, i + batchSize);
+      await Notification.insertMany(batch);
+    }
+    
+    logger.info(`Broadcast notification sent to ${userIds.length} users by admin: ${req.user?.id}`);
+    
+    res.status(200).json({
+      status: 'success',
+      message: `Broadcast notification sent to ${userIds.length} users`,
+      data: {
+        recipients: userIds.length,
+        title,
+        message,
+      }
+    });
+    
+  } catch (error) {
+    logger.error('Broadcast notification error:', error);
+    next(error);
+  }
+};
+
+/**
+ * Send notification to specific user (by admin)
+ */
+exports.sendNotificationToUser = async (req, res, next) => {
+  try {
+    const { userId, title, message, type = 'system' } = req.body;
+    
+    if (!userId || !title || !message) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'userId, title and message are required'
+      });
+    }
+    
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'User not found'
+      });
+    }
+    
+    const notification = await Notification.create({
+      user: userId,
+      title,
+      message,
+      type,
+      isBroadcast: false,
+    });
+    
+    logger.info(`Notification sent to user ${userId} by admin: ${req.user?.id}`);
+    
+    res.status(200).json({
+      status: 'success',
+      message: 'Notification sent successfully',
+      data: notification
+    });
+    
+  } catch (error) {
+    logger.error('Send notification error:', error);
+    next(error);
+  }
+};
 
 exports.getNotifications = async (req, res, next) => {
     try {

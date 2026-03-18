@@ -158,12 +158,55 @@ module.exports = {
     },
   },
 
+  // Service routing configuration (for API Console)
+  // Maps each service type to a provider
+  serviceRouting: {
+    data: 'clubkonnect',
+    airtime: 'airtimenigeria',
+    airtimepin: 'airtimenigeria',
+    education: 'smeplug',
+    electricity: 'clubkonnect',
+    cable: 'airtimenigeria',
+    airtime2cash: 'smeplug',
+  },
+
   // Get provider for specific service
   getProviderForService(serviceType) {
-    const service = this.billPaymentServices[serviceType];
-    if (!service) {
-      return this.providers[this.defaults.primaryProvider];
+    const providerId = this.serviceRouting[serviceType];
+    if (providerId && this.providers[providerId]) {
+      return this.providers[providerId];
     }
-    return this.providers[service.defaultProvider];
+    return this.providers[this.defaults.primaryProvider];
+  },
+
+  // Get provider ID for specific service
+  getProviderIdForService(serviceType) {
+    return this.serviceRouting[serviceType] || this.defaults.primaryProvider;
+  },
+
+  // Set provider for specific service
+  setProviderForService(serviceType, providerId) {
+    if (this.providers[providerId]) {
+      this.serviceRouting[serviceType] = providerId;
+      return true;
+    }
+    return false;
+  },
+
+  // Update service routing configuration
+  updateServiceRouting(config) {
+    const validServices = ['data', 'airtime', 'airtimepin', 'education', 'electricity', 'cable', 'airtime2cash'];
+    
+    for (const [service, provider] of Object.entries(config)) {
+      if (validServices.includes(service) && this.providers[provider]) {
+        this.serviceRouting[service] = provider;
+      }
+    }
+    return this.serviceRouting;
+  },
+
+  // Get all service routing configuration
+  getServiceRouting() {
+    return { ...this.serviceRouting };
   },
 };

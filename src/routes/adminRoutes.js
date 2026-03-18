@@ -21,6 +21,122 @@ router.get('/dashboard', adminController.getDashboardStats);
 
 /**
  * @swagger
+ * /api/v1/admin/staff:
+ *   get:
+ *     summary: Get all staff members
+ *     tags: [Admin - Staff]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: role
+ *         schema:
+ *           type: string
+ *           enum: [superadmin, admin, support]
+ *     responses:
+ *       200:
+ *         description: Staff list with role counts
+ *   post:
+ *     summary: Add a new staff member
+ *     tags: [Admin - Staff]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - firstName
+ *               - lastName
+ *               - email
+ *             properties:
+ *               firstName:
+ *                 type: string
+ *               lastName:
+ *                 type: string
+ *               email:
+ *                 type: string
+ *               phone:
+ *                 type: string
+ *               role:
+ *                 type: string
+ *                 enum: [superadmin, admin, support]
+ *                 default: support
+ *     responses:
+ *       201:
+ *         description: Staff member created
+ */
+router.get('/staff', superAdminOnly, adminController.getStaff);
+router.post('/staff', superAdminOnly, adminController.addStaff);
+
+/**
+ * @swagger
+ * /api/v1/admin/staff/{staffId}/role:
+ *   put:
+ *     summary: Update staff member role
+ *     tags: [Admin - Staff]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: staffId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - role
+ *             properties:
+ *               role:
+ *                 type: string
+ *                 enum: [superadmin, admin, support]
+ *     responses:
+ *       200:
+ *         description: Staff role updated
+ */
+router.put('/staff/:staffId/role', superAdminOnly, adminController.updateStaffRole);
+
+/**
+ * @swagger
+ * /api/v1/admin/staff/{staffId}:
+ *   delete:
+ *     summary: Remove a staff member
+ *     tags: [Admin - Staff]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: staffId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Staff member removed
+ */
+router.delete('/staff/:staffId', superAdminOnly, adminController.removeStaff);
+
+/**
+ * @swagger
  * /api/v1/admin/users:
  *   get:
  *     summary: Get all users

@@ -5,7 +5,6 @@ const notificationSchema = new mongoose.Schema(
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
-      required: true,
       index: true,
     },
 
@@ -28,9 +27,15 @@ const notificationSchema = new mongoose.Schema(
         'data',
         'login',
         'security',
-        'system'
+        'system',
+        'broadcast'  // Added for broadcast notifications
       ],
       default: 'system',
+    },
+
+    isBroadcast: {
+      type: Boolean,
+      default: false,
     },
 
     reference: {

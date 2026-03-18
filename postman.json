@@ -2495,6 +2495,108 @@
             "description": "Export data (transactions, users, wallets)"
           },
           "response": []
+        },
+        {
+          "name": "Get All Staff",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/staff?page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "staff"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Get all staff members (users with role: superadmin, admin, support). Requires SUPER ADMIN authentication."
+          },
+          "response": []
+        },
+        {
+          "name": "Add New Staff",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\",\n  \"email\": \"john.doe@example.com\",\n  \"phone\": \"+2348012345678\",\n  \"role\": \"support\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/staff",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "staff"]
+            },
+            "description": "Add a new staff member. Auto-generates password and sends credentials via email. Roles: superadmin, admin, support. Requires SUPER ADMIN authentication."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Staff Role",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"admin\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/staff/64f1234567890abcdef1234/role",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "staff", "64f1234567890abcdef1234", "role"]
+            },
+            "description": "Update a staff member's role. Roles: superadmin, admin, support. Requires SUPER ADMIN authentication."
+          },
+          "response": []
+        },
+        {
+          "name": "Remove Staff",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/staff/64f1234567890abcdef1234",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "staff", "64f1234567890abcdef1234"]
+            },
+            "description": "Remove a staff member. Cannot remove self or last superadmin. Requires SUPER ADMIN authentication."
+          },
+          "response": []
         }
       ]
     },

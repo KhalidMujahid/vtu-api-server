@@ -73,8 +73,8 @@ exports.purchaseData = async (req, res, next) => {
   try {
     const { phoneNumber, network, dataPlan, transactionPin, amount, provider } = req.body;
     
-    // Get default provider from config
-    const defaultProvider = vtuConfig.defaults.primaryProvider;
+    // Get default provider for data from config
+    const defaultProvider = vtuConfig.getProviderIdForService('data');
     const activeProvider = provider || defaultProvider;
     
     // More specific validation
@@ -268,8 +268,8 @@ exports.purchaseAirtime = async (req, res, next) => {
       return next(new AppError("All fields required", 400));
     }
 
-    // Get default provider from config
-    const defaultProvider = vtuConfig.defaults.primaryProvider;
+    // Get default provider for airtime from config
+    const defaultProvider = vtuConfig.getProviderIdForService('airtime');
     const activeProvider = provider || defaultProvider;
 
     const user = await User.findById(req.user.id).select("+transactionPin");

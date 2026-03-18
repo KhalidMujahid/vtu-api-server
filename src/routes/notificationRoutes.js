@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const notificationController = require('../controllers/notification.controller');
 const { protect } = require('../middlewares/auth');
+const { adminAuth } = require('../middlewares/admin');
 
 router.use(protect);
 
@@ -86,6 +87,67 @@ router.put('/mark-all-read', notificationController.markAllAsRead);
  *         description: Notification deleted
  */
 router.delete('/:id', notificationController.deleteNotification);
+
+/**
+ * @swagger
+ * /api/v1/notifications/admin/broadcast:
+ *   post:
+ *     summary: Broadcast notification to all users (Admin only)
+ *     tags: [Notifications - Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - title
+ *               - message
+ *             properties:
+ *               title:
+ *                 type: string
+ *               message:
+ *                 type: string
+ *               type:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Broadcast sent
+ */
+router.post('/admin/broadcast', adminAuth, notificationController.broadcastNotification);
+
+/**
+ * @swagger
+ * /api/v1/notifications/admin/send:
+ *   post:
+ *     summary: Send notification to specific user (Admin only)
+ *     tags: [Notifications - Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - userId
+ *               - title
+ *               - message
+ *             properties:
+ *               userId:
+ *                 type: string
+ *               title:
+ *                 type: string
+ *               message:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Notification sent
+ */
+router.post('/admin/send', adminAuth, notificationController.sendNotificationToUser);
 
 /**
  * @swagger

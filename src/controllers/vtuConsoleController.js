@@ -159,6 +159,10 @@ exports.getProviderBalance = async (req, res, next) => {
 exports.getProviderConfig = async (req, res, next) => {
   try {
     const providers = VtuProviderService.getAllProviders();
+    const vtuConfig = require('../config/vtuProviders');
+    
+    // Get service routing configuration
+    const serviceRouting = vtuConfig.getServiceRouting();
     
     // Return only public configuration (no API keys)
     const publicConfig = providers.map(p => ({
@@ -178,10 +182,47 @@ exports.getProviderConfig = async (req, res, next) => {
       status: 'success',
       data: {
         providers: publicConfig,
+        serviceRouting,
         defaults: {
           primaryProvider: 'clubkonnect',
           failoverEnabled: true,
         }
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Save service provider configuration
+ */
+exports.saveServiceConfig = async (req, res, next) => {
+  try {
+    const { data, airtime, airtimepin, education, electricity, cable, airtime2cash } = req.body;
+    
+    const vtuConfig = require('../config/vtuProviders');
+    
+    // Build configuration object
+    const config = {};
+    if (data) config.data = data;
+    if (airtime) config.airtime = airtime;
+    if (airtimepin) config.airtimepin = airtimepin;
+    if (education) config.education = education;
+    if (electricity) config.electricity = electricity;
+    if (cable) config.cable = cable;
+    if (airtime2cash) config.airtime2cash = airtime2cash;
+    
+    // Update the service routing
+    const updatedRouting = vtuConfig.updateServiceRouting(config);
+    
+    logger.info(`Service configuration updated by user: ${req.user?.id || 'system'}`, config);
+    
+    res.status(200).json({
+      status: 'success',
+      message: 'Service provider configuration saved successfully',
+      data: {
+        serviceRouting: updatedRouting
       }
     });
   } catch (error) {

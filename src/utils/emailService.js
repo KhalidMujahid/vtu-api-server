@@ -1,23 +1,7 @@
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 const logger = require('./logger');
 
-const transporter = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST,
-  port: process.env.EMAIL_PORT,
-  secure: false,
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-});
-
-transporter.verify((error) => {
-  if (error) {
-    logger.error('Email transporter error:', error);
-  } else {
-    logger.info('Email transporter is ready');
-  }
-});
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 exports.sendOTPEmail = async (email, otp) => {
   try {
@@ -171,5 +155,78 @@ exports.sendWelcomeEmail = async (email, firstName) => {
     logger.info(`Welcome email sent to ${email}`);
   } catch (error) {
     logger.error("Error sending welcome email:", error);
+  }
+};
+
+exports.sendStaffCredentials = async ({ email, firstName, lastName, tempPassword, role }) => {
+  try {
+    const roleDisplay = {
+      superadmin: 'Super Admin',
+      admin: 'Admin',
+      support: 'Support Staff'
+    }[role] || role;
+
+    const mailOptions = {
+      from: `"Yareema Data Hub" <${process.env.EMAIL_USER}>`,
+      subject: `Welcome to Yareema Data Hub - Your Staff Account Details`,
+      to: email,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center;">
+            <h1 style="color: white; margin: 0; font-size: 28px;">Yareema Data Hub</h1>
+            <p style="color: white; margin: 10px 0 0 0; opacity: 0.9;">Staff Account Created</p>
+          </div>
+          
+          <div style="padding: 30px; background: #f9f9f9;">
+            <h2 style="color: #333; margin-top: 0;">Welcome, ${firstName}!</h2>
+            
+            <p style="font-size: 16px; color: #555;">
+              Your staff account has been created on <strong>Yareema Data Hub</strong> as a <strong>${roleDisplay}</strong>.
+            </p>
+            
+            <div style="background: white; border-radius: 8px; padding: 20px; margin: 20px 0; border: 1px solid #e0e0e0;">
+              <h3 style="color: #333; margin-top: 0; font-size: 16px;">Your Login Credentials</h3>
+              
+              <table style="width: 100%; border-collapse: collapse;">
+                <tr>
+                  <td style="padding: 8px 0; color: #666; font-size: 14px;"><strong>Email:</strong></td>
+                  <td style="padding: 8px 0; color: #333; font-size: 14px;">${email}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 8px 0; color: #666; font-size: 14px;"><strong>Temporary Password:</strong></td>
+                  <td style="padding: 8px 0; color: #333; font-size: 14px; font-family: monospace; background: #f0f0f0; padding: 4px 8px; border-radius: 4px;">${tempPassword}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 8px 0; color: #666; font-size: 14px;"><strong>Role:</strong></td>
+                  <td style="padding: 8px 0; color: #333; font-size: 14px;">${roleDisplay}</td>
+                </tr>
+              </table>
+            </div>
+            
+            <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0;">
+              <p style="margin: 0; color: #856404; font-size: 14px;">
+                <strong>Important:</strong> Please change your password after your first login for security purposes.
+              </p>
+            </div>
+            
+            <p style="font-size: 14px; color: #666;">
+              If you did not expect this email, please contact your administrator immediately.
+            </p>
+          </div>
+          
+          <div style="background: #333; padding: 20px; text-align: center;">
+            <p style="color: #999; font-size: 12px; margin: 0;">
+              &copy; ${new Date().getFullYear()} Yareema Data Hub. All rights reserved.
+            </p>
+          </div>
+        </div>
+      `
+    };
+
+    await transporter.sendMail(mailOptions);
+    logger.info(`Staff credentials email sent to ${email}`);
+  } catch (error) {
+    logger.error('Error sending staff credentials email:', error);
+    throw error;
   }
 };

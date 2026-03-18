@@ -37,6 +37,48 @@ router.get('/providers/config', vtuConsoleController.getProviderConfig);
 
 /**
  * @swagger
+ * /api/v1/console/config:
+ *   post:
+ *     summary: Save service provider configuration
+ *     tags: [VTU Console - Configuration]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               data:
+ *                 type: string
+ *                 description: Provider for data services
+ *               airtime:
+ *                 type: string
+ *                 description: Provider for airtime
+ *               airtimepin:
+ *                 type: string
+ *                 description: Provider for airtime PIN
+ *               education:
+ *                 type: string
+ *                 description: Provider for education PIN
+ *               electricity:
+ *                 type: string
+ *                 description: Provider for electricity
+ *               cable:
+ *                 type: string
+ *                 description: Provider for cable TV
+ *               airtime2cash:
+ *                 type: string
+ *                 description: Provider for airtime2cash
+ *     responses:
+ *       200:
+ *         description: Configuration saved
+ */
+router.post('/config', adminAuth, requireTransactionPin, vtuConsoleController.saveServiceConfig);
+
+/**
+ * @swagger
  * /api/v1/console/providers/:providerId:
  *   get:
  *     summary: Get provider details by ID

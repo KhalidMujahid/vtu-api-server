@@ -73,8 +73,7 @@ exports.purchaseElectricity = async (req, res, next) => {
     const { meterNumber, disco, amount, phoneNumber, meterType = 'prepaid', transactionPin, source } = req.body;
     
     // Get default provider for electricity from config
-    const electricityService = vtuConfig.billPaymentServices?.electricity;
-    const defaultProvider = electricityService?.defaultProvider || 'smeplug';
+    const defaultProvider = vtuConfig.getProviderIdForService('electricity');
     const activeProvider = source || defaultProvider;
     
     if (!meterNumber || !disco || !amount || !transactionPin) {
@@ -240,7 +239,7 @@ exports.purchaseCableTV = async (req, res, next) => {
     
     // Get default provider for cable TV from config
     const cableService = vtuConfig.billPaymentServices?.cable_tv;
-    const defaultProvider = cableService?.defaultProvider || 'clubkonnect';
+    const defaultProvider = vtuConfig.getProviderIdForService('cable');
     const activeProvider = source || defaultProvider;
     
     if (!smartCardNumber || !provider || !planId && !months && !transactionPin) {

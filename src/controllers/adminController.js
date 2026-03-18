@@ -11,6 +11,9 @@ const TelecomService = require('../services/telecomService');
 const BillsService = require('../services/billsService');
 const { AppError } = require('../middlewares/errorHandler');
 const logger = require('../utils/logger');
+const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
+const emailService = require('../utils/emailService');
 
 class AdminController {
   // Dashboard Statistics
@@ -150,6 +153,302 @@ class AdminController {
       
     } catch (error) {
       logger.error('Error getting dashboard stats:', error);
+      next(error);
+    }
+  }
+
+  // Staff Management
+  static async getStaff(req, res, next) {
+    try {
+      const { page = 1, limit = 20, search, role, sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
+      const skip = (parseInt(page) - 1) * parseInt(limit);
+      
+      // Only get admin users (role: superadmin, admin, support)
+      const query = { role: { $in: ['superadmin', 'admin', 'support'] } };
+      
+      if (search) {
+        query.$or = [
+          { firstName: { $regex: search, $options: 'i' } },
+          { lastName: { $regex: search, $options: 'i' } },
+          { email: { $regex: search, $options: 'i' } },
+        ];
+      }
+      
+      if (role && ['superadmin', 'admin', 'support'].includes(role)) {
+        query.role = role;
+      }
+      
+      const sort = {};
+      sort[sortBy] = sortOrder === 'asc' ? 1 : -1;
+      
+      const [staff, total] = await Promise.all([
+        User.find(query)
+          .select('-password -transactionPin -resetPasswordToken')
+          .sort(sort)
+          .skip(skip)
+          .limit(parseInt(limit)),
+        User.countDocuments(query)
+      ]);
+      
+      // Get role counts
+      const roleCounts = await User.aggregate([
+        { $match: { role: { $in: ['superadmin', 'admin', 'support'] } } },
+        { $group: { _id: '$role', count: { $sum: 1 } } }
+      ]);
+      
+      const roleCountObj = {
+        superadmin: 0,
+        admin: 0,
+        support: 0
+      };
+      roleCounts.forEach(r => {
+        roleCountObj[r._id] = r.count;
+      });
+      
+      res.status(200).json({
+        status: 'success',
+        data: {
+          staff,
+          pagination: {
+            page: parseInt(page),
+            limit: parseInt(limit),
+            total,
+            pages: Math.ceil(total / parseInt(limit))
+          },
+          roleCounts: roleCountObj
+        }
+      });
+    } catch (error) {
+      logger.error('Error getting staff:', error);
+      next(error);
+    }
+  }
+
+  static async addStaff(req, res, next) {
+    try {
+      const { firstName, lastName, email, phone, role = 'support' } = req.body;
+      
+      // Validate required fields
+      if (!firstName || !lastName || !email) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'First name, last name, and email are required'
+        });
+      }
+      
+      // Validate role
+      const validRoles = ['superadmin', 'admin', 'support'];
+      if (!validRoles.includes(role)) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'Invalid role. Must be superadmin, admin, or support'
+        });
+      }
+      
+      // Check if email already exists
+      const existingUser = await User.findOne({ email: email.toLowerCase() });
+      if (existingUser) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'User with this email already exists'
+        });
+      }
+      
+      // Generate random password
+      const tempPassword = crypto.randomBytes(8).toString('hex');
+      const hashedPassword = await bcrypt.hash(tempPassword, 12);
+      
+      // Create staff member
+      const staff = await User.create({
+        firstName,
+        lastName,
+        email: email.toLowerCase(),
+        phone,
+        password: hashedPassword,
+        role,
+        isActive: true,
+        isEmailVerified: true,
+        isPhoneVerified: true
+      });
+      
+      // Send credentials email
+      try {
+        await emailService.sendStaffCredentials({
+          email: staff.email,
+          firstName: staff.firstName,
+          lastName: staff.lastName,
+          tempPassword,
+          role: staff.role
+        });
+      } catch (emailError) {
+        logger.error('Error sending staff credentials email:', emailError);
+        // Don't fail the request if email fails, just log it
+      }
+      
+      // Log the action
+      await AdminLog.create({
+        admin: req.user?.id,
+        adminEmail: req.user?.email,
+        action: 'create_staff',
+        entity: 'user',
+        entityId: staff._id,
+        description: `Created new staff member: ${staff.firstName} ${staff.lastName} (${staff.email}) with role: ${role}`,
+        status: 'success',
+        metadata: { role, staffEmail: staff.email }
+      });
+      
+      res.status(201).json({
+        status: 'success',
+        message: 'Staff member created successfully. Credentials sent to email.',
+        data: {
+          staff: {
+            id: staff._id,
+            firstName: staff.firstName,
+            lastName: staff.lastName,
+            email: staff.email,
+            phone: staff.phone,
+            role: staff.role,
+            isActive: staff.isActive,
+            createdAt: staff.createdAt
+          }
+        }
+      });
+    } catch (error) {
+      logger.error('Error adding staff:', error);
+      next(error);
+    }
+  }
+
+  static async updateStaffRole(req, res, next) {
+    try {
+      const { staffId } = req.params;
+      const { role } = req.body;
+      
+      // Validate role
+      const validRoles = ['superadmin', 'admin', 'support'];
+      if (!role || !validRoles.includes(role)) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'Invalid role. Must be superadmin, admin, or support'
+        });
+      }
+      
+      // Find staff member
+      const staff = await User.findOne({
+        _id: staffId,
+        role: { $in: ['superadmin', 'admin', 'support'] }
+      });
+      
+      if (!staff) {
+        return res.status(404).json({
+          status: 'error',
+          message: 'Staff member not found'
+        });
+      }
+      
+      // Prevent removing own admin role
+      if (req.user?.id === staffId.toString() && staff.role === 'superadmin' && role !== 'superadmin') {
+        return res.status(400).json({
+          status: 'error',
+          message: 'Cannot change your own superadmin role'
+        });
+      }
+      
+      const oldRole = staff.role;
+      staff.role = role;
+      await staff.save();
+      
+      // Log the action
+      await AdminLog.create({
+        admin: req.user?.id,
+        adminEmail: req.user?.email,
+        action: 'update_staff_role',
+        entity: 'user',
+        entityId: staff._id,
+        description: `Updated staff role: ${staff.firstName} ${staff.lastName} from ${oldRole} to ${role}`,
+        status: 'success',
+        metadata: { oldRole, newRole: role }
+      });
+      
+      res.status(200).json({
+        status: 'success',
+        message: 'Staff role updated successfully',
+        data: {
+          staff: {
+            id: staff._id,
+            firstName: staff.firstName,
+            lastName: staff.lastName,
+            email: staff.email,
+            role: staff.role
+          }
+        }
+      });
+    } catch (error) {
+      logger.error('Error updating staff role:', error);
+      next(error);
+    }
+  }
+
+  static async removeStaff(req, res, next) {
+    try {
+      const { staffId } = req.params;
+      
+      // Find staff member
+      const staff = await User.findOne({
+        _id: staffId,
+        role: { $in: ['superadmin', 'admin', 'support'] }
+      });
+      
+      if (!staff) {
+        return res.status(404).json({
+          status: 'error',
+          message: 'Staff member not found'
+        });
+      }
+      
+      // Prevent removing self
+      if (req.user?.id === staffId.toString()) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'Cannot remove yourself from staff'
+        });
+      }
+      
+      // Prevent removing superadmin if only one
+      if (staff.role === 'superadmin') {
+        const superadminCount = await User.countDocuments({ role: 'superadmin' });
+        if (superadminCount <= 1) {
+          return res.status(400).json({
+            status: 'error',
+            message: 'Cannot remove the last superadmin'
+          });
+        }
+      }
+      
+      const staffName = `${staff.firstName} ${staff.lastName}`;
+      const staffEmail = staff.email;
+      
+      // Delete the staff member
+      await User.findByIdAndDelete(staffId);
+      
+      // Log the action
+      await AdminLog.create({
+        admin: req.user?.id,
+        adminEmail: req.user?.email,
+        action: 'remove_staff',
+        entity: 'user',
+        entityId: staffId,
+        description: `Removed staff member: ${staffName} (${staffEmail})`,
+        status: 'success',
+        metadata: { removedEmail: staffEmail }
+      });
+      
+      res.status(200).json({
+        status: 'success',
+        message: 'Staff member removed successfully'
+      });
+    } catch (error) {
+      logger.error('Error removing staff:', error);
       next(error);
     }
   }
@@ -2336,6 +2635,12 @@ class AdminController {
 module.exports = {
   // Dashboard
   getDashboardStats: AdminController.getDashboardStats,
+  
+  // Staff Management
+  getStaff: AdminController.getStaff,
+  addStaff: AdminController.addStaff,
+  updateStaffRole: AdminController.updateStaffRole,
+  removeStaff: AdminController.removeStaff,
   
   // User Management
   getUsers: AdminController.getUsers,
