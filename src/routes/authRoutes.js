@@ -262,6 +262,6 @@ router.post('/change-password', authController.changePassword);
  *       200:
  *         description: PIN set successfully
  */
-router.post('/set-pin', authController.setTransactionPin);
+router.post('/set-pin', protect, authController.setTransactionPin);
 
 module.exports = router;

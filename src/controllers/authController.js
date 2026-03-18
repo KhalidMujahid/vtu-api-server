@@ -217,7 +217,7 @@ exports.verifyOTP = async (req, res, next) => {
       return next(new AppError("Too many attempts. Try again later.", 429));
     }
 
-    const hashedToken = crypto.createHash("sha256").update(otp).digest("hex");
+    const hashedToken = crypto.createHash("sha256").update(otp.trim()).digest("hex");
 
     if (
       user.verificationToken !== hashedToken ||
@@ -346,7 +346,7 @@ exports.resetPassword = async (req, res, next) => {
   try {
     const { email, otp, password } = req.body;
 
-    const hashedOTP = crypto.createHash("sha256").update(otp).digest("hex");
+    const hashedOTP = crypto.createHash("sha256").update(otp.trim()).digest("hex");
 
     const user = await User.findOne({
       email,
