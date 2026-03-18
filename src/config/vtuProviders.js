@@ -1,22 +1,11 @@
-/**
- * VTU Provider Configuration
- * Supports three VTU providers with failover capability
- * 
- * Providers:
- * - clubkonnect: Club Konnect API (Primary)
- * - airtimenigeria: Airtime Nigeria API
- * - smeplug: SMEPlug API
- */
-
 module.exports = {
-  // Available VTU Providers
   providers: {
     clubkonnect: {
       id: 'clubkonnect',
       name: 'Club Konnect',
       displayName: 'Club Konnect (NelloBytes)',
       description: 'Smart bundles · corporate · nellobytes',
-      color: '#f59e0b', // amber
+      color: '#f59e0b',
       icon: 'zap',
       baseUrl: process.env.VTU_BASE_URL || 'https://www.nellobytesystems.com',
       apiKey: process.env.NELLO_API_KEY || '',
@@ -39,7 +28,6 @@ module.exports = {
         requestsPerMinute: 60,
         requestsPerHour: 500,
       },
-      // Uses NelloBytes API
       source: 'nellobytes',
     },
     
@@ -48,7 +36,7 @@ module.exports = {
       name: 'Airtime Nigeria',
       displayName: 'Airtime Nigeria',
       description: 'Recharge · data · discoin',
-      color: '#0284c7', // sky blue
+      color: '#0284c7',
       icon: 'airplay',
       baseUrl: process.env.AIRTIME_NIGERIA_BASE_URL || 'https://www.airtimenigeria.com/api/v1',
       apiKey: process.env.AIRTIME_NIGERIA_API_KEY || '',
@@ -71,7 +59,6 @@ module.exports = {
         requestsPerMinute: 50,
         requestsPerHour: 400,
       },
-      // Uses AirtimeNigeria.com API
       source: 'airtimenigeria',
     },
     
@@ -80,7 +67,7 @@ module.exports = {
       name: 'SMEPlug',
       displayName: 'SMEPlug',
       description: 'Utility · data · airtime',
-      color: '#7c3aed', // indigo
+      color: '#7c3aed', 
       icon: 'plug',
       baseUrl: process.env.SMEPLUG_BASE_URL || 'https://api.smeplug.ng/v1',
       apiKey: process.env.SMEPLUG_API_KEY || '',
@@ -106,7 +93,6 @@ module.exports = {
     },
   },
 
-  // Network to Provider mapping (for fallback routing)
   networkProviders: {
     mtn: ['clubkonnect', 'airtimenigeria', 'smeplug'],
     glo: ['clubkonnect', 'airtimenigeria', 'smeplug'],
@@ -114,15 +100,13 @@ module.exports = {
     '9mobile': ['clubkonnect', 'airtimenigeria', 'smeplug'],
   },
 
-  // Default settings
   defaults: {
     primaryProvider: process.env.DEFAULT_VTU_PROVIDER || 'clubkonnect',
     failoverEnabled: true,
-    failoverDelay: 5000, // ms before switching to fallback
-    healthCheckInterval: 300000, // 5 minutes
+    failoverDelay: 5000,
+    healthCheckInterval: 300000,
   },
 
-  // Service types mapping
   serviceTypes: {
     data_recharge: {
       endpoint: '/data',
@@ -146,7 +130,6 @@ module.exports = {
     },
   },
 
-  // Bill payment service types (electricity, cable)
   billPaymentServices: {
     electricity: {
       providers: ['airtimenigeria', 'smeplug'],
@@ -158,8 +141,6 @@ module.exports = {
     },
   },
 
-  // Service routing configuration (for API Console)
-  // Maps each service type to a provider
   serviceRouting: {
     data: 'clubkonnect',
     airtime: 'airtimenigeria',
@@ -170,7 +151,6 @@ module.exports = {
     airtime2cash: 'smeplug',
   },
 
-  // Get provider for specific service
   getProviderForService(serviceType) {
     const providerId = this.serviceRouting[serviceType];
     if (providerId && this.providers[providerId]) {
@@ -179,12 +159,10 @@ module.exports = {
     return this.providers[this.defaults.primaryProvider];
   },
 
-  // Get provider ID for specific service
   getProviderIdForService(serviceType) {
     return this.serviceRouting[serviceType] || this.defaults.primaryProvider;
   },
 
-  // Set provider for specific service
   setProviderForService(serviceType, providerId) {
     if (this.providers[providerId]) {
       this.serviceRouting[serviceType] = providerId;
@@ -193,7 +171,6 @@ module.exports = {
     return false;
   },
 
-  // Update service routing configuration
   updateServiceRouting(config) {
     const validServices = ['data', 'airtime', 'airtimepin', 'education', 'electricity', 'cable', 'airtime2cash'];
     
@@ -205,7 +182,6 @@ module.exports = {
     return this.serviceRouting;
   },
 
-  // Get all service routing configuration
   getServiceRouting() {
     return { ...this.serviceRouting };
   },

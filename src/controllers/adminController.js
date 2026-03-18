@@ -16,7 +16,6 @@ const crypto = require('crypto');
 const emailService = require('../utils/emailService');
 
 class AdminController {
-  // Dashboard Statistics
   static async getDashboardStats(req, res, next) {
     try {
       const today = new Date();
@@ -24,7 +23,6 @@ class AdminController {
       const startOfWeek = new Date(today.setDate(today.getDate() - today.getDay()));
       const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
       
-      // Get all counts in parallel for better performance
       const [
         totalUsers,
         newUsersToday,
@@ -38,16 +36,13 @@ class AdminController {
         lockedWallets,
         providerStatus,
       ] = await Promise.all([
-        // User stats
         User.countDocuments(),
         User.countDocuments({ createdAt: { $gte: startOfToday } }),
         User.countDocuments({ lastLogin: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } }),
         
-        // Transaction stats
         Transaction.countDocuments(),
         Transaction.countDocuments({ createdAt: { $gte: startOfToday } }),
         
-        // Revenue stats (sum of successful transaction amounts)
         Transaction.aggregate([
           { $match: { status: 'successful' } },
           { $group: { _id: null, total: { $sum: '$amount' } } },
@@ -57,18 +52,14 @@ class AdminController {
           { $group: { _id: null, total: { $sum: '$amount' } } },
         ]),
         
-        // KYC stats
         KYC.countDocuments({ status: 'pending' }),
         
-        // Wallet stats
         Wallet.countDocuments(),
         Wallet.countDocuments({ locked: true }),
         
-        // Provider stats
         ProviderStatus.find({}).lean(),
       ]);
       
-      // Get transaction breakdown by type
       const transactionBreakdown = await Transaction.aggregate([
         { $match: { createdAt: { $gte: startOfMonth } } },
         { $group: { _id: '$type', count: { $sum: 1 }, amount: { $sum: '$amount' } } },
@@ -76,14 +67,12 @@ class AdminController {
         { $limit: 10 },
       ]);
       
-      // Get recent transactions
       const recentTransactions = await Transaction.find()
         .sort({ createdAt: -1 })
         .limit(10)
         .populate('user', 'firstName lastName email phoneNumber')
         .lean();
       
-      // Get revenue trend (last 7 days)
       const revenueTrend = await Transaction.aggregate([
         {
           $match: {
@@ -103,7 +92,6 @@ class AdminController {
         { $sort: { _id: 1 } },
       ]);
       
-      // Calculate success rate
       const successRate = await Transaction.aggregate([
         {
           $group: {
@@ -157,13 +145,11 @@ class AdminController {
     }
   }
 
-  // Staff Management
   static async getStaff(req, res, next) {
     try {
       const { page = 1, limit = 20, search, role, sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
       const skip = (parseInt(page) - 1) * parseInt(limit);
       
-      // Only get admin users (role: superadmin, admin, support)
       const query = { role: { $in: ['superadmin', 'admin', 'support'] } };
       
       if (search) {
@@ -190,7 +176,6 @@ class AdminController {
         User.countDocuments(query)
       ]);
       
-      // Get role counts
       const roleCounts = await User.aggregate([
         { $match: { role: { $in: ['superadmin', 'admin', 'support'] } } },
         { $group: { _id: '$role', count: { $sum: 1 } } }

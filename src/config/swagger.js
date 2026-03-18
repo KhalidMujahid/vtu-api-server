@@ -1,4 +1,3 @@
-// Swagger Documentation - All API Endpoints
 const swaggerSpec = {
   openapi: '3.0.0',
   info: {

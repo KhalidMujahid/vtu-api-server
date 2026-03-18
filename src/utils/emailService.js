@@ -6,7 +6,7 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 exports.sendOTPEmail = async (email, otp) => {
   try {
     const mailOptions = {
-      from: `"Yareema Data Hub" <${process.env.EMAIL_USER}>`,
+      from: process.env.EMAIL_USER,
       to: email,
       subject: 'Your OTP Code - Yareema Data Hub',
       html: `
@@ -26,7 +26,7 @@ exports.sendOTPEmail = async (email, otp) => {
       `,
     };
 
-    await transporter.sendMail(mailOptions);
+    await resend.emails.send(mailOptions);
     logger.info(`OTP email sent to ${email}`);
   } catch (error) {
     logger.error('Error sending OTP email:', error);
@@ -37,7 +37,7 @@ exports.sendOTPEmail = async (email, otp) => {
 exports.sendPasswordResetEmail = async (email, resetURL) => {
   try {
     const mailOptions = {
-      from: `"Yareema Data Hub" <${process.env.EMAIL_USER}>`,
+      from: process.env.EMAIL_USER,
       to: email,
       subject: 'Password Reset Request - Yareema Data Hub',
       html: `
@@ -63,7 +63,7 @@ exports.sendPasswordResetEmail = async (email, resetURL) => {
       `,
     };
 
-    await transporter.sendMail(mailOptions);
+    await resend.emails.send(mailOptions);
     logger.info(`Password reset email sent to ${email}`);
   } catch (error) {
     logger.error('Error sending password reset email:', error);
@@ -74,7 +74,7 @@ exports.sendPasswordResetEmail = async (email, resetURL) => {
 exports.sendTransactionNotification = async (email, transaction) => {
   try {
     const mailOptions = {
-      from: `"Yareema Data Hub" <${process.env.EMAIL_USER}>`,
+      from: process.env.EMAIL_USER,
       to: email,
       subject: `Transaction ${transaction.status} - Yareema Data Hub`,
       html: `
@@ -91,7 +91,7 @@ exports.sendTransactionNotification = async (email, transaction) => {
       `,
     };
 
-    await transporter.sendMail(mailOptions);
+    await resend.emails.send(mailOptions);
     logger.info(`Transaction notification sent to ${email}`);
   } catch (error) {
     logger.error('Error sending transaction notification:', error);
@@ -111,7 +111,7 @@ exports.sendOTPSMS = async (phoneNumber, otp) => {
 exports.sendWelcomeEmail = async (email, firstName) => {
   try {
     const mailOptions = {
-      from: `"Yareema Data Hub" <${process.env.EMAIL_USER}>`,
+      from: process.env.EMAIL_USER,
       to: email,
       subject: "Welcome to Yareema Data Hub",
       html: `
@@ -151,7 +151,7 @@ exports.sendWelcomeEmail = async (email, firstName) => {
       `,
     };
 
-    await transporter.sendMail(mailOptions);
+    await resend.emails.send(mailOptions);
     logger.info(`Welcome email sent to ${email}`);
   } catch (error) {
     logger.error("Error sending welcome email:", error);
@@ -167,7 +167,7 @@ exports.sendStaffCredentials = async ({ email, firstName, lastName, tempPassword
     }[role] || role;
 
     const mailOptions = {
-      from: `"Yareema Data Hub" <${process.env.EMAIL_USER}>`,
+      from: process.env.EMAIL_USER,
       subject: `Welcome to Yareema Data Hub - Your Staff Account Details`,
       to: email,
       html: `
@@ -223,7 +223,7 @@ exports.sendStaffCredentials = async ({ email, firstName, lastName, tempPassword
       `
     };
 
-    await transporter.sendMail(mailOptions);
+    await resend.emails.send(mailOptions);
     logger.info(`Staff credentials email sent to ${email}`);
   } catch (error) {
     logger.error('Error sending staff credentials email:', error);
