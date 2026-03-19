@@ -1,8 +1,3 @@
-/**
- * VTU API Console Routes
- * Routes for provider management and API console functionality
- */
-
 const express = require('express');
 const router = express.Router();
 const vtuConsoleController = require('../controllers/vtuConsoleController');

@@ -2424,6 +2424,60 @@
           "response": []
         },
         {
+          "name": "Notification Admin: Broadcast",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Important Update\",\n  \"message\": \"This is a notification to all users\",\n  \"type\": \"broadcast\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/notifications/admin/broadcast",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "notifications", "admin", "broadcast"]
+            },
+            "description": "Admin broadcast notification to all users"
+          },
+          "response": []
+        },
+        {
+          "name": "Notification Admin: Send to User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"64f1234567890abcdef1234\",\n  \"title\": \"Account Update\",\n  \"message\": \"Your account has been verified\",\n  \"type\": \"system\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/notifications/admin/send",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "notifications", "admin", "send"]
+            },
+            "description": "Send notification to specific user"
+          },
+          "response": []
+        },
+        {
           "name": "Get System Settings",
           "request": {
             "method": "GET",
@@ -2493,6 +2547,362 @@
               "path": ["api", "v1", "admin", "export"]
             },
             "description": "Export data (transactions, users, wallets)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "VTU Console (Admin)",
+      "item": [
+        {
+          "name": "Get All Providers",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/console/providers",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "console", "providers"]
+            },
+            "description": "Get all VTU service providers"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Provider Config",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/console/providers/config",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "console", "providers", "config"]
+            },
+            "description": "Get provider configuration"
+          },
+          "response": []
+        },
+        {
+          "name": "Save Service Config",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/console/config",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "console", "config"]
+            },
+            "description": "Save service configuration"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Provider Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/console/providers/:providerId",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "console", "providers", ":providerId"]
+            },
+            "description": "Get specific provider details"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Provider Stats",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/console/providers/:providerId/stats",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "console", "providers", ":providerId", "stats"]
+            },
+            "description": "Get provider statistics"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Provider Balance",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/console/providers/:providerId/balance",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "console", "providers", ":providerId", "balance"]
+            },
+            "description": "Get provider wallet balance"
+          },
+          "response": []
+        },
+        {
+          "name": "Switch Provider",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/console/switch",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "console", "switch"]
+            },
+            "description": "Switch to a different provider"
+          },
+          "response": []
+        },
+        {
+          "name": "Run Health Check",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/console/health",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "console", "health"]
+            },
+            "description": "Run health check on all providers"
+          },
+          "response": []
+        },
+        {
+          "name": "Run Provider Health Check",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/console/providers/:providerId/health",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "console", "providers", ":providerId", "health"]
+            },
+            "description": "Run health check on specific provider"
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Provider Balances",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/console/balances",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "console", "balances"]
+            },
+            "description": "Get all provider balances"
+          },
+          "response": []
+        },
+        {
+          "name": "Get API Logs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/console/logs?page=1&limit=50",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "console", "logs"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "Get API logs"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Provider Status",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/console/providers/:providerId/status",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "console", "providers", ":providerId", "status"]
+            },
+            "description": "Update provider status (active/inactive)"
+          },
+          "response": []
+        },
+        {
+          "name": "Initialize Providers",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/console/init",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "console", "init"]
+            },
+            "description": "Initialize/re-seed providers"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Bill Payment Providers",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/console/bill-payment/providers",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "console", "bill-payment", "providers"]
+            },
+            "description": "Get all bill payment providers"
+          },
+          "response": []
+        },
+        {
+          "name": "Switch Bill Payment Provider",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/console/bill-payment/switch",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "console", "bill-payment", "switch"]
+            },
+            "description": "Switch bill payment provider"
           },
           "response": []
         }
@@ -2637,12 +3047,12 @@
               }
             ],
             "url": {
-              "raw": "{{base_url}}/api/v1/admin/check-provider/:providerName",
+              "raw": "{{base_url}}/api/v1/admin/check-provider/:providerId",
               "host": ["{{base_url}}"],
-              "path": ["api", "v1", "admin", "check-provider", ":providerName"],
+              "path": ["api", "v1", "admin", "check-provider", ":providerId"],
               "variable": [
                 {
-                  "key": "providerName",
+                  "key": "providerId",
                   "value": "mtn"
                 }
               ]

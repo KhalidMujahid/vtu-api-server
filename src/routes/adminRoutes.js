@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const adminController = require('../controllers/adminController');
+const vtuConsoleController = require('../controllers/vtuConsoleController');
 const { adminAuth, logAction, superAdminOnly, staffOnly } = require('../middlewares/admin');
 
 router.use(adminAuth);
@@ -401,5 +402,12 @@ router.get('/providers', adminController.getProviders);
 router.put('/providers/:name/status', logAction('update', 'provider'), adminController.updateProviderStatus);
 
 router.get('/logs', adminController.getAdminLogs);
+
+router.get('/check-provider/:providerId', vtuConsoleController.getProvider);
+
+router.post('/broadcast', adminAuth, adminController.broadcastNotification);
+router.get('/settings', adminController.getSystemSettings);
+router.put('/settings', adminAuth, adminController.updateSystemSettings);
+router.post('/export', adminAuth, adminController.exportData);
 
 module.exports = router;
