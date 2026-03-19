@@ -5,7 +5,7 @@ const swaggerSpec = {
     version: '1.0.0',
     description: 'Complete Nigerian VTU & Utility Platform API'
   },
-  servers: [{ url: 'http://localhost:5000/api/v1' }],
+  servers: [{ url: 'http://localhost:5000/api/v1' }, { url: 'https://vtu-api-d3q2.onrender.com/api/v1' }],
   components: {
     securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' } }
   },
