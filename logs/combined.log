@@ -223,3 +223,11 @@
 {"level":"info","message":"Broadcast notification sent to 13 users by admin: 69ac28740e411a8f499e72d1","service":"yareema-data-hub","timestamp":"2026-03-18 18:04:02"}
 {"ip":"::1","level":"info","message":"POST /api/v1/admin/broadcast","service":"yareema-data-hub","timestamp":"2026-03-18 18:06:16","userAgent":"PostmanRuntime/7.52.0"}
 {"level":"info","message":"Broadcast notification: System Maintenance, Target: 13 users, Admin: admin@yareemadata.com","service":"yareema-data-hub","timestamp":"2026-03-18 18:06:19"}
+{"level":"info","message":"VTU Providers initialized","service":"yareema-data-hub","timestamp":"2026-03-18 18:17:07"}
+{"ip":"::ffff:127.0.0.1","level":"info","message":"GET /api-docs","service":"yareema-data-hub","timestamp":"2026-03-18 18:19:02","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:148.0) Gecko/20100101 Firefox/148.0"}
+{"ip":"::ffff:127.0.0.1","level":"info","message":"GET /api-docs/","service":"yareema-data-hub","timestamp":"2026-03-18 18:19:02","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:148.0) Gecko/20100101 Firefox/148.0"}
+{"ip":"::ffff:127.0.0.1","level":"info","message":"GET /api-docs/swagger-ui.css","service":"yareema-data-hub","timestamp":"2026-03-18 18:19:03","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:148.0) Gecko/20100101 Firefox/148.0"}
+{"ip":"::ffff:127.0.0.1","level":"info","message":"GET /api-docs/swagger-ui-bundle.js","service":"yareema-data-hub","timestamp":"2026-03-18 18:19:03","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:148.0) Gecko/20100101 Firefox/148.0"}
+{"ip":"::ffff:127.0.0.1","level":"info","message":"GET /api-docs/swagger-ui-standalone-preset.js","service":"yareema-data-hub","timestamp":"2026-03-18 18:19:03","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:148.0) Gecko/20100101 Firefox/148.0"}
+{"ip":"::ffff:127.0.0.1","level":"info","message":"GET /api-docs/swagger-ui-init.js","service":"yareema-data-hub","timestamp":"2026-03-18 18:19:03","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:148.0) Gecko/20100101 Firefox/148.0"}
+{"ip":"::ffff:127.0.0.1","level":"info","message":"GET /api-docs/favicon-16x16.png","service":"yareema-data-hub","timestamp":"2026-03-18 18:19:04","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:148.0) Gecko/20100101 Firefox/148.0"}
