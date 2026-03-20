@@ -70,7 +70,7 @@ router.get('/providers/config', vtuConsoleController.getProviderConfig);
  *       200:
  *         description: Configuration saved
  */
-router.post('/config', adminAuth, requireTransactionPin, vtuConsoleController.saveServiceConfig);
+router.post('/config', adminAuth, vtuConsoleController.saveServiceConfig);
 
 /**
  * @swagger
@@ -151,7 +151,7 @@ router.get('/providers/:providerId/balance', adminAuth, vtuConsoleController.get
  *       200:
  *         description: Provider switched successfully
  */
-router.post('/switch', adminAuth, requireTransactionPin, vtuConsoleController.switchProvider);
+router.post('/switch', adminAuth, vtuConsoleController.switchProvider);
 
 /**
  * @swagger
@@ -305,6 +305,6 @@ router.get('/bill-payment/providers', adminAuth, vtuConsoleController.getBillPay
  *       200:
  *         description: Provider switched
  */
-router.post('/bill-payment/switch', adminAuth, requireTransactionPin, vtuConsoleController.switchBillPaymentProvider);
+router.post('/bill-payment/switch', adminAuth, vtuConsoleController.switchBillPaymentProvider);
 
 module.exports = router;

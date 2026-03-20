@@ -94,22 +94,29 @@ class SmePlugService {
 
   /**
    * Purchase Data
-   * @param {Object} options - { phone, network, planId, customerReference }
+   * @param {Object} options - { phone, network, planId, customerReference, callbackUrl }
    */
   static async purchaseData(options) {
-    const { phone, network, planId, customerReference } = options;
+    const { phone, network, planId, customerReference, callbackUrl } = options;
     
     try {
       const networkId = this.getNetworkId(network);
       
+      const requestBody = {
+        network_id: networkId,
+        phone,
+        plan_id: planId,
+        customer_reference: customerReference || '',
+      };
+      
+      // Add callback URL if provided
+      if (callbackUrl) {
+        requestBody.callback_url = callbackUrl;
+      }
+      
       const response = await axios.post(
         `${this.getConfig().baseUrl}/data/purchase`,
-        {
-          network_id: networkId,
-          phone,
-          plan_id: planId,
-          customer_reference: customerReference || '',
-        },
+        requestBody,
         {
           headers: this.getHeaders(),
           timeout: this.getConfig().timeout,
@@ -134,22 +141,29 @@ class SmePlugService {
 
   /**
    * Purchase Airtime
-   * @param {Object} options - { phone, network, amount, customerReference }
+   * @param {Object} options - { phone, network, amount, customerReference, callbackUrl }
    */
   static async purchaseAirtime(options) {
-    const { phone, network, amount, customerReference } = options;
+    const { phone, network, amount, customerReference, callbackUrl } = options;
     
     try {
       const networkId = this.getNetworkId(network);
       
+      const requestBody = {
+        network_id: networkId,
+        phone,
+        amount: parseInt(amount),
+        customer_reference: customerReference || '',
+      };
+      
+      // Add callback URL if provided
+      if (callbackUrl) {
+        requestBody.callback_url = callbackUrl;
+      }
+      
       const response = await axios.post(
         `${this.getConfig().baseUrl}/airtime/purchase`,
-        {
-          network_id: networkId,
-          phone,
-          amount: parseInt(amount),
-          customer_reference: customerReference || '',
-        },
+        requestBody,
         {
           headers: this.getHeaders(),
           timeout: this.getConfig().timeout,

@@ -138,6 +138,59 @@ router.get('/data/plans', telecomController.getDataPlans);
 
 /**
  * @swagger
+ * /api/v1/telecom/data:
+ *   get:
+ *     summary: Get data plans from active provider (unified endpoint)
+ *     tags: [Telecom - Data]
+ *     parameters:
+ *       - in: query
+ *         name: network
+ *         schema:
+ *           type: string
+ *           enum: [mtn, glo, airtel, 9mobile]
+ *     responses:
+ *       200:
+ *         description: Data plans fetched successfully
+ *   post:
+ *     summary: Purchase data from active provider (unified endpoint)
+ *     tags: [Telecom - Data]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - phoneNumber
+ *               - network
+ *               - dataPlan
+ *               - transactionPin
+ *             properties:
+ *               phoneNumber:
+ *                 type: string
+ *                 description: Recipient phone number
+ *               network:
+ *                 type: string
+ *                 enum: [mtn, glo, airtel, 9mobile]
+ *               dataPlan:
+ *                 type: string
+ *                 description: Plan code or amount
+ *               transactionPin:
+ *                 type: string
+ *               amount:
+ *                 type: number
+ *                 description: Optional - selling price
+ *     responses:
+ *       200:
+ *         description: Data purchase successful
+ */
+router.get('/data', telecomController.getDataPlans);
+router.post('/data', protect, requireTransactionPin, telecomController.purchaseData);
+
+/**
+ * @swagger
  * /api/v1/telecom/data/purchase:
  *   post:
  *     summary: Purchase data
@@ -162,7 +215,7 @@ router.get('/data/plans', telecomController.getDataPlans);
  *       200:
  *         description: Data purchased
  */
-router.post('/data/purchase', requireTransactionPin, telecomController.purchaseData);
+router.post('/data/purchase', protect, requireTransactionPin, telecomController.purchaseData);
 
 /**
  * @swagger
@@ -193,7 +246,44 @@ router.post('/data/purchase', requireTransactionPin, telecomController.purchaseD
  *       200:
  *         description: Airtime purchased
  */
-router.post('/airtime/purchase', requireTransactionPin, telecomController.purchaseAirtime);
+router.post('/airtime/purchase', protect, requireTransactionPin, telecomController.purchaseAirtime);
+
+/**
+ * @swagger
+ * /api/v1/telecom/airtime:
+ *   post:
+ *     summary: Purchase airtime from active provider (unified endpoint)
+ *     tags: [Telecom - Airtime]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - phoneNumber
+ *               - network
+ *               - amount
+ *               - transactionPin
+ *             properties:
+ *               phoneNumber:
+ *                 type: string
+ *                 description: Recipient phone number
+ *               network:
+ *                 type: string
+ *                 enum: [mtn, glo, airtel, 9mobile]
+ *               amount:
+ *                 type: number
+ *                 description: Amount to recharge
+ *               transactionPin:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Airtime purchase successful
+ */
+router.post('/airtime', protect, requireTransactionPin, telecomController.purchaseAirtime);
 
 /**
  * @swagger

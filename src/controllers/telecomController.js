@@ -180,11 +180,13 @@ exports.purchaseData = async (req, res, next) => {
         
       } else if (activeProvider === 'smeplug') {
         // Use SMEPlug API
+        const smeCallbackUrl = `${SERVER_URL}/api/v1/telecom/webhook/smeplug`;
         apiResponse = await SmePlugService.purchaseData({
           phone: phoneNumber,
           network: network.toLowerCase(),
           planId: dataPlan,
           customerReference: reference,
+          callbackUrl: smeCallbackUrl,
         });
         transaction.service.provider = 'smeplug';
         
@@ -348,11 +350,13 @@ exports.purchaseAirtime = async (req, res, next) => {
       
     } else if (activeProvider === 'smeplug') {
       // Use SMEPlug API
+      const smeCallbackUrl = `${SERVER_URL}/api/v1/telecom/webhook/smeplug`;
       apiResponse = await SmePlugService.purchaseAirtime({
         phone: phoneNumber,
         network: network.toLowerCase(),
         amount: parseInt(amount),
         customerReference: requestId,
+        callbackUrl: smeCallbackUrl,
       });
       responseData = { status: apiResponse.status === 'success' ? 'ORDER_RECEIVED' : 'FAILED' };
       
@@ -1284,11 +1288,13 @@ exports.purchaseSmePlugData = async (req, res, next) => {
     });
 
     try {
+      const callbackUrl = `${SERVER_URL}/api/v1/telecom/webhook/smeplug`;
       const apiResponse = await SmePlugService.purchaseData({
         phone: phoneNumber,
         network: network.toLowerCase(),
         planId,
         customerReference: reference,
+        callbackUrl,
       });
 
       transaction.status = 'pending';
@@ -1393,11 +1399,13 @@ exports.purchaseSmePlugAirtime = async (req, res, next) => {
     });
 
     try {
+      const callbackUrl = `${SERVER_URL}/api/v1/telecom/webhook/smeplug`;
       const apiResponse = await SmePlugService.purchaseAirtime({
         phone: phoneNumber,
         network: network.toLowerCase(),
         amount: parseFloat(amount),
         customerReference: reference,
+        callbackUrl,
       });
 
       transaction.status = 'pending';

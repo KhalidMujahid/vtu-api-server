@@ -12,7 +12,7 @@ const webhookController = require('../controllers/webhookController');
  *       200:
  *         description: Webhook processed
  */
-router.post('/webhook/budpay', webhookController.budpayWebhook);
+router.post('/budpay', webhookController.budpayWebhook);
 
 /**
  * @swagger
