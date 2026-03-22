@@ -250,7 +250,7 @@ class AdminController {
       }
       
       const tempPassword = crypto.randomBytes(8).toString('hex');
-      const hashedPassword = await bcrypt.hash(tempPassword, 12);
+      // const hashedPassword = await bcrypt.hash(tempPassword, 12);
       
       let staff;
       try {
@@ -259,7 +259,7 @@ class AdminController {
           lastName,
           email: email.toLowerCase(),
           phoneNumber,
-          password: hashedPassword,
+          password: tempPassword,
           role,
           isActive: true,
           isEmailVerified: true,
