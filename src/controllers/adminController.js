@@ -239,7 +239,7 @@ class AdminController {
         });
       }
       
-      if (phone) {
+      if (phoneNumber) {
         const existingPhone = await User.findOne({ phoneNumber });
         if (existingPhone) {
           return res.status(400).json({
@@ -309,7 +309,7 @@ class AdminController {
             firstName: staff.firstName,
             lastName: staff.lastName,
             email: staff.email,
-            phone: staff.phone,
+            phone: staff.phoneNumber,
             role: staff.role,
             isActive: staff.isActive,
             createdAt: staff.createdAt
