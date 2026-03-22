@@ -6,6 +6,7 @@
 const VtuProviderService = require('../services/vtuProviderService');
 const ProviderStatus = require('../models/ProviderStatus');
 const logger = require('../utils/logger');
+const vtuConfig = require('../config/vtuProviders');
 
 /**
  * Get all VTU providers with their status
@@ -159,7 +160,6 @@ exports.getProviderBalance = async (req, res, next) => {
 exports.getProviderConfig = async (req, res, next) => {
   try {
     const providers = VtuProviderService.getAllProviders();
-    const vtuConfig = require('../config/vtuProviders');
     
     // Get service routing configuration
     const serviceRouting = vtuConfig.getServiceRouting();
@@ -201,8 +201,6 @@ exports.saveServiceConfig = async (req, res, next) => {
   try {
     const { data, airtime, airtimepin, education, electricity, cable, airtime2cash } = req.body;
     
-    const vtuConfig = require('../config/vtuProviders');
-    
     // Build configuration object
     const config = {};
     if (data) config.data = data;
@@ -213,8 +211,11 @@ exports.saveServiceConfig = async (req, res, next) => {
     if (cable) config.cable = cable;
     if (airtime2cash) config.airtime2cash = airtime2cash;
     
-    // Update the service routing
+    // Update the service routing in memory
     const updatedRouting = vtuConfig.updateServiceRouting(config);
+    
+    // Save to database for persistence
+    await vtuConfig.saveToDatabase(updatedRouting, req.user?.id);
     
     logger.info(`Service configuration updated by user: ${req.user?.id || 'system'}`, config);
     

@@ -93,6 +93,80 @@ class SmePlugService {
   }
 
   /**
+   * Get Data Plans
+   * @param {string} network - Network name (mtn, airtel, glo, 9mobile)
+   */
+  static async getDataPlans(network = null) {
+    try {
+      const networks = network ? [network.toLowerCase()] : ['mtn', 'airtel', 'glo', '9mobile'];
+      const allPlans = {};
+
+      for (const net of networks) {
+        const networkId = this.getNetworkId(net);
+        try {
+          console.log(`Fetching SMEPlug data plans for ${net} (network_id: ${networkId})...`);
+          const response = await axios.get(
+            `${this.getConfig().baseUrl}/data/plans`,
+            {
+              params: { network_id: networkId },
+              headers: this.getHeaders(),
+              timeout: 30000,
+            }
+          );
+          
+          console.log(`SMEPlug response for ${net}:`, JSON.stringify(response.data));
+
+          // Handle different response structures
+          if (response.data?.status && response.data?.data) {
+            let plansData = response.data.data;
+            
+            // If data is an object with a 'data' property that's an array
+            if (plansData.data && Array.isArray(plansData.data)) {
+              plansData = plansData.data;
+            }
+            
+            // If data is still not an array, try to get the first key's value
+            if (!Array.isArray(plansData)) {
+              const firstKey = Object.keys(plansData)[0];
+              if (firstKey && Array.isArray(plansData[firstKey])) {
+                plansData = plansData[firstKey];
+              }
+            }
+            
+            if (Array.isArray(plansData)) {
+              allPlans[net] = plansData.map(plan => ({
+                id: plan.id || plan.plan_id || plan.product_id,
+                planCode: plan.plan_id || plan.product_code,
+                planName: plan.name || plan.product_name,
+                size: plan.size || plan.data_size,
+                price: plan.selling_price || plan.price || plan.amount,
+                validity: plan.validity,
+                network: net,
+              }));
+            }
+          }
+        } catch (err) {
+          console.error(`SmePlug getDataPlans error for ${net}:`, err.response?.data || err.message);
+          logger.warn(`SmePlug getDataPlans error for ${net}:`, err.response?.data || err.message);
+        }
+      }
+
+      if (Object.keys(allPlans).length === 0) {
+        throw new Error('Failed to get data plans from SMEPlug - no plans returned');
+      }
+
+      return {
+        success: true,
+        plans: allPlans,
+      };
+    } catch (error) {
+      console.error('SmePlug getDataPlans error:', error.response?.data || error.message);
+      logger.error('SmePlug getDataPlans error:', error.response?.data || error.message);
+      throw new Error(error.response?.data?.message || error.message || 'Failed to get data plans');
+    }
+  }
+
+  /**
    * Purchase Data
    * @param {Object} options - { phone, network, planId, customerReference, callbackUrl }
    */

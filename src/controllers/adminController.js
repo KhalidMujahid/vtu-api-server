@@ -231,32 +231,52 @@ class AdminController {
       }
       
       // Check if email already exists
-      const existingUser = await User.findOne({ email: email.toLowerCase() });
-      if (existingUser) {
+      const existingEmail = await User.findOne({ email: email.toLowerCase() });
+      if (existingEmail) {
         return res.status(400).json({
           status: 'error',
-          message: 'User with this email already exists'
+          message: 'A user with this email already exists'
         });
       }
       
-      // Generate random password
+      if (phone) {
+        const existingPhone = await User.findOne({ phoneNumber: phone });
+        if (existingPhone) {
+          return res.status(400).json({
+            status: 'error',
+            message: 'A user with this phone number already exists'
+          });
+        }
+      }
+      
       const tempPassword = crypto.randomBytes(8).toString('hex');
       const hashedPassword = await bcrypt.hash(tempPassword, 12);
       
-      // Create staff member
-      const staff = await User.create({
-        firstName,
-        lastName,
-        email: email.toLowerCase(),
-        phone,
-        password: hashedPassword,
-        role,
-        isActive: true,
-        isEmailVerified: true,
-        isPhoneVerified: true
-      });
+      let staff;
+      try {
+        staff = await User.create({
+          firstName,
+          lastName,
+          email: email.toLowerCase(),
+          phoneNumber: phone,
+          password: hashedPassword,
+          role,
+          isActive: true,
+          isEmailVerified: true,
+          isPhoneVerified: true
+        });
+      } catch (createError) {
+        if (createError.code === 11000) {
+          const field = Object.keys(createError.keyPattern)[0];
+          const fieldName = field === 'email' ? 'email' : 'phone number';
+          return res.status(400).json({
+            status: 'error',
+            message: `A user with this ${fieldName} already exists`
+          });
+        }
+        throw createError;
+      }
       
-      // Send credentials email
       try {
         await emailService.sendStaffCredentials({
           email: staff.email,
@@ -267,10 +287,8 @@ class AdminController {
         });
       } catch (emailError) {
         logger.error('Error sending staff credentials email:', emailError);
-        // Don't fail the request if email fails, just log it
       }
       
-      // Log the action
       await AdminLog.create({
         admin: req.user?.id,
         adminEmail: req.user?.email,
@@ -2373,13 +2391,7 @@ class AdminController {
       } else {
         return next(new AppError('Invalid target users', 400));
       }
-      
-      // In a real implementation, you would:
-      // 1. Send emails if sendEmail is true
-      // 2. Send SMS if sendSMS is true
-      // 3. Store notification in database
-      
-      // For now, we'll log the notification
+
       const notification = {
         title,
         message,

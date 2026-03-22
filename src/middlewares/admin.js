@@ -29,7 +29,7 @@ module.exports = {
         });
       }
       
-      if (!['admin', 'super_admin', 'staff'].includes(user.role)) {
+      if (!['admin', 'superadmin', 'staff', 'super_admin'].includes(user.role)) {
         return res.status(403).json({
           status: 'error',
           message: 'Admin access required.',
@@ -101,7 +101,7 @@ module.exports = {
   },
   
   superAdminOnly: (req, res, next) => {
-    if (req.admin.role !== 'super_admin') {
+    if (req.admin.role !== 'superadmin' && req.admin.role !== 'super_admin') {
       return res.status(403).json({
         status: 'error',
         message: 'Super admin access required.',

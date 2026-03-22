@@ -4,7 +4,6 @@ const adminLogSchema = new mongoose.Schema({
   admin: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true,
   },
   adminEmail: String,
   adminRole: String,
@@ -13,6 +12,9 @@ const adminLogSchema = new mongoose.Schema({
     type: String,
     required: true,
     enum: [
+      'update_staff_role',
+      'remove_staff',
+      'create_staff',
       'create',
       'read',
       'update',

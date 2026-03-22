@@ -17,6 +17,7 @@ module.exports = {
       status: 'active',
       priority: 1,
       isDefault: true,
+      source: 'nellobytes',
       features: {
         dataBundle: true,
         airtime: true,
@@ -28,7 +29,6 @@ module.exports = {
         requestsPerMinute: 60,
         requestsPerHour: 500,
       },
-      source: 'nellobytes',
     },
     
     airtimenigeria: {
@@ -48,6 +48,7 @@ module.exports = {
       status: 'active',
       priority: 2,
       isDefault: false,
+      source: 'airtimenigeria',
       features: {
         dataBundle: true,
         airtime: true,
@@ -59,7 +60,6 @@ module.exports = {
         requestsPerMinute: 50,
         requestsPerHour: 400,
       },
-      source: 'airtimenigeria',
     },
     
     smeplug: {
@@ -79,6 +79,7 @@ module.exports = {
       status: 'active',
       priority: 3,
       isDefault: false,
+      source: 'smeplug',
       features: {
         dataBundle: true,
         airtime: true,
@@ -151,15 +152,53 @@ module.exports = {
     airtime2cash: 'smeplug',
   },
 
-  getProviderForService(serviceType) {
-    const providerId = this.serviceRouting[serviceType];
+  async getProviderForService(serviceType) {
+    const providerId = await this.getProviderIdForService(serviceType);
     if (providerId && this.providers[providerId]) {
       return this.providers[providerId];
     }
     return this.providers[this.defaults.primaryProvider];
   },
 
-  getProviderIdForService(serviceType) {
+  // Sync version for backward compatibility
+  getProviderForServiceSync(serviceType) {
+    const providerId = this.serviceRouting[serviceType] || this.defaults.primaryProvider;
+    if (providerId && this.providers[providerId]) {
+      return this.providers[providerId];
+    }
+    return this.providers[this.defaults.primaryProvider];
+  },
+
+  /**
+   * Get provider ID for a service - always fetches from database
+   * @param {string} serviceType - The service type (data, airtime, etc.)
+   * @returns {string} Provider ID
+   */
+  async getProviderIdForService(serviceType) {
+    try {
+      // Always try to fetch fresh config from database
+      const VtuConfig = require('../models/VtuConfig');
+      
+      if (VtuConfig.db && VtuConfig.db.collection) {
+        const dbConfig = await VtuConfig.findOne({ key: 'serviceRouting' }).lean();
+        
+        if (dbConfig && dbConfig.value && dbConfig.value[serviceType]) {
+          // Update in-memory config and return
+          this.serviceRouting[serviceType] = dbConfig.value[serviceType];
+          console.log('getProviderIdForService - fetched from DB:', serviceType, '=', dbConfig.value[serviceType]);
+          return dbConfig.value[serviceType];
+        }
+      }
+    } catch (error) {
+      console.error('getProviderIdForService - DB fetch error:', error.message);
+    }
+    
+    // Fallback to in-memory config
+    return this.serviceRouting[serviceType] || this.defaults.primaryProvider;
+  },
+
+  // Sync version for backward compatibility
+  getProviderIdForServiceSync(serviceType) {
     return this.serviceRouting[serviceType] || this.defaults.primaryProvider;
   },
 
@@ -184,5 +223,286 @@ module.exports = {
 
   getServiceRouting() {
     return { ...this.serviceRouting };
+  },
+
+  // Map source name to service class
+  getDataPlansService(source) {
+    const serviceMap = {
+      'nellobytes': require('../services/nelloBytesService'),
+      'airtimenigeria': require('../services/airtimeNigeriaService'),
+      'smeplug': require('../services/smePlugService'),
+    };
+    return serviceMap[source] || null;
+  },
+
+  // Map source name to service class for airtime
+  getAirtimeService(source) {
+    const serviceMap = {
+      'nellobytes': require('../services/nelloBytesService'),
+      'airtimenigeria': require('../services/airtimeNigeriaService'),
+      'smeplug': require('../services/smePlugService'),
+    };
+    return serviceMap[source] || null;
+  },
+
+  /**
+   * Load service routing from database
+   */
+  async loadFromDatabase() {
+    let VtuConfig;
+    try {
+      // Dynamic import to avoid circular dependency
+      VtuConfig = require('../models/VtuConfig');
+      
+      console.log('Loading VTU config from database...');
+      
+      // Check if the model is ready
+      if (!VtuConfig.db || !VtuConfig.db.collection) {
+        console.log('Database not ready yet, using default config');
+        return this.serviceRouting;
+      }
+      
+      const dbConfig = await VtuConfig.findOne({ key: 'serviceRouting' }).lean();
+      console.log('Database query result:', dbConfig);
+      
+      if (dbConfig && dbConfig.value) {
+        // Merge database config with default config
+        this.serviceRouting = { ...this.serviceRouting, ...dbConfig.value };
+        console.log('✓ VTU service routing loaded from database:', JSON.stringify(dbConfig.value));
+      } else {
+        console.log('⚠ No VTU service routing found in database. Using default config.');
+        console.log('   Save a config using API Console to persist settings.');
+      }
+      return this.serviceRouting;
+    } catch (error) {
+      console.error('Error loading VTU config from database:', error.message);
+      console.error(error.stack);
+      return this.serviceRouting;
+    }
+  },
+
+  /**
+   * Save service routing to database
+   */
+  async saveToDatabase(serviceRouting, userId = null) {
+    try {
+      const VtuConfig = require('../models/VtuConfig');
+      
+      console.log('Saving VTU config to database:', serviceRouting);
+      
+      const result = await VtuConfig.findOneAndUpdate(
+        { key: 'serviceRouting' },
+        {
+          key: 'serviceRouting',
+          value: serviceRouting,
+          description: 'VTU service provider routing configuration',
+          updatedBy: userId,
+          updatedAt: new Date(),
+        },
+        { upsert: true, new: true }
+      );
+      
+      console.log('✓ VTU service routing saved to database:', result);
+      return true;
+    } catch (error) {
+      console.error('Error saving VTU config to database:', error.message);
+      console.error(error.stack);
+      return false;
+    }
+  },
+
+  /**
+   * Initialize config from database on startup
+   */
+  async initialize() {
+    await this.loadFromDatabase();
+  },
+
+  /**
+   * Transform data plans from different providers into a unified format
+   * @param {string} source - The provider source (nellobytes, airtimenigeria, smeplug)
+   * @param {object} data - Raw data from the provider API
+   * @returns {object} Normalized data with unified structure
+   */
+  transformDataPlans(source, data) {
+    console.log('transformDataPlans - source:', source, 'data keys:', data ? Object.keys(data) : 'no data');
+    
+    if (!data) return {};
+    
+    try {
+      let normalizedData = {};
+
+      switch (source) {
+        case 'nellobytes':
+          // ClubKonnect format: { MOBILE_NETWORK: { MTN: [...], Glo: [...], m_9mobile: [...], Airtel: [...] } }
+          normalizedData = this._normalizeNelloBytes(data);
+          break;
+        case 'smeplug':
+          // SMEPlug format: { plans: { mtn: [...], glo: [...], airtel: [...], 9mobile: [...] } }
+          normalizedData = this._normalizeSmePlug(data);
+          break;
+        case 'airtimenigeria':
+          // AirtimeNigeria format: { data: { mtn: [...], glo: [...], airtel: [...], 9mobile: [...] } }
+          normalizedData = this._normalizeAirtimeNigeria(data);
+          break;
+        default:
+          // Return as-is if unknown source
+          return data;
+      }
+
+      console.log('transformDataPlans - normalized keys:', Object.keys(normalizedData));
+      return normalizedData;
+    } catch (error) {
+      console.error('Error transforming data plans:', error.message);
+      return data;
+    }
+  },
+
+  /**
+   * Normalize ClubKonnect/NelloBytes response
+   */
+  _normalizeNelloBytes(data) {
+    const result = {};
+    const mobileNetwork = data.MOBILE_NETWORK || data;
+    
+    // Map network names to lowercase
+    const networkMap = {
+      'MTN': 'mtn',
+      'Glo': 'glo',
+      'Airtel': 'airtel',
+      'm_9mobile': '9mobile',
+      '9mobile': '9mobile'
+    };
+
+    for (const [networkKey, networkData] of Object.entries(mobileNetwork)) {
+      const normalizedKey = networkMap[networkKey] || networkKey.toLowerCase();
+      
+      if (Array.isArray(networkData)) {
+        result[normalizedKey] = networkData.map(plan => this._normalizePlanItem(plan, 'nellobytes'));
+      } else if (networkData && networkData[0] && networkData[0].PRODUCT) {
+        // Handle nested PRODUCT array format
+        const products = networkData[0].PRODUCT || [];
+        result[normalizedKey] = products.map(plan => this._normalizeNelloBytesPlan(plan));
+      }
+    }
+
+    return result;
+  },
+
+  /**
+   * Normalize ClubKonnect plan item
+   */
+  _normalizeNelloBytesPlan(plan) {
+    return {
+      id: plan.PRODUCT_ID || plan.ID || '',
+      planCode: plan.PRODUCT_CODE || '',
+      planName: plan.PRODUCT_NAME || '',
+      network: '', // Will be set by parent
+      size: plan.PRODUCT_NAME || '',
+      price: parseFloat(plan.PRODUCT_AMOUNT) || 0,
+      validity: this._extractValidity(plan.PRODUCT_NAME || ''),
+    };
+  },
+
+  /**
+   * Normalize SMEPlug response
+   */
+  _normalizeSmePlug(data) {
+    const result = {};
+    const plans = data.plans || data;
+    
+    const networkMap = {
+      'MTN': 'mtn',
+      'Glo': 'glo',
+      'Airtel': 'airtel',
+      '9mobile': '9mobile'
+    };
+
+    for (const [networkKey, networkPlans] of Object.entries(plans)) {
+      const normalizedKey = networkMap[networkKey] || networkKey.toLowerCase();
+      
+      if (Array.isArray(networkPlans)) {
+        result[normalizedKey] = networkPlans.map(plan => this._normalizeSmePlugPlan(plan));
+      }
+    }
+
+    return result;
+  },
+
+  /**
+   * Normalize SMEPlug plan item
+   */
+  _normalizeSmePlugPlan(plan) {
+    return {
+      id: plan.id || '',
+      planCode: plan.planCode || '',
+      planName: plan.planName || '',
+      network: plan.network || '',
+      size: plan.size || plan.planName || '',
+      price: parseFloat(plan.price) || 0,
+      validity: plan.validity || this._extractValidity(plan.planName || ''),
+    };
+  },
+
+  /**
+   * Normalize AirtimeNigeria response
+   */
+  _normalizeAirtimeNigeria(data) {
+    const result = {};
+    const networkData = data.data || data;
+    
+    const networkMap = {
+      'MTN': 'mtn',
+      'Glo': 'glo',
+      'Airtel': 'airtel',
+      '9mobile': '9mobile'
+    };
+
+    for (const [networkKey, networkPlans] of Object.entries(networkData)) {
+      const normalizedKey = networkMap[networkKey] || networkKey.toLowerCase();
+      
+      if (Array.isArray(networkPlans)) {
+        result[normalizedKey] = networkPlans.map(plan => this._normalizeAirtimeNigeriaPlan(plan));
+      }
+    }
+
+    return result;
+  },
+
+  /**
+   * Normalize AirtimeNigeria plan item
+   */
+  _normalizeAirtimeNigeriaPlan(plan) {
+    return {
+      id: plan.planId || plan.plan_id || '',
+      planCode: plan.planCode || plan.plan_code || '',
+      planName: plan.planName || plan.plan_summary || '',
+      network: plan.network || '',
+      size: plan.size || '',
+      price: parseFloat(plan.price) || 0,
+      validity: plan.validity || '',
+    };
+  },
+
+  /**
+   * Normalize generic plan item
+   */
+  _normalizePlanItem(plan, source) {
+    if (source === 'nellobytes') {
+      return this._normalizeNelloBytesPlan(plan);
+    } else if (source === 'smeplug') {
+      return this._normalizeSmePlugPlan(plan);
+    } else if (source === 'airtimenigeria') {
+      return this._normalizeAirtimeNigeriaPlan(plan);
+    }
+    return plan;
+  },
+
+  /**
+   * Extract validity from plan name
+   */
+  _extractValidity(planName) {
+    const match = planName.match(/(\d+\s*(?:day|week|month|year|hour|hr)s?)/i);
+    return match ? match[1] : '';
   },
 };

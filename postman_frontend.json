@@ -2397,6 +2397,116 @@
           "response": []
         },
         {
+          "name": "Admin: Get All Staff",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/staff?page=1&limit=20&search=john&role=support",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "staff"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "search",
+                  "value": "john"
+                },
+                {
+                  "key": "role",
+                  "value": "support"
+                }
+              ]
+            },
+            "description": "Get all staff members (Super Admin only)"
+          },
+          "response": []
+        },
+        {
+          "name": "Admin: Add Staff",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\",\n  \"email\": \"john.doe@yareemadata.com\",\n  \"phone\": \"+2348012345678\",\n  \"role\": \"support\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/staff",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "staff"]
+            },
+            "description": "Add a new staff member (Super Admin only)"
+          },
+          "response": []
+        },
+        {
+          "name": "Admin: Update Staff Role",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"admin\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/staff/:staffId/role",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "staff", ":staffId", "role"]
+            },
+            "description": "Update staff member role (Super Admin only)"
+          },
+          "response": []
+        },
+        {
+          "name": "Admin: Remove Staff",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/staff/:staffId",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "staff", ":staffId"]
+            },
+            "description": "Remove a staff member (Super Admin only)"
+          },
+          "response": []
+        },
+        {
           "name": "Broadcast Notification",
           "request": {
             "method": "POST",
