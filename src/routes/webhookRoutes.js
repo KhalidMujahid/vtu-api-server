@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const webhookController = require('../controllers/webhookController');
 
+router.post('/smeplug', webhookController.smePlugWebhook);
+
 /**
  * @swagger
  * /api/v1/webhooks/webhook/budpay:

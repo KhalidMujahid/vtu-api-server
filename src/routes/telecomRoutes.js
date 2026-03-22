@@ -98,18 +98,6 @@ router.post('/smeplug/airtime/purchase', protect, requireTransactionPin, telecom
 
 /**
  * @swagger
- * /api/v1/telecom/webhook/smeplug:
- *   post:
- *     summary: SMEPlug webhook
- *     tags: [Telecom - Webhooks]
- *     responses:
- *       200:
- *         description: Webhook processed
- */
-router.post('/webhook/smeplug', telecomController.smePlugWebhook);
-
-/**
- * @swagger
  * /api/v1/telecom/nellobyte/callback:
  *   get:
  *     summary: NelloBytes callback

@@ -26,14 +26,15 @@ const app = express();
 
 app.use(helmet());
 app.use(cors());
-app.use(xss());
-app.use(mongoSanitize());
 
 
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
+app.use("/api/v1/webhook", webhookRoutes);
 
+app.use(xss());
+app.use(mongoSanitize());
 
 app.use((req, res, next) => {
   logger.info(`${req.method} ${req.url}`, {
@@ -49,7 +50,6 @@ app.use("/api/v1/telecom", telecomRoutes);
 app.use("/api/v1/bills", billsRoutes);
 app.use("/api/v1/admin", adminRoutes);
 app.use("/api/v1/agent", agentRoutes);
-app.use("/api/v1/webhook", webhookRoutes);
 app.use("/api/v1/payments", paymentRoutes);
 app.use("/api/v1/notifications", notificationRoutes);
 app.use("/api/v1/reports", reportRoutes);
