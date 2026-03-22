@@ -6,7 +6,6 @@ const { adminAuth, logAction, superAdminOnly, staffOnly } = require('../middlewa
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
-// Public endpoint to check auth status - returns appropriate message
 router.get('/check-auth', async (req, res) => {
   try {
     const token = req.headers.authorization?.split(' ')[1];

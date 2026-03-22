@@ -398,3 +398,9 @@
 {"level":"info","message":"VTU Providers initialized","service":"yareema-data-hub","timestamp":"2026-03-22 10:37:35"}
 {"ip":"::1","level":"info","message":"POST /api/v1/auth/login","service":"yareema-data-hub","timestamp":"2026-03-22 10:37:48","userAgent":"PostmanRuntime/7.52.0"}
 {"ip":"::1","level":"error","message":"Incorrect email or password","method":"POST","path":"/api/v1/auth/login","service":"yareema-data-hub","stack":"Error: Incorrect email or password\n    at exports.login (C:\\Users\\Khalid\\Documents\\vtu-api-server-main\\src\\controllers\\authController.js:111:19)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)","timestamp":"2026-03-22 10:37:49","user":"anonymous"}
+{"level":"info","message":"VTU Providers initialized","service":"yareema-data-hub","timestamp":"2026-03-22 10:42:19"}
+{"ip":"::1","level":"info","message":"GET /api/v1/admin/staff?page=1&limit=20","service":"yareema-data-hub","timestamp":"2026-03-22 10:42:24","userAgent":"PostmanRuntime/7.52.0"}
+{"ip":"::1","level":"info","message":"DELETE /api/v1/admin/staff/69c01c9abb0a709d02ab6a32","service":"yareema-data-hub","timestamp":"2026-03-22 10:42:46","userAgent":"PostmanRuntime/7.52.0"}
+{"ip":"::1","level":"info","message":"GET /api/v1/admin/users?page=1&limit=20","service":"yareema-data-hub","timestamp":"2026-03-22 10:51:26","userAgent":"PostmanRuntime/7.52.0"}
+{"level":"info","message":"VTU Providers initialized","service":"yareema-data-hub","timestamp":"2026-03-22 10:53:17"}
+{"ip":"::1","level":"info","message":"GET /api/v1/admin/users?page=1&limit=20","service":"yareema-data-hub","timestamp":"2026-03-22 10:53:31","userAgent":"PostmanRuntime/7.52.0"}

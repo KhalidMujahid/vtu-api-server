@@ -29,7 +29,7 @@ module.exports = {
         });
       }
       
-      if (!['admin', 'superadmin', 'staff', 'super_admin'].includes(user.role)) {
+      if (!['admin', 'superadmin', 'staff', 'super_admin','support'].includes(user.role)) {
         return res.status(403).json({
           status: 'error',
           message: 'Admin access required.',

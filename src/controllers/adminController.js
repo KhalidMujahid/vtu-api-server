@@ -250,7 +250,6 @@ class AdminController {
       }
       
       const tempPassword = crypto.randomBytes(8).toString('hex');
-      // const hashedPassword = await bcrypt.hash(tempPassword, 12);
       
       let staff;
       try {
