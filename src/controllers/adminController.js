@@ -211,7 +211,7 @@ class AdminController {
 
   static async addStaff(req, res, next) {
     try {
-      const { firstName, lastName, email, phone, role = 'support' } = req.body;
+      const { firstName, lastName, email, phoneNumber, role = 'support' } = req.body;
       
       // Validate required fields
       if (!firstName || !lastName || !email) {
@@ -258,7 +258,7 @@ class AdminController {
           firstName,
           lastName,
           email: email.toLowerCase(),
-          phoneNumber: phone,
+          phoneNumber,
           password: hashedPassword,
           role,
           isActive: true,
