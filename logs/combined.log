@@ -404,3 +404,10 @@
 {"ip":"::1","level":"info","message":"GET /api/v1/admin/users?page=1&limit=20","service":"yareema-data-hub","timestamp":"2026-03-22 10:51:26","userAgent":"PostmanRuntime/7.52.0"}
 {"level":"info","message":"VTU Providers initialized","service":"yareema-data-hub","timestamp":"2026-03-22 10:53:17"}
 {"ip":"::1","level":"info","message":"GET /api/v1/admin/users?page=1&limit=20","service":"yareema-data-hub","timestamp":"2026-03-22 10:53:31","userAgent":"PostmanRuntime/7.52.0"}
+{"level":"info","message":"VTU Providers initialized","service":"yareema-data-hub","timestamp":"2026-03-22 11:25:11"}
+{"ip":"::1","level":"info","message":"GET /api/v1/webhooks/webhook/budpay","service":"yareema-data-hub","timestamp":"2026-03-22 11:25:57","userAgent":"PostmanRuntime/7.52.0"}
+{"ip":"::1","level":"info","message":"POST /api/v1/webhooks/webhook/budpay","service":"yareema-data-hub","timestamp":"2026-03-22 11:26:04","userAgent":"PostmanRuntime/7.52.0"}
+{"ip":"::1","level":"info","message":"POST /api/v1/webhook/webhook/budpay","service":"yareema-data-hub","timestamp":"2026-03-22 11:26:36","userAgent":"PostmanRuntime/7.52.0"}
+{"ip":"::1","level":"info","message":"POST /api/v1/webhook/budpay","service":"yareema-data-hub","timestamp":"2026-03-22 11:27:05","userAgent":"PostmanRuntime/7.52.0"}
+{"ip":"::1","level":"info","message":"POST /api/v1/telecom/webhook/smeplug","service":"yareema-data-hub","timestamp":"2026-03-22 11:29:52","userAgent":"PostmanRuntime/7.52.0"}
+{"level":"info","message":"SMEPlug webhook received:","service":"yareema-data-hub","timestamp":"2026-03-22 11:29:52"}

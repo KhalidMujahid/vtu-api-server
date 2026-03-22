@@ -1614,34 +1614,42 @@ exports.smePlugWebhook = async (req, res) => {
   try {
     const payload = req.body;
     logger.info('SMEPlug webhook received:', payload);
-    
+
     const result = SmePlugService.verifyCallback(payload);
-    
+
     if (!result) {
       return res.status(400).send('Invalid payload');
     }
-    
-    const transaction = await Transaction.findOne({ 'service.orderId': result.reference });
-    
+
+    logger.info('Parsed webhook result:', result);
+
+    const transaction = await Transaction.findOne({
+      'service.orderId': result.reference,
+    });
+
     if (!transaction) {
       logger.warn(`Transaction not found for reference: ${result.reference}`);
       return res.status(200).send('OK');
     }
-    
-    if (transaction.status === 'successful' || transaction.status === 'failed') {
+
+    if (['successful', 'failed'].includes(transaction.status)) {
       return res.status(200).send('Already processed');
     }
-    
-    if (result.status === 'success') {
+
+    const status = result.status?.toLowerCase();
+
+    const successStatuses = ['success', 'successful'];
+
+    if (successStatuses.includes(status)) {
       transaction.status = 'successful';
       transaction.statusHistory.push({
         status: 'successful',
         note: result.message || 'Delivered successfully',
         timestamp: new Date(),
       });
-      
+
       await transaction.save();
-      
+
       await NotificationService.create({
         user: transaction.user,
         title: 'Purchase Successful',
@@ -1649,21 +1657,31 @@ exports.smePlugWebhook = async (req, res) => {
         type: 'purchase_success',
         reference: transaction.reference,
       });
+
+      logger.info(`Transaction successful: ${transaction.reference}`);
     } else {
+
+      if (transaction.status === 'failed') {
+        return res.status(200).send('Already refunded');
+      }
+
       transaction.status = 'failed';
       transaction.statusHistory.push({
         status: 'failed',
         note: result.message || 'Delivery failed',
         timestamp: new Date(),
       });
-      
+
       await transaction.save();
-      
       const wallet = await Wallet.findOne({ user: transaction.user });
+
       if (wallet) {
-        await wallet.credit(transaction.amount, 'Purchase refund due to failure');
+        await wallet.credit(
+          transaction.amount,
+          'Purchase refund due to failure'
+        );
       }
-      
+
       await NotificationService.create({
         user: transaction.user,
         title: 'Purchase Failed',
@@ -1671,11 +1689,13 @@ exports.smePlugWebhook = async (req, res) => {
         type: 'purchase_failed',
         reference: transaction.reference,
       });
+
+      logger.warn(`Transaction failed: ${transaction.reference}`);
     }
-    
-    res.status(200).send('OK');
+
+    return res.status(200).send('OK');
   } catch (error) {
     logger.error('SMEPlug webhook error:', error);
-    res.status(200).send('OK');
+    return res.status(200).send('OK');
   }
 };
