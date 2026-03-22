@@ -428,21 +428,50 @@ class SmePlugService {
   /**
    * Verify webhook payload
    */
+  // static verifyCallback(payload) {
+  //   if (payload?.transaction) {
+  //     const tx = payload.transaction;
+  //     return {
+  //       reference: tx.reference,
+  //       customerReference: tx.customer_reference,
+  //       status: tx.status,
+  //       type: tx.type,
+  //       beneficiary: tx.beneficiary,
+  //       amount: tx.price,
+  //       message: tx.response,
+  //     };
+  //   }
+  //   return null;
+  // }
+
   static verifyCallback(payload) {
-    if (payload?.transaction) {
-      const tx = payload.transaction;
-      return {
-        reference: tx.reference,
-        customerReference: tx.customer_reference,
-        status: tx.status,
-        type: tx.type,
-        beneficiary: tx.beneficiary,
-        amount: tx.price,
-        message: tx.response,
-      };
-    }
-    return null;
+  if (payload?.transaction) {
+    const tx = payload.transaction;
+    return {
+      reference: tx.reference,
+      customerReference: tx.customer_reference,
+      status: tx.status,
+      type: tx.type,
+      beneficiary: tx.beneficiary,
+      amount: parseFloat(tx.price),
+      message: tx.response,
+    };
   }
+
+  if (payload?.ref) {
+    return {
+      reference: payload.ref,
+      customerReference: payload.customer_ref,
+      status: payload.status,
+      type: payload.type,
+      beneficiary: payload.beneficiary,
+      amount: parseFloat(payload.price),
+      message: payload.response,
+    };
+  }
+
+  return null;
+}
 }
 
 module.exports = SmePlugService;
