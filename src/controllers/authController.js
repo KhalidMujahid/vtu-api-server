@@ -207,7 +207,7 @@ exports.verifyOTP = async (req, res, next) => {
       return next(new AppError("Please provide email and OTP", 400));
     }
 
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email: email.toLowerCase().trim() });
 
     if (!user) {
       return next(new AppError("User not found", 404));
@@ -217,13 +217,20 @@ exports.verifyOTP = async (req, res, next) => {
       return next(new AppError("Too many attempts. Try again later.", 429));
     }
 
+    // Check if verification token exists
+    if (!user.verificationToken) {
+      return next(new AppError("No OTP found. Please request a new OTP.", 400));
+    }
+
+    // Check if OTP has expired
+    if (!user.verificationTokenExpires || user.verificationTokenExpires < Date.now()) {
+      return next(new AppError("OTP has expired. Please request a new OTP.", 400));
+    }
+
     const hashedToken = crypto.createHash("sha256").update(otp.trim()).digest("hex");
 
-    if (
-      user.verificationToken !== hashedToken ||
-      user.verificationTokenExpires < Date.now()
-    ) {
-      user.otpAttempts += 1;
+    if (user.verificationToken !== hashedToken) {
+      user.otpAttempts = (user.otpAttempts || 0) + 1;
 
       if (user.otpAttempts >= 5) {
         user.otpBlockedUntil = Date.now() + 15 * 60 * 1000;
@@ -231,7 +238,11 @@ exports.verifyOTP = async (req, res, next) => {
 
       await user.save();
 
-      return next(new AppError("Invalid or expired OTP", 400));
+      const attemptsLeft = 5 - user.otpAttempts;
+      if (attemptsLeft > 0) {
+        return next(new AppError(`Invalid OTP. ${attemptsLeft} attempts remaining.`, 400));
+      }
+      return next(new AppError("Too many attempts. Try again later.", 429));
     }
 
     user.otpAttempts = 0;
@@ -265,7 +276,7 @@ exports.resendOTP = async (req, res, next) => {
   try {
     const { email, verificationType = "email" } = req.body;
 
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email: email.toLowerCase().trim() });
 
     if (!user) {
       return next(new AppError("User not found", 404));
@@ -310,6 +321,268 @@ exports.resendOTP = async (req, res, next) => {
   }
 };
 
+// exports.forgotPassword = async (req, res, next) => {
+//   try {
+//     const { email } = req.body;
+
+//     const user = await User.findOne({ email });
+
+//     if (!user) {
+//       return next(new AppError("User not found", 404));
+//     }
+
+//     const otp = generateOTP();
+
+//     const hashedOTP = crypto.createHash("sha256").update(otp).digest("hex");
+
+//     user.resetPasswordToken = hashedOTP;
+//     user.resetPasswordExpires = Date.now() + 5 * 60 * 1000;
+
+//     await user.save();
+
+//     await sendOTPEmail(user.email, otp);
+
+//     res.status(200).json({
+//       status: "success",
+//       message: "Password reset OTP sent to email",
+//     });
+
+//     logger.info(`Password reset OTP sent: ${user.email}`);
+//   } catch (error) {
+//     next(error);
+//   }
+// };
+
+exports.resetPassword = async (req, res, next) => {
+  try {
+    const { email, otp, password } = req.body;
+
+    const hashedOTP = crypto.createHash("sha256").update(otp.trim()).digest("hex");
+
+    const user = await User.findOne({
+      email,
+      resetPasswordToken: hashedOTP,
+      resetPasswordExpires: { $gt: Date.now() },
+    });
+
+    if (!user) {
+      return next(new AppError("Invalid or expired OTP", 400));
+    }
+
+    user.password = password;
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpires = undefined;
+
+    await user.save();
+
+    createSendToken(user, 200, res);
+
+    logger.info(`Password reset successful: ${user.email}`);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// exports.setTransactionPin = async (req, res, next) => {
+//   try {
+//     const { transactionPin } = req.body;
+
+//     if (!transactionPin) {
+//       return next(new AppError("Please provide a transaction PIN", 400));
+//     }
+
+//     if (!/^\d{4}$/.test(transactionPin)) {
+//       return next(new AppError("PIN must be 4 digits", 400));
+//     }
+
+//     // Check if user is authenticated
+//     if (!req.user || !req.user.id) {
+//       return next(new AppError("You are not logged in. Please log in to set your PIN.", 401));
+//     }
+
+//     const user = await User.findById(req.user.id || req.user._id);
+
+//     if (user.transactionPin) {
+//       return next(new AppError("Transaction PIN already set", 400));
+//     }
+
+//     user.transactionPin = transactionPin;
+//     user.pin = true;
+
+//     await user.save();
+
+//     res.status(200).json({
+//       status: "success",
+//       message: "Transaction PIN set successfully",
+//     });
+
+//     logger.info(`Transaction PIN set for user: ${user.email}`);
+//   } catch (error) {
+//     next(error);
+//   }
+// };
+
+exports.changePassword = async (req, res, next) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    
+    const user = await User.findById(req.user.id).select('+password');
+    
+    if (!(await user.comparePassword(currentPassword))) {
+      return next(new AppError('Current password is incorrect', 401));
+    }
+    
+    user.password = newPassword;
+    await user.save();
+    
+    res.status(200).json({
+      status: 'success',
+      message: 'Password changed successfully',
+    });
+    
+    logger.info(`Password changed for user: ${user.email}`);
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.getProfile = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user.id);
+    
+    res.status(200).json({
+      status: 'success',
+      data: {
+        user,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// exports.verifyOTP = async (req, res, next) => {
+//   try {
+//     const { email, otp, verificationType = "email" } = req.body;
+
+//     if (!email || !otp) {
+//       return next(new AppError("Please provide email and OTP", 400));
+//     }
+
+//     const user = await User.findOne({ email: email.toLowerCase().trim() });
+
+//     if (!user) {
+//       return next(new AppError("User not found", 404));
+//     }
+
+//     if (user.otpBlockedUntil && user.otpBlockedUntil > Date.now()) {
+//       return next(new AppError("Too many attempts. Try again later.", 429));
+//     }
+
+//     // Check if verification token exists
+//     if (!user.verificationToken) {
+//       return next(new AppError("No OTP found. Please request a new OTP.", 400));
+//     }
+
+//     // Check if OTP has expired
+//     if (!user.verificationTokenExpires || user.verificationTokenExpires < Date.now()) {
+//       return next(new AppError("OTP has expired. Please request a new OTP.", 400));
+//     }
+
+//     const hashedToken = crypto.createHash("sha256").update(otp.trim()).digest("hex");
+
+//     if (user.verificationToken !== hashedToken) {
+//       user.otpAttempts = (user.otpAttempts || 0) + 1;
+
+//       if (user.otpAttempts >= 5) {
+//         user.otpBlockedUntil = Date.now() + 15 * 60 * 1000;
+//       }
+
+//       await user.save();
+
+//       const attemptsLeft = 5 - user.otpAttempts;
+//       if (attemptsLeft > 0) {
+//         return next(new AppError(`Invalid OTP. ${attemptsLeft} attempts remaining.`, 400));
+//       }
+//       return next(new AppError("Too many attempts. Try again later.", 429));
+//     }
+
+//     user.otpAttempts = 0;
+//     user.otpBlockedUntil = undefined;
+
+//     if (verificationType === "email") {
+//       user.isEmailVerified = true;
+//     }
+
+//     if (verificationType === "phone") {
+//       user.isPhoneVerified = true;
+//     }
+
+//     user.verificationToken = undefined;
+//     user.verificationTokenExpires = undefined;
+
+//     await user.save();
+
+//     res.status(200).json({
+//       status: "success",
+//       message: "OTP verified successfully",
+//     });
+
+//     logger.info(`User verified ${verificationType}: ${user.email}`);
+//   } catch (error) {
+//     next(error);
+//   }
+// };
+
+// exports.resendOTP = async (req, res, next) => {
+//   try {
+//     const { email, verificationType = "email" } = req.body;
+
+//     const user = await User.findOne({ email: email.toLowerCase().trim() });
+
+//     if (!user) {
+//       return next(new AppError("User not found", 404));
+//     }
+
+//     if (user.otpResendAfter && user.otpResendAfter > Date.now()) {
+//       return next(
+//         new AppError("Please wait before requesting another OTP", 429)
+//       );
+//     }
+
+//     const otp = generateOTP();
+
+//     const verificationToken = crypto
+//       .createHash("sha256")
+//       .update(otp)
+//       .digest("hex");
+
+//     user.verificationToken = verificationToken;
+//     user.verificationTokenExpires = Date.now() + 5 * 60 * 1000;
+
+//     user.otpResendAfter = Date.now() + 60 * 1000;
+
+//     await user.save();
+
+//     if (verificationType === "email") {
+//       await sendOTPEmail(user.email, otp);
+//     }
+
+//     if (verificationType === "phone") {
+//       await sendOTPSMS(user.phoneNumber, otp);
+//     }
+
+//     res.status(200).json({
+//       status: "success",
+//       message: "OTP sent successfully",
+//     });
+
+//     logger.info(`OTP resent to ${verificationType}: ${user.email}`);
+//   } catch (error) {
+//     next(error);
+//   }
+// };
+
 exports.forgotPassword = async (req, res, next) => {
   try {
     const { email } = req.body;
@@ -342,45 +615,54 @@ exports.forgotPassword = async (req, res, next) => {
   }
 };
 
-exports.resetPassword = async (req, res, next) => {
-  try {
-    const { email, otp, password } = req.body;
+// exports.resetPassword = async (req, res, next) => {
+//   try {
+//     const { email, otp, password } = req.body;
 
-    const hashedOTP = crypto.createHash("sha256").update(otp.trim()).digest("hex");
+//     const hashedOTP = crypto.createHash("sha256").update(otp.trim()).digest("hex");
 
-    const user = await User.findOne({
-      email,
-      resetPasswordToken: hashedOTP,
-      resetPasswordExpires: { $gt: Date.now() },
-    });
+//     const user = await User.findOne({
+//       email,
+//       resetPasswordToken: hashedOTP,
+//       resetPasswordExpires: { $gt: Date.now() },
+//     });
 
-    if (!user) {
-      return next(new AppError("Invalid or expired OTP", 400));
-    }
+//     if (!user) {
+//       return next(new AppError("Invalid or expired OTP", 400));
+//     }
 
-    user.password = password;
-    user.resetPasswordToken = undefined;
-    user.resetPasswordExpires = undefined;
+//     user.password = password;
+//     user.resetPasswordToken = undefined;
+//     user.resetPasswordExpires = undefined;
 
-    await user.save();
+//     await user.save();
 
-    createSendToken(user, 200, res);
+//     createSendToken(user, 200, res);
 
-    logger.info(`Password reset successful: ${user.email}`);
-  } catch (error) {
-    next(error);
-  }
-};
+//     logger.info(`Password reset successful: ${user.email}`);
+//   } catch (error) {
+//     next(error);
+//   }
+// };
 
 exports.setTransactionPin = async (req, res, next) => {
   try {
     const { transactionPin } = req.body;
 
+    if (!transactionPin) {
+      return next(new AppError("Please provide a transaction PIN", 400));
+    }
+
     if (!/^\d{4}$/.test(transactionPin)) {
       return next(new AppError("PIN must be 4 digits", 400));
     }
 
-    const user = await User.findById(req.user.id);
+    // Check if user is authenticated
+    if (!req.user || !req.user.id) {
+      return next(new AppError("You are not logged in. Please log in to set your PIN.", 401));
+    }
+
+    const user = await User.findById(req.user.id || req.user._id);
 
     if (user.transactionPin) {
       return next(new AppError("Transaction PIN already set", 400));
@@ -402,29 +684,29 @@ exports.setTransactionPin = async (req, res, next) => {
   }
 };
 
-exports.changePassword = async (req, res, next) => {
-  try {
-    const { currentPassword, newPassword } = req.body;
+// exports.changePassword = async (req, res, next) => {
+//   try {
+//     const { currentPassword, newPassword } = req.body;
     
-    const user = await User.findById(req.user.id).select('+password');
+//     const user = await User.findById(req.user.id).select('+password');
     
-    if (!(await user.comparePassword(currentPassword))) {
-      return next(new AppError('Current password is incorrect', 401));
-    }
+//     if (!(await user.comparePassword(currentPassword))) {
+//       return next(new AppError('Current password is incorrect', 401));
+//     }
     
-    user.password = newPassword;
-    await user.save();
+//     user.password = newPassword;
+//     await user.save();
     
-    res.status(200).json({
-      status: 'success',
-      message: 'Password changed successfully',
-    });
+//     res.status(200).json({
+//       status: 'success',
+//       message: 'Password changed successfully',
+//     });
     
-    logger.info(`Password changed for user: ${user.email}`);
-  } catch (error) {
-    next(error);
-  }
-};
+//     logger.info(`Password changed for user: ${user.email}`);
+//   } catch (error) {
+//     next(error);
+//   }
+// };
 
 exports.getProfile = async (req, res, next) => {
   try {

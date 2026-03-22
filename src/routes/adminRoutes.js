@@ -3,6 +3,67 @@ const router = express.Router();
 const adminController = require('../controllers/adminController');
 const vtuConsoleController = require('../controllers/vtuConsoleController');
 const { adminAuth, logAction, superAdminOnly, staffOnly } = require('../middlewares/admin');
+const jwt = require('jsonwebtoken');
+const User = require('../models/User');
+
+// Public endpoint to check auth status - returns appropriate message
+router.get('/check-auth', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    
+    if (!token) {
+      return res.status(200).json({
+        status: 'success',
+        authenticated: false,
+        message: 'No token provided. Please login.'
+      });
+    }
+    
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.id);
+    
+    if (!user) {
+      return res.status(200).json({
+        status: 'success',
+        authenticated: false,
+        message: 'User not found.'
+      });
+    }
+    
+    if (!['admin', 'superadmin', 'staff', 'super_admin'].includes(user.role)) {
+      return res.status(200).json({
+        status: 'success',
+        authenticated: false,
+        message: 'Admin access required.'
+      });
+    }
+    
+    if (!user.isActive) {
+      return res.status(200).json({
+        status: 'success',
+        authenticated: false,
+        message: 'Admin account is deactivated.'
+      });
+    }
+    
+    return res.status(200).json({
+      status: 'success',
+      authenticated: true,
+      user: {
+        id: user._id,
+        email: user.email,
+        name: user.name,
+        role: user.role
+      }
+    });
+  } catch (error) {
+    return res.status(200).json({
+      status: 'success',
+      authenticated: false,
+      message: 'Token expired or invalid. Please login again.'
+    });
+  }
+});
 
 router.use(adminAuth);
 
