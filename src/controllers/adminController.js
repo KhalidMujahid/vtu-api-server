@@ -240,7 +240,7 @@ class AdminController {
       }
       
       if (phone) {
-        const existingPhone = await User.findOne({ phoneNumber: phone });
+        const existingPhone = await User.findOne({ phoneNumber });
         if (existingPhone) {
           return res.status(400).json({
             status: 'error',
