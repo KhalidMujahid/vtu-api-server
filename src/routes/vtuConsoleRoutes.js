@@ -15,8 +15,49 @@ const { adminAuth } = require('../middlewares/admin');
  *     responses:
  *       200:
  *         description: List of all providers
+ *   post:
+ *     summary: Create a new VTU provider
+ *     tags: [VTU Console - Providers]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - providerId
+ *             properties:
+ *               providerId:
+ *                 type: string
+ *               name:
+ *                 type: string
+ *               displayName:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *               baseUrl:
+ *                 type: string
+ *               apiKey:
+ *                 type: string
+ *               apiSecret:
+ *                 type: string
+ *               supportedServices:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *               status:
+ *                 type: string
+ *                 enum: [active, inactive, maintenance, degraded]
+ *               isDefault:
+ *                 type: boolean
+ *     responses:
+ *       201:
+ *         description: Provider created
  */
 router.get('/providers', adminAuth, vtuConsoleController.getAllProviders);
+router.post('/providers', adminAuth, vtuConsoleController.createProvider);
 
 /**
  * @swagger
@@ -33,6 +74,14 @@ router.get('/providers/config', vtuConsoleController.getProviderConfig);
 /**
  * @swagger
  * /api/v1/console/config:
+ *   get:
+ *     summary: Get service provider configuration
+ *     tags: [VTU Console - Configuration]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Current service routing configuration
  *   post:
  *     summary: Save service provider configuration
  *     tags: [VTU Console - Configuration]
@@ -70,6 +119,7 @@ router.get('/providers/config', vtuConsoleController.getProviderConfig);
  *       200:
  *         description: Configuration saved
  */
+router.get('/config', adminAuth, vtuConsoleController.getServiceConfig);
 router.post('/config', adminAuth, vtuConsoleController.saveServiceConfig);
 
 /**
@@ -88,8 +138,76 @@ router.post('/config', adminAuth, vtuConsoleController.saveServiceConfig);
  *     responses:
  *       200:
  *         description: Provider details
+ *   put:
+ *     summary: Update provider details
+ *     tags: [VTU Console - Providers]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: providerId
+ *         required: true
+ *         description: Provider ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum: [active, inactive, maintenance, degraded]
+ *               isDefault:
+ *                 type: boolean
+ *               priority:
+ *                 type: number
+ *               apiKey:
+ *                 type: string
+ *               apiSecret:
+ *                 type: string
+ *               baseUrl:
+ *                 type: string
+ *               supportedServices:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *               rateLimit:
+ *                 type: object
+ *               healthCheckEndpoint:
+ *                 type: string
+ *               maintenanceMessage:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Provider updated
  */
 router.get('/providers/:providerId', adminAuth, vtuConsoleController.getProvider);
+router.put('/providers/:providerId', adminAuth, vtuConsoleController.updateProvider);
+
+/**
+ * @swagger
+ * /api/v1/console/providers/:providerId:
+ *   delete:
+ *     summary: Delete (deactivate) a provider
+ *     tags: [VTU Console - Providers]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: providerId
+ *         required: true
+ *         description: Provider ID
+ *       - in: query
+ *         name: hardDelete
+ *         description: If true, permanently delete from database
+ *     responses:
+ *       200:
+ *         description: Provider deleted
+ */
+router.delete('/providers/:providerId', adminAuth, vtuConsoleController.deleteProvider);
 
 /**
  * @swagger

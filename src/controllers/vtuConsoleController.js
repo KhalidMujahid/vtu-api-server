@@ -161,22 +161,45 @@ exports.getProviderConfig = async (req, res, next) => {
   try {
     const providers = VtuProviderService.getAllProviders();
     
-    // Get service routing configuration
+    // Get service routing configuration from database
     const serviceRouting = vtuConfig.getServiceRouting();
     
-    // Return only public configuration (no API keys)
-    const publicConfig = providers.map(p => ({
-      id: p.id,
-      name: p.name,
-      displayName: p.displayName,
-      description: p.description,
-      color: p.color,
-      icon: p.icon,
-      supportedServices: p.supportedServices,
-      supportedNetworks: p.supportedNetworks,
-      features: p.features,
-      rateLimit: p.rateLimit,
-    }));
+    // Fetch provider statuses from database for more info
+    const dbStatuses = await ProviderStatus.find({}).lean();
+    const statusMap = {};
+    dbStatuses.forEach(s => {
+      statusMap[s.providerName] = s;
+    });
+    
+    // Return only public configuration (no API keys) but include DB status
+    const publicConfig = providers.map(p => {
+      const dbStatus = statusMap[p.id] || {};
+      return {
+        id: p.id,
+        name: p.name,
+        displayName: p.displayName,
+        description: p.description,
+        color: p.color,
+        icon: p.icon,
+        supportedServices: p.supportedServices,
+        supportedNetworks: p.supportedNetworks,
+        features: p.features,
+        rateLimit: p.rateLimit,
+        // Database status
+        status: dbStatus.status || p.status || 'active',
+        isDefault: dbStatus.isDefault || p.isDefault || false,
+        priority: dbStatus.priority || p.priority,
+        totalRequests: dbStatus.totalRequests || 0,
+        successfulRequests: dbStatus.successfulRequests || 0,
+        failedRequests: dbStatus.failedRequests || 0,
+        successRate: dbStatus.successRate || 100,
+        uptime: dbStatus.uptime || 100,
+        lastChecked: dbStatus.lastChecked || null,
+      };
+    });
+    
+    // Get primary provider
+    const primaryProvider = publicConfig.find(p => p.isDefault) || publicConfig.find(p => p.status === 'active') || providers[0];
     
     res.status(200).json({
       status: 'success',
@@ -184,7 +207,7 @@ exports.getProviderConfig = async (req, res, next) => {
         providers: publicConfig,
         serviceRouting,
         defaults: {
-          primaryProvider: 'clubkonnect',
+          primaryProvider: primaryProvider?.id || 'clubkonnect',
           failoverEnabled: true,
         }
       }
@@ -224,6 +247,62 @@ exports.saveServiceConfig = async (req, res, next) => {
       message: 'Service provider configuration saved successfully',
       data: {
         serviceRouting: updatedRouting
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get service provider configuration (service routing)
+ */
+exports.getServiceConfig = async (req, res, next) => {
+  try {
+    // Get current service routing (from memory, but syncs with DB)
+    const serviceRouting = vtuConfig.getServiceRouting();
+    
+    // Get available providers for reference
+    const providers = VtuProviderService.getAllProviders().map(p => ({
+      id: p.id,
+      name: p.name,
+      displayName: p.displayName,
+      supportedServices: p.supportedServices,
+    }));
+    
+    // Map service names to readable labels
+    const serviceLabels = {
+      data: 'Data Recharge',
+      airtime: 'Airtime Recharge',
+      airtimepin: 'Airtime PIN',
+      education: 'Education PIN',
+      electricity: 'Electricity Bill Payment',
+      cable: 'Cable TV Subscription',
+      airtime2cash: 'Airtime to Cash',
+    };
+    
+    // Build detailed response
+    const routingDetails = {};
+    for (const [service, providerId] of Object.entries(serviceRouting)) {
+      const provider = providers.find(p => p.id === providerId);
+      routingDetails[service] = {
+        providerId,
+        providerName: provider?.displayName || providerId,
+        label: serviceLabels[service] || service,
+      };
+    }
+    
+    res.status(200).json({
+      status: 'success',
+      data: {
+        serviceRouting,
+        routingDetails,
+        availableProviders: providers,
+        serviceLabels,
+        defaults: {
+          failoverEnabled: vtuConfig.defaults?.failoverEnabled || true,
+          failoverDelay: vtuConfig.defaults?.failoverDelay || 5000,
+        }
       }
     });
   } catch (error) {
@@ -311,6 +390,187 @@ exports.getProviderStats = async (req, res, next) => {
 };
 
 /**
+ * Update provider details (full update)
+ */
+exports.updateProvider = async (req, res, next) => {
+  try {
+    const { providerId } = req.params;
+    const {
+      status,
+      isDefault,
+      priority,
+      apiKey,
+      apiSecret,
+      baseUrl,
+      callbackUrl,
+      supportedServices,
+      rateLimit,
+      healthCheckEndpoint,
+      healthCheckInterval,
+      fallbackTo,
+      maintenanceMessage,
+      maintenanceStart,
+      maintenanceEnd,
+      description,
+      contactEmail,
+      contactPhone,
+    } = req.body;
+
+    const allowedStatuses = ['active', 'inactive', 'maintenance', 'degraded'];
+    
+    if (status && !allowedStatuses.includes(status)) {
+      return res.status(400).json({
+        status: 'error',
+        message: `Invalid status. Allowed: ${allowedStatuses.join(', ')}`
+      });
+    }
+    
+    // Check if provider exists in config
+    const configProvider = vtuConfig.providers[providerId];
+    if (!configProvider) {
+      return res.status(404).json({
+        status: 'error',
+        message: `Provider ${providerId} not found in configuration`
+      });
+    }
+    
+    // Build update object
+    const updateData = {
+      providerName: providerId,
+      lastUpdatedBy: req.user?.id,
+    };
+    
+    if (status) updateData.status = status;
+    if (priority !== undefined) updateData.priority = priority;
+    if (apiKey) updateData.apiKey = apiKey;
+    if (apiSecret) updateData.apiSecret = apiSecret;
+    if (baseUrl) updateData.baseUrl = baseUrl;
+    if (callbackUrl) updateData.callbackUrl = callbackUrl;
+    if (supportedServices) updateData.supportedServices = supportedServices;
+    if (rateLimit) updateData.rateLimit = rateLimit;
+    if (healthCheckEndpoint) updateData.healthCheckEndpoint = healthCheckEndpoint;
+    if (healthCheckInterval) updateData.healthCheckInterval = healthCheckInterval;
+    if (fallbackTo) updateData.fallbackTo = fallbackTo;
+    if (maintenanceMessage) updateData.maintenanceMessage = maintenanceMessage;
+    if (maintenanceStart) updateData.maintenanceStart = maintenanceStart;
+    if (maintenanceEnd) updateData.maintenanceEnd = maintenanceEnd;
+    if (description) updateData.description = description;
+    if (contactEmail) updateData.contactEmail = contactEmail;
+    if (contactPhone) updateData.contactPhone = contactPhone;
+    
+    // Handle isDefault - reset others if setting this as default
+    if (isDefault !== undefined) {
+      if (isDefault) {
+        await ProviderStatus.updateMany({}, { isDefault: false });
+        updateData.isDefault = true;
+      } else {
+        updateData.isDefault = false;
+      }
+    }
+    
+    // Update in database
+    const updated = await ProviderStatus.findOneAndUpdate(
+      { providerName: providerId },
+      { $set: updateData },
+      { new: true, upsert: true }
+    );
+    
+    logger.info(`Provider ${providerId} updated by user: ${req.user?.id || 'system'}`);
+    
+    res.status(200).json({
+      status: 'success',
+      message: 'Provider updated successfully',
+      data: updated
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Create a new provider
+ */
+exports.createProvider = async (req, res, next) => {
+  try {
+    const {
+      providerId,
+      name,
+      displayName,
+      description,
+      color,
+      icon,
+      baseUrl,
+      apiKey,
+      apiSecret,
+      timeout,
+      supportedServices,
+      supportedNetworks,
+      status,
+      priority,
+      isDefault,
+      features,
+      rateLimit,
+      healthCheckEndpoint,
+      healthCheckInterval,
+      fallbackTo,
+    } = req.body;
+    
+    if (!providerId) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Provider ID is required'
+      });
+    }
+    
+    // Check if provider already exists
+    const existing = await ProviderStatus.findOne({ providerName: providerId });
+    if (existing) {
+      return res.status(400).json({
+        status: 'error',
+        message: `Provider ${providerId} already exists. Use PUT to update.`
+      });
+    }
+    
+    const allowedStatuses = ['active', 'inactive', 'maintenance', 'degraded'];
+    const providerStatus = status && allowedStatuses.includes(status) ? status : 'active';
+    
+    // Create new provider in database
+    const newProvider = new ProviderStatus({
+      providerName: providerId,
+      name,
+      displayName,
+      description,
+      supportedServices: supportedServices || [],
+      status: providerStatus,
+      priority: priority || 1,
+      isDefault: isDefault || false,
+      apiKey,
+      apiSecret,
+      baseUrl,
+      supportedNetworks,
+      features,
+      rateLimit,
+      healthCheckEndpoint,
+      healthCheckInterval,
+      fallbackTo,
+      lastUpdatedBy: req.user?.id,
+    });
+    
+    await newProvider.save();
+    
+    logger.info(`Provider ${providerId} created by user: ${req.user?.id || 'system'}`);
+    
+    res.status(201).json({
+      status: 'success',
+      message: 'Provider created successfully',
+      data: newProvider
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * Get API logs (mock - in production would aggregate from actual logs)
  */
 exports.getApiLogs = async (req, res, next) => {
@@ -351,12 +611,104 @@ exports.getApiLogs = async (req, res, next) => {
  */
 exports.initializeProviders = async (req, res, next) => {
   try {
-    await VtuProviderService.initializeProviders();
+    const providers = VtuProviderService.getAllProviders();
+    const results = [];
+    
+    for (const provider of providers) {
+      // Check if already exists
+      const existing = await ProviderStatus.findOne({ providerName: provider.id });
+      
+      if (existing) {
+        // Update with latest config
+        await ProviderStatus.findOneAndUpdate(
+          { providerName: provider.id },
+          {
+            $set: {
+              supportedServices: provider.supportedServices,
+              status: provider.status,
+              priority: provider.priority,
+              isDefault: provider.isDefault,
+              description: provider.description,
+              rateLimit: provider.rateLimit,
+              healthCheckInterval: provider.healthCheckInterval || 300000,
+            }
+          },
+          { new: true }
+        );
+        results.push({ provider: provider.id, action: 'updated' });
+      } else {
+        // Create new
+        const newProvider = new ProviderStatus({
+          providerName: provider.id,
+          name: provider.name,
+          displayName: provider.displayName,
+          description: provider.description,
+          supportedServices: provider.supportedServices,
+          supportedNetworks: provider.supportedNetworks,
+          status: provider.status || 'active',
+          priority: provider.priority || 1,
+          isDefault: provider.isDefault || false,
+          rateLimit: provider.rateLimit,
+          healthCheckInterval: provider.healthCheckInterval || 300000,
+          features: provider.features,
+        });
+        await newProvider.save();
+        results.push({ provider: provider.id, action: 'created' });
+      }
+    }
+    
+    logger.info(`Providers initialized: ${results.length} providers processed`);
     
     res.status(200).json({
       status: 'success',
-      message: 'Providers initialized successfully'
+      message: 'Providers initialized successfully',
+      data: {
+        results,
+        total: results.length
+      }
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Delete a provider from database (soft delete - just marks as inactive)
+ */
+exports.deleteProvider = async (req, res, next) => {
+  try {
+    const { providerId } = req.params;
+    const { hardDelete } = req.query;
+    
+    const provider = await ProviderStatus.findOne({ providerName: providerId });
+    
+    if (!provider) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Provider not found in database'
+      });
+    }
+    
+    if (hardDelete === 'true') {
+      // Actually delete from database
+      await ProviderStatus.deleteOne({ providerName: providerId });
+      logger.info(`Provider ${providerId} hard deleted by user: ${req.user?.id || 'system'}`);
+      
+      res.status(200).json({
+        status: 'success',
+        message: 'Provider deleted permanently'
+      });
+    } else {
+      // Soft delete - just mark as inactive
+      provider.status = 'inactive';
+      await provider.save();
+      logger.info(`Provider ${providerId} soft deleted by user: ${req.user?.id || 'system'}`);
+      
+      res.status(200).json({
+        status: 'success',
+        message: 'Provider marked as inactive'
+      });
+    }
   } catch (error) {
     next(error);
   }
