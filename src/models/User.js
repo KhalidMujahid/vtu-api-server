@@ -243,6 +243,11 @@ userSchema.pre('save', async function(next) {
 });
 
 userSchema.pre('save', async function(next) {
+  // Only run this hook for NEW documents (not updates)
+  if (!this.isNew) {
+    return next();
+  }
+  
   if (!this.referralCode) {
     this.referralCode = Math.random().toString(36).substring(2, 8).toUpperCase();
   }

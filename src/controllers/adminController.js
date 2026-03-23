@@ -663,13 +663,18 @@ class AdminController {
       if (user.isActive) {
         return next(new AppError('User is already active', 400));
       }
+
+      if (user.isApproved) {
+        return next(new AppError('User is already approved', 400));
+      }
       
       // Activate user
       user.isActive = true;
+      user.isApproved = true;
       await user.save();
       
       // Unlock user's wallet
-      await WalletService.unlockWallet(id);
+      // await WalletService.unlockWallet(id);
       
       // Log the action
       await AdminLog.log({
@@ -687,7 +692,7 @@ class AdminController {
       
       res.status(200).json({
         status: 'success',
-        message: 'User activated successfully',
+        message: 'User activated and verified successfully',
         data: {
           user: {
             id: user._id,
