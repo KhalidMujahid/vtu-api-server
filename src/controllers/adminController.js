@@ -852,11 +852,20 @@ class AdminController {
         return next(new AppError('Agent is already approved', 400));
       }
       
-      // Approve agent
-      user.isApproved = true;
-      user.approvedBy = req.admin._id;
-      user.approvedAt = new Date();
-      await user.save();
+      // Approve agent using findOneAndUpdate for reliability
+      const updatedUser = await User.findOneAndUpdate(
+        { _id: id },
+        {
+          isApproved: true,
+          approvedBy: req.admin._id,
+          approvedAt: new Date(),
+        },
+        { new: true, runValidators: true }
+      );
+      
+      if (!updatedUser) {
+        return next(new AppError('Failed to approve agent', 500));
+      }
       
       // Log the action
       await AdminLog.log({
@@ -866,7 +875,7 @@ class AdminController {
         action: 'approve_agent',
         entity: 'user',
         entityId: id,
-        description: `Agent ${user.email} approved by ${req.admin.email}`,
+        description: `Agent ${updatedUser.email} approved by ${req.admin.email}`,
         ipAddress: req.ip,
         userAgent: req.get('user-agent'),
         status: 'success',
@@ -877,15 +886,15 @@ class AdminController {
         message: 'Agent approved successfully',
         data: {
           user: {
-            id: user._id,
-            email: user.email,
-            isApproved: user.isApproved,
-            approvedAt: user.approvedAt,
+            id: updatedUser._id,
+            email: updatedUser.email,
+            isApproved: updatedUser.isApproved,
+            approvedAt: updatedUser.approvedAt,
           },
         },
       });
       
-      logger.info(`Agent approved: ${user.email} by ${req.admin.email}`);
+      logger.info(`Agent approved: ${updatedUser.email} by ${req.admin.email}`);
       
     } catch (error) {
       logger.error('Error approving agent:', error);
@@ -909,10 +918,19 @@ class AdminController {
         return next(new AppError('User does not have agent role', 400));
       }
       
-      // Deactivate the agent account
-      user.isActive = false;
-      user.isApproved = false;
-      await user.save();
+      // Deactivate the agent account using findOneAndUpdate for reliability
+      const updatedUser = await User.findOneAndUpdate(
+        { _id: id },
+        {
+          isActive: false,
+          isApproved: false,
+        },
+        { new: true, runValidators: true }
+      );
+      
+      if (!updatedUser) {
+        return next(new AppError('Failed to reject agent', 500));
+      }
       
       // Log the action
       await AdminLog.log({
@@ -922,7 +940,7 @@ class AdminController {
         action: 'reject_agent',
         entity: 'user',
         entityId: id,
-        description: `Agent ${user.email} rejected by ${req.admin.email}. Reason: ${reason || 'Not specified'}`,
+        description: `Agent ${updatedUser.email} rejected by ${req.admin.email}. Reason: ${reason || 'Not specified'}`,
         ipAddress: req.ip,
         userAgent: req.get('user-agent'),
         status: 'success',
@@ -934,15 +952,15 @@ class AdminController {
         message: 'Agent rejected successfully',
         data: {
           user: {
-            id: user._id,
-            email: user.email,
-            isActive: user.isActive,
-            isApproved: user.isApproved,
+            id: updatedUser._id,
+            email: updatedUser.email,
+            isActive: updatedUser.isActive,
+            isApproved: updatedUser.isApproved,
           },
         },
       });
       
-      logger.info(`Agent rejected: ${user.email} by ${req.admin.email}`);
+      logger.info(`Agent rejected: ${updatedUser.email} by ${req.admin.email}`);
       
     } catch (error) {
       logger.error('Error rejecting agent:', error);
