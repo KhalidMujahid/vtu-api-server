@@ -1,16 +1,35 @@
 const { Queue } = require('bullmq');
 const { getRedisConnection } = require('../config/redis');
+const logger = require('../utils/logger');
 
 const VTU_TRANSACTION_QUEUE = 'vtu-transaction-polling';
 const VTU_POLL_JOB = 'poll-vtu-transaction';
 const VTU_RECOVERY_JOB = 'recover-vtu-transaction-polling';
 
 let queue;
+let queueEnabled = true;
+
+function setQueueEnabled(enabled) {
+  queueEnabled = enabled;
+}
+
+function isQueueEnabled() {
+  return queueEnabled;
+}
 
 function getQueue() {
+  if (!queueEnabled) {
+    return null;
+  }
+
   if (!queue) {
+    const connection = getRedisConnection();
+    if (!connection) {
+      return null;
+    }
+
     queue = new Queue(VTU_TRANSACTION_QUEUE, {
-      connection: getRedisConnection(),
+      connection,
       defaultJobOptions: {
         removeOnComplete: 500,
         removeOnFail: 500,
@@ -30,13 +49,19 @@ function getNextDelay(attempt = 1) {
 }
 
 async function enqueueTransactionPolling(transactionId, options = {}) {
+  const currentQueue = getQueue();
+  if (!currentQueue) {
+    logger.warn(`Skipping VTU poll enqueue for ${transactionId} because queue is disabled.`);
+    return null;
+  }
+
   const {
     attempt = 1,
     delay = getNextDelay(attempt),
     reason = 'scheduled',
   } = options;
 
-  return getQueue().add(
+  return currentQueue.add(
     VTU_POLL_JOB,
     {
       transactionId,
@@ -51,9 +76,14 @@ async function enqueueTransactionPolling(transactionId, options = {}) {
 }
 
 async function scheduleRecoveryJob() {
+  const currentQueue = getQueue();
+  if (!currentQueue) {
+    return null;
+  }
+
   const every = Number(process.env.VTU_RECOVERY_INTERVAL_MS || 300000);
 
-  return getQueue().add(
+  return currentQueue.add(
     VTU_RECOVERY_JOB,
     {
       scheduledAt: new Date().toISOString(),
@@ -68,7 +98,12 @@ async function scheduleRecoveryJob() {
 }
 
 async function cancelTransactionPolling(transactionId) {
-  const jobs = await getQueue().getJobs(['delayed', 'waiting', 'prioritized'], 0, 200);
+  const currentQueue = getQueue();
+  if (!currentQueue) {
+    return null;
+  }
+
+  const jobs = await currentQueue.getJobs(['delayed', 'waiting', 'prioritized'], 0, 200);
   const matchingJobs = jobs.filter((job) => job?.data?.transactionId === String(transactionId));
 
   await Promise.all(
@@ -89,6 +124,8 @@ module.exports = {
   VTU_POLL_JOB,
   VTU_RECOVERY_JOB,
   getQueue,
+  setQueueEnabled,
+  isQueueEnabled,
   getNextDelay,
   enqueueTransactionPolling,
   cancelTransactionPolling,

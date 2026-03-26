@@ -476,3 +476,4 @@
 {"level":"info","message":"VTU Providers initialized","service":"yareema-data-hub","timestamp":"2026-03-26 15:35:02"}
 {"level":"info","message":"VTU Providers initialized","service":"yareema-data-hub","timestamp":"2026-03-26 15:40:03"}
 {"level":"warn","message":"Unable to verify or set Redis eviction policy to noeviction: NOPERM User default has no permissions to run the 'config|get' command","service":"yareema-data-hub","timestamp":"2026-03-26 15:40:07"}
+{"level":"warn","message":"Skipping VTU poll enqueue for abc because queue is disabled.","service":"yareema-data-hub","timestamp":"2026-03-26 15:52:06"}

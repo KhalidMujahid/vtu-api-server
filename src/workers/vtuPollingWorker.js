@@ -1,10 +1,16 @@
 const { Worker } = require('bullmq');
-const { createRedisConnection, ensureRedisNoEviction } = require('../config/redis');
+const {
+  isRedisConfigured,
+  createRedisConnection,
+  ensureRedisNoEviction,
+  verifyRedisConnection,
+} = require('../config/redis');
 const {
   VTU_TRANSACTION_QUEUE,
   VTU_POLL_JOB,
   VTU_RECOVERY_JOB,
   scheduleRecoveryJob,
+  setQueueEnabled,
 } = require('../queues/vtuTransactionQueue');
 const VtuPollingService = require('../services/vtuPollingService');
 const logger = require('../utils/logger');
@@ -16,7 +22,24 @@ async function startVtuPollingWorker() {
     return worker;
   }
 
+  if (!isRedisConfigured()) {
+    setQueueEnabled(false);
+    logger.warn('Redis is not configured. VTU polling and recovery jobs are disabled.');
+    return null;
+  }
+
   const connection = createRedisConnection();
+  const redisStatus = await verifyRedisConnection(connection);
+
+  if (!redisStatus.available) {
+    setQueueEnabled(false);
+    if (connection) {
+      connection.disconnect();
+    }
+    return null;
+  }
+
+  setQueueEnabled(true);
   await ensureRedisNoEviction(connection);
   await scheduleRecoveryJob();
 

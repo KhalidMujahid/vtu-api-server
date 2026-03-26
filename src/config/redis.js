@@ -2,15 +2,30 @@ const IORedis = require('ioredis');
 const logger = require('../utils/logger');
 
 let sharedConnection;
+let lastRedisErrorMessage = null;
+
+function isRedisConfigured() {
+  return Boolean(
+    process.env.REDIS_URL ||
+    process.env.REDIS_HOST ||
+    process.env.REDIS_PORT
+  );
+}
 
 function getRedisOverrides() {
   return {
     maxRetriesPerRequest: null,
     enableReadyCheck: false,
+    lazyConnect: true,
+    connectTimeout: Number(process.env.REDIS_CONNECT_TIMEOUT_MS || 10000),
   };
 }
 
 function buildRedisConfig() {
+  if (!isRedisConfigured()) {
+    return null;
+  }
+
   if (process.env.REDIS_URL) {
     return {
       url: process.env.REDIS_URL,
@@ -29,12 +44,26 @@ function buildRedisConfig() {
 
 function createRedisConnection() {
   const config = buildRedisConfig();
-
-  if (config.url) {
-    return new IORedis(config.url, getRedisOverrides());
+  if (!config) {
+    return null;
   }
 
-  return new IORedis(config);
+  let connection;
+
+  if (config.url) {
+    connection = new IORedis(config.url, getRedisOverrides());
+  } else {
+    connection = new IORedis(config);
+  }
+
+  connection.on('error', (error) => {
+    if (error.message !== lastRedisErrorMessage) {
+      lastRedisErrorMessage = error.message;
+      logger.warn(`Redis connection error: ${error.message}`);
+    }
+  });
+
+  return connection;
 }
 
 function getRedisConnection() {
@@ -46,6 +75,10 @@ function getRedisConnection() {
 }
 
 async function ensureRedisNoEviction(connection = getRedisConnection()) {
+  if (!connection) {
+    return { policy: null, updated: false, skipped: true };
+  }
+
   try {
     const response = await connection.config('GET', 'maxmemory-policy');
     const policy = Array.isArray(response) ? response[1] : null;
@@ -70,9 +103,29 @@ async function ensureRedisNoEviction(connection = getRedisConnection()) {
   }
 }
 
+async function verifyRedisConnection(connection = getRedisConnection()) {
+  if (!connection) {
+    return { available: false, reason: 'not_configured' };
+  }
+
+  try {
+    if (connection.status === 'wait') {
+      await connection.connect();
+    }
+
+    await connection.ping();
+    return { available: true };
+  } catch (error) {
+    logger.warn(`Redis unavailable, VTU queue disabled: ${error.message}`);
+    return { available: false, reason: error.message };
+  }
+}
+
 module.exports = {
+  isRedisConfigured,
   buildRedisConfig,
   createRedisConnection,
   getRedisConnection,
   ensureRedisNoEviction,
+  verifyRedisConnection,
 };
