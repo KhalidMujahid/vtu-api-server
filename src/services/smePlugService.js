@@ -37,22 +37,6 @@ class SmePlugService {
     return this.networkMap[network.toLowerCase()] || network;
   }
 
-  static formatPhoneNumber(phone) {
-    if (!phone) {
-      return phone;
-    }
-
-    if (phone.startsWith('+234')) {
-      return `0${phone.substring(4)}`;
-    }
-
-    if (phone.startsWith('234')) {
-      return `0${phone.substring(3)}`;
-    }
-
-    return phone;
-  }
-
   /**
    * Get Wallet Balance
    */
@@ -192,15 +176,10 @@ class SmePlugService {
     try {
       const networkId = this.getNetworkId(network);
       
-      // SMEPlug expects a local 0-prefixed MSISDN.
-      const formattedPhone = this.formatPhoneNumber(phone);
-      
-      console.log('SMEPlug purchase - network:', network, '-> networkId:', networkId, 'phone:', formattedPhone);
-      
       const requestBody = {
         network_id: networkId,
-        phone: formattedPhone,
-        plan_id: Number(planId), // Ensure it's sent as a number
+        phone,
+        plan_id: planId,
         customer_reference: customerReference || '',
       };
       
@@ -208,8 +187,6 @@ class SmePlugService {
       if (callbackUrl) {
         requestBody.callback_url = callbackUrl;
       }
-      
-      logger.info(`SMEPlug purchaseData request: ${JSON.stringify(requestBody)}`);
       
       const response = await axios.post(
         `${this.getConfig().baseUrl}/data/purchase`,
@@ -219,8 +196,6 @@ class SmePlugService {
           timeout: this.getConfig().timeout,
         }
       );
-
-      logger.info(`SMEPlug purchaseData response: ${JSON.stringify(response.data)}`);
 
       if (response.data?.status) {
         return {
@@ -234,18 +209,7 @@ class SmePlugService {
       throw new Error(response.data?.message || 'Data purchase failed');
     } catch (error) {
       logger.error('SmePlug purchaseData error:', error.response?.data || error.message);
-      console.error('SmePlug purchaseData full error:', error.response);
-      
-      // Try to get the actual error message from SMEPlug response
-      const errorData = error.response?.data;
-      const errorMsg = errorData?.message 
-        || errorData?.msg 
-        || errorData?.error 
-        || errorData?.data?.message
-        || errorData?.data?.msg
-        || error.message 
-        || 'Data purchase failed';
-      throw new Error(`Data purchase failed: ${errorMsg}`);
+      throw new Error(error.response?.data?.message || error.message || 'Data purchase failed');
     }
   }
 
@@ -258,11 +222,10 @@ class SmePlugService {
     
     try {
       const networkId = this.getNetworkId(network);
-      const formattedPhone = this.formatPhoneNumber(phone);
       
       const requestBody = {
         network_id: networkId,
-        phone: formattedPhone,
+        phone,
         amount: parseInt(amount),
         customer_reference: customerReference || '',
       };
@@ -272,8 +235,6 @@ class SmePlugService {
         requestBody.callback_url = callbackUrl;
       }
       
-      logger.info(`SMEPlug purchaseAirtime request: ${JSON.stringify(requestBody)}`);
-
       const response = await axios.post(
         `${this.getConfig().baseUrl}/airtime/purchase`,
         requestBody,
@@ -282,8 +243,6 @@ class SmePlugService {
           timeout: this.getConfig().timeout,
         }
       );
-
-      logger.info(`SMEPlug purchaseAirtime response: ${JSON.stringify(response.data)}`);
 
       if (response.data?.status) {
         return {
@@ -297,17 +256,7 @@ class SmePlugService {
       throw new Error(response.data?.message || 'Airtime purchase failed');
     } catch (error) {
       logger.error('SmePlug purchaseAirtime error:', error.response?.data || error.message);
-
-      const errorData = error.response?.data;
-      const errorMsg = errorData?.message
-        || errorData?.msg
-        || errorData?.error
-        || errorData?.data?.message
-        || errorData?.data?.msg
-        || error.message
-        || 'Airtime purchase failed';
-
-      throw new Error(`Airtime purchase failed: ${errorMsg}`);
+      throw new Error(error.response?.data?.message || error.message || 'Airtime purchase failed');
     }
   }
 

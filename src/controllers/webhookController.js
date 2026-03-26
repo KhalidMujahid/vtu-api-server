@@ -1,10 +1,9 @@
 const crypto = require('crypto');
 const WalletService = require('../services/walletService');
 const Transaction = require('../models/Transaction');
+const Wallet = require('../models/Wallet');
 const { AppError } = require('../middlewares/errorHandler');
 const logger = require('../utils/logger');
-const SmePlugService = require('../services/smePlugService');
-const VtuTransactionLifecycleService = require('../services/vtuTransactionLifecycleService');
 
 /**
  * SMEPlug Webhook Handler
@@ -40,16 +39,6 @@ exports.smePlugWebhook = async (req, res) => {
     const successStatuses = ['success', 'successful'];
 
     if (successStatuses.includes(status)) {
-      await VtuTransactionLifecycleService.markSuccessful(transaction._id, {
-        source: 'webhook:smeplug',
-        note: result.message || 'Delivered successfully',
-        providerName: transaction.service?.provider,
-        providerReference: result.reference,
-        providerResponse: payload,
-      });
-      logger.info(`Transaction successful: ${transaction.reference}`);
-      return res.status(200).send('OK');
-
       transaction.status = 'successful';
       transaction.statusHistory.push({
         status: 'successful',
@@ -73,17 +62,6 @@ exports.smePlugWebhook = async (req, res) => {
       if (transaction.status === 'failed') {
         return res.status(200).send('Already refunded');
       }
-
-      await VtuTransactionLifecycleService.markFailed(transaction._id, {
-        source: 'webhook:smeplug',
-        note: result.message || 'Delivery failed',
-        providerName: transaction.service?.provider,
-        providerReference: result.reference,
-        providerResponse: payload,
-        notificationMessage: `Your ${transaction.type} of N${transaction.amount} failed. Amount has been refunded.`,
-      });
-      logger.warn(`Transaction failed: ${transaction.reference}`);
-      return res.status(200).send('OK');
 
       transaction.status = 'failed';
       transaction.statusHistory.push({

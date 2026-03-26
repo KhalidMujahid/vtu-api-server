@@ -1,7 +1,6 @@
 const express = require('express');
 const router = express.Router();
 const telecomController = require('../controllers/telecomController');
-const webhookController = require('../controllers/webhookController');
 
 const { protect, requireTransactionPin } = require('../middlewares/auth');
 
@@ -40,18 +39,6 @@ router.post('/webhook/nellobytes', telecomController.nelloBytesWebhook);
  *         description: Webhook processed
  */
 router.post('/webhook/airtimenigeria', telecomController.airtimeNigeriaWebhook);
-
-/**
- * @swagger
- * /api/v1/telecom/webhook/smeplug:
- *   post:
- *     summary: SMEPlug webhook
- *     tags: [Telecom - Webhooks]
- *     responses:
- *       200:
- *         description: Webhook processed
- */
-router.post('/webhook/smeplug', webhookController.smePlugWebhook);
 
 /**
  * @swagger

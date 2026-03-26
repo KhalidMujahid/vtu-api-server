@@ -10,7 +10,6 @@ const NelloBytesService = require('../services/nelloBytesService');
 const VtuProviderService = require('../services/vtuProviderService');
 const AirtimeNigeriaService = require('../services/airtimeNigeriaService');
 const SmePlugService = require('../services/smePlugService');
-const VtuTransactionLifecycleService = require('../services/vtuTransactionLifecycleService');
 const vtuConfig = require('../config/vtuProviders');
 const crypto = require('crypto');
 
@@ -19,14 +18,6 @@ const AIRTIME_CALLBACK_URL = process.env.AIRTIME_CALLBACK_URL || `${SERVER_URL}/
 
 function generateReference(prefix = 'TX') {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
-}
-
-async function scheduleTransactionPolling(transaction, reason = 'provider_accepted') {
-  try {
-    await VtuTransactionLifecycleService.schedulePolling(transaction, { attempt: 1, reason });
-  } catch (error) {
-    logger.error(`Failed to schedule polling for ${transaction.reference}:`, error);
-  }
 }
 
 exports.getDataPlans = async (req, res, next) => {
@@ -50,11 +41,8 @@ exports.getDataPlans = async (req, res, next) => {
       // Fetch from provider API
       const rawPlans = await DataService.getDataPlans(network);
       
-      // Get the plans data - service returns { success: true, plans: {...} }
-      const plansData = rawPlans?.plans || rawPlans;
-      
       // Transform to unified format
-      const unifiedPlans = vtuConfig.transformDataPlans(selectedSource, plansData);
+      const unifiedPlans = vtuConfig.transformDataPlans(selectedSource, rawPlans);
       
       // Filter by network if specified
       let responseData = unifiedPlans;
@@ -376,19 +364,13 @@ exports.purchaseData = async (req, res, next) => {
       if (apiResponse.success || apiResponse.status === 'success' || apiResponse.statusCode === '100') {
         transaction.status = 'pending';
         transaction.service.orderId = apiResponse.reference || apiResponse.orderId;
-        transaction.provider = {
-          ...(transaction.provider || {}),
-          name: transaction.service.provider,
-          providerReference: apiResponse.reference || apiResponse.orderId,
-          providerResponse: apiResponse,
-        };
+        transaction.providerResponse = apiResponse;
         transaction.statusHistory.push({ 
           status: 'pending', 
           note: `Order received: ${apiResponse.reference || apiResponse.orderId}`, 
           timestamp: new Date() 
         });
         await transaction.save();
-        await scheduleTransactionPolling(transaction, 'data_purchase_initiated');
 
         res.status(200).json({
           status: 'success',
@@ -408,12 +390,13 @@ exports.purchaseData = async (req, res, next) => {
         throw new AppError(apiResponse.message || 'Purchase failed', 400);
       }
     } catch (err) {
-      await VtuTransactionLifecycleService.markFailed(transaction._id, {
-        source: 'provider-initiation',
-        note: err.message,
-        providerName: transaction.service?.provider,
-        notificationMessage: `Your data purchase of N${sellingPrice} failed during provider initiation. Amount has been refunded.`,
-      });
+      // Refund wallet on failure
+      await wallet.credit(sellingPrice, 'Data purchase refund');
+
+      transaction.status = 'failed';
+      transaction.failureReason = err.message;
+      transaction.statusHistory.push({ status: 'failed', note: err.message, timestamp: new Date() });
+      await transaction.save();
 
       logger.error(`Data purchase failed → ${err.message}`);
       return next(new AppError(`Data purchase failed: ${err.message}`, 500));
@@ -509,99 +492,91 @@ exports.purchaseAirtime = async (req, res, next) => {
       ],
     });
 
-    try {
-      let apiResponse;
-      let responseData;
+    let apiResponse;
+    let responseData;
 
-      // Route to the appropriate provider
-      if (activeProvider === 'airtimenigeria') {
-        apiResponse = await AirtimeNigeriaService.purchaseAirtime({
-          network: network.toLowerCase(),
-          phone: phoneNumber,
-          amount: parseInt(amount),
-          maxAmount: parseInt(amount),
-          customerReference: requestId,
-        });
-        responseData = { status: apiResponse.status === 'success' ? 'ORDER_RECEIVED' : 'FAILED' };
-      } else if (activeProvider === 'smeplug') {
-        const smeCallbackUrl = `${SERVER_URL}/api/v1/telecom/webhook/smeplug`;
-        apiResponse = await SmePlugService.purchaseAirtime({
-          phone: phoneNumber,
-          network: network.toLowerCase(),
-          amount: parseInt(amount),
-          customerReference: requestId,
-          callbackUrl: smeCallbackUrl,
-        });
-        responseData = { status: apiResponse.status === 'success' ? 'ORDER_RECEIVED' : 'FAILED' };
-      } else {
-        apiResponse = await axios.get(
-          "https://www.nellobytesystems.com/APIAirtimeV1.asp",
-          {
-            params: {
-              UserID: process.env.NELLO_USER_ID,
-              APIKey: process.env.NELLO_API_KEY,
-              MobileNetwork: networkCode,
-              Amount: amount,
-              MobileNumber: phoneNumber,
-              RequestID: requestId,
-              CallBackURL: AIRTIME_CALLBACK_URL,
-            },
-            timeout: 10000,
-          }
-        );
-        responseData = apiResponse.data;
-      }
-
-      if (responseData.status === "ORDER_RECEIVED") {
-        transaction.status = "pending";
-        transaction.service = {
-          ...transaction.service,
-          orderId: apiResponse?.reference || responseData?.orderid || requestId
-        };
-        transaction.provider = {
-          ...(transaction.provider || {}),
-          name: activeProvider,
-          providerReference: apiResponse?.reference || responseData?.orderid || requestId,
-          providerResponse: apiResponse?.data || apiResponse || responseData,
-        };
-
-        transaction.statusHistory.push({
-          status: "pending",
-          note: "Order received by provider",
-          timestamp: new Date(),
-        });
-
-        await transaction.save();
-        await scheduleTransactionPolling(transaction, 'airtime_purchase_initiated');
-      } else {
-        await VtuTransactionLifecycleService.markFailed(transaction._id, {
-          source: 'provider-initiation',
-          note: responseData.status || 'Provider rejected request',
-          providerName: activeProvider,
-          providerReference: apiResponse?.reference || responseData?.orderid || requestId,
-          providerResponse: apiResponse?.data || apiResponse || responseData,
-          notificationMessage: `Your airtime purchase of N${amount} failed during provider initiation. Amount has been refunded.`,
-        });
-      }
-
-      res.status(200).json({
-        status: "success",
-        message: "Airtime purchase processing",
-        data: {
-          reference: requestId,
-          provider: activeProvider,
-          providerResponse: responseData,
-        },
+    // Route to the appropriate provider
+    if (activeProvider === 'airtimenigeria') {
+      // Use AirtimeNigeria API
+      apiResponse = await AirtimeNigeriaService.purchaseAirtime({
+        network: network.toLowerCase(),
+        phone: phoneNumber,
+        amount: parseInt(amount),
+        maxAmount: parseInt(amount),
+        customerReference: requestId,
       });
-    } catch (providerError) {
-      await VtuTransactionLifecycleService.markFailed(transaction._id, {
-        source: 'provider-initiation',
-        note: providerError.message,
-        providerName: activeProvider,
-        notificationMessage: `Your airtime purchase of N${amount} failed during provider initiation. Amount has been refunded.`,
+      responseData = { status: apiResponse.status === 'success' ? 'ORDER_RECEIVED' : 'FAILED' };
+      
+    } else if (activeProvider === 'smeplug') {
+      // Use SMEPlug API
+      const smeCallbackUrl = `${SERVER_URL}/api/v1/telecom/webhook/smeplug`;
+      apiResponse = await SmePlugService.purchaseAirtime({
+        phone: phoneNumber,
+        network: network.toLowerCase(),
+        amount: parseInt(amount),
+        customerReference: requestId,
+        callbackUrl: smeCallbackUrl,
       });
-      throw providerError;
+      responseData = { status: apiResponse.status === 'success' ? 'ORDER_RECEIVED' : 'FAILED' };
+      
+    } else {
+      // Default: Use NelloBytes
+      apiResponse = await axios.get(
+        "https://www.nellobytesystems.com/APIAirtimeV1.asp",
+        {
+          params: {
+            UserID: process.env.NELLO_USER_ID,
+            APIKey: process.env.NELLO_API_KEY,
+            MobileNetwork: networkCode,
+            Amount: amount,
+            MobileNumber: phoneNumber,
+            RequestID: requestId,
+            CallBackURL: AIRTIME_CALLBACK_URL,
+          },
+          timeout: 10000,
+        }
+      );
+      responseData = apiResponse.data;
     }
+
+    if (responseData.status === "ORDER_RECEIVED") {
+      transaction.status = "pending";
+
+      transaction.service = {
+        ...transaction.service,
+        orderId: apiResponse?.reference || responseData?.orderid || requestId
+      };
+
+      transaction.statusHistory.push({
+        status: "pending",
+        note: "Order received by provider",
+        timestamp: new Date(),
+      });
+
+      await transaction.save();
+    } else {
+      transaction.status = "failed";
+
+      transaction.statusHistory.push({
+        status: "failed",
+        note: responseData.status || "Provider rejected request",
+        timestamp: new Date(),
+      });
+
+      await transaction.save();
+
+      await wallet.credit(amount, "Airtime refund");
+    }
+
+    res.status(200).json({
+      status: "success",
+      message: "Airtime purchase processing",
+      data: {
+        reference: requestId,
+        provider: activeProvider,
+        providerResponse: responseData,
+      },
+    });
   } catch (error) {
     console.error("Airtime Error:", error);
     next(error);
@@ -627,25 +602,35 @@ exports.airtimeCallback = async (req, res) => {
 
     if (orderstatus === "ORDER_COMPLETED" || statuscode === "200") {
 
-      await VtuTransactionLifecycleService.markSuccessful(transaction._id, {
-        source: 'webhook:nellobytes-callback',
+      transaction.status = "successful";
+
+      transaction.statusHistory.push({
+        status: "successful",
         note: orderremark || "Airtime delivered successfully",
-        providerName: transaction.service?.provider,
-        providerReference: orderid,
-        providerResponse: req.query,
+        timestamp: new Date()
       });
+
+      await transaction.save();
+      
+      // Send notification
+      await NotificationService.airtimePurchase(
+        transaction.user,
+        transaction.service?.network,
+        transaction.amount,
+        transaction.service?.phoneNumber
+      );
 
     } else {
 
-      await VtuTransactionLifecycleService.markFailed(transaction._id, {
-        source: 'webhook:nellobytes-callback',
+      transaction.status = "failed";
+
+      transaction.statusHistory.push({
+        status: "failed",
         note: orderremark || "Provider reported failure",
-        providerName: transaction.service?.provider,
-        providerReference: orderid,
-        providerResponse: req.query,
-        notificationMessage: `Your airtime purchase of N${transaction.amount} to ${transaction.service?.phoneNumber} failed. Amount has been refunded.`,
+        timestamp: new Date()
       });
-      return res.send("OK");
+
+      await transaction.save();
       
       // Refund wallet and send notification
       const wallet = await Wallet.findOne({ user: transaction.user });
@@ -699,33 +684,30 @@ exports.airtimeWebhook = async (req, res) => {
     }
 
     if (statuscode === "100") {
-      await VtuTransactionLifecycleService.markPending(transaction._id, {
-        source: 'webhook:nellobytes-airtime',
+      transaction.status = 'pending';
+      transaction.statusHistory.push({
+        status: 'pending',
         note: status,
-        providerName: transaction.service?.provider,
-        providerReference: transaction.service?.orderId || orderid,
-        providerResponse: req.body,
+        timestamp: new Date(),
       });
-      return res.status(200).send('OK');
+
     } else if (statuscode === "200") {
-      await VtuTransactionLifecycleService.markSuccessful(transaction._id, {
-        source: 'webhook:nellobytes-airtime',
+      transaction.status = 'successful';
+      transaction.statusHistory.push({
+        status: 'successful',
         note: 'Confirmed by provider',
-        providerName: transaction.service?.provider,
-        providerReference: transaction.service?.orderId || orderid,
-        providerResponse: req.body,
+        timestamp: new Date(),
       });
-      return res.status(200).send('OK');
+
+      // Send notification for successful airtime purchase
+      await NotificationService.airtimePurchase(
+        transaction.user,
+        transaction.service?.network,
+        transaction.amount,
+        transaction.service?.phoneNumber
+      );
+
     } else {
-      await VtuTransactionLifecycleService.markFailed(transaction._id, {
-        source: 'webhook:nellobytes-airtime',
-        note: status || 'Provider failure',
-        providerName: transaction.service?.provider,
-        providerReference: transaction.service?.orderId || orderid,
-        providerResponse: req.body,
-        notificationMessage: `Your airtime purchase of N${transaction.amount} to ${transaction.service?.phoneNumber} failed. Amount has been refunded.`,
-      });
-      return res.status(200).send('OK');
       transaction.status = 'failed';
       transaction.statusHistory.push({
         status: 'failed',
@@ -890,16 +872,6 @@ exports.nelloBytesWebhook = async (req, res, next) => {
 
     // Handle different status codes
     if (statuscode === '200' || orderstatus === 'ORDER_COMPLETED') {
-      await VtuTransactionLifecycleService.markSuccessful(transaction._id, {
-        source: 'webhook:nellobytes',
-        note: orderremark || 'Transaction completed successfully',
-        providerName: transaction.service?.provider,
-        providerReference: orderid,
-        providerResponse: data,
-      });
-      logger.info(`Transaction ${transaction.reference} marked as successful`);
-      return res.status(200).send('OK');
-
       // Success
       transaction.status = 'successful';
       transaction.statusHistory.push({
@@ -929,15 +901,6 @@ exports.nelloBytesWebhook = async (req, res, next) => {
       logger.info(`Transaction ${transaction.reference} marked as successful`);
       
     } else if (statuscode === '100' || orderstatus === 'ORDER_RECEIVED') {
-      await VtuTransactionLifecycleService.markPending(transaction._id, {
-        source: 'webhook:nellobytes',
-        note: orderremark || 'Order received, processing',
-        providerName: transaction.service?.provider,
-        providerReference: orderid,
-        providerResponse: data,
-      });
-      return res.status(200).send('OK');
-
       // Order received, still processing
       transaction.status = 'pending';
       transaction.statusHistory.push({
@@ -948,15 +911,6 @@ exports.nelloBytesWebhook = async (req, res, next) => {
       await transaction.save();
       
     } else if (orderstatus === 'ORDER_ONHOLD') {
-      await VtuTransactionLifecycleService.markPending(transaction._id, {
-        source: 'webhook:nellobytes',
-        note: orderremark || 'Order on hold',
-        providerName: transaction.service?.provider,
-        providerReference: orderid,
-        providerResponse: data,
-      });
-      return res.status(200).send('OK');
-
       // Order on hold
       transaction.status = 'pending';
       transaction.statusHistory.push({
@@ -967,17 +921,6 @@ exports.nelloBytesWebhook = async (req, res, next) => {
       await transaction.save();
       
     } else {
-      await VtuTransactionLifecycleService.markFailed(transaction._id, {
-        source: 'webhook:nellobytes',
-        note: orderremark || 'Transaction failed',
-        providerName: transaction.service?.provider,
-        providerReference: orderid,
-        providerResponse: data,
-        notificationMessage: `Your ${transaction.type || 'transaction'} purchase failed. Amount has been refunded.`,
-      });
-      logger.info(`Transaction ${transaction.reference} marked as failed, wallet refunded`);
-      return res.status(200).send('OK');
-
       // Failed - refund wallet
       if (user) {
         const wallet = await Wallet.findOne({ user: user._id });
@@ -1159,19 +1102,13 @@ exports.purchaseAirtimeNigeriaData = async (req, res, next) => {
 
       transaction.status = 'pending';
       transaction.service.orderId = apiResponse.reference;
-      transaction.provider = {
-        ...(transaction.provider || {}),
-        name: 'airtimenigeria',
-        providerReference: apiResponse.reference,
-        providerResponse: apiResponse,
-      };
+      transaction.providerResponse = apiResponse;
       transaction.statusHistory.push({ 
         status: 'pending', 
         note: `Order received: ${apiResponse.reference}`, 
         timestamp: new Date() 
       });
       await transaction.save();
-      await scheduleTransactionPolling(transaction, 'airtimenigeria_data_purchase_initiated');
 
       res.status(200).json({
         status: 'success',
@@ -1188,12 +1125,13 @@ exports.purchaseAirtimeNigeriaData = async (req, res, next) => {
         },
       });
     } catch (err) {
-      await VtuTransactionLifecycleService.markFailed(transaction._id, {
-        source: 'provider-initiation',
-        note: err.message,
-        providerName: 'airtimenigeria',
-        notificationMessage: `Your data purchase of N${sellingPrice} failed during provider initiation. Amount has been refunded.`,
-      });
+      // Refund wallet on failure
+      await wallet.credit(sellingPrice, 'Data purchase refund');
+
+      transaction.status = 'failed';
+      transaction.failureReason = err.message;
+      transaction.statusHistory.push({ status: 'failed', note: err.message, timestamp: new Date() });
+      await transaction.save();
 
       logger.error(`AirtimeNigeria data purchase failed → ${err.message}`);
       return next(new AppError(`Data purchase failed: ${err.message}`, 500));
@@ -1274,19 +1212,13 @@ exports.purchaseAirtimeNigeriaAirtime = async (req, res, next) => {
 
       transaction.status = 'pending';
       transaction.service.orderId = apiResponse.reference;
-      transaction.provider = {
-        ...(transaction.provider || {}),
-        name: 'airtimenigeria',
-        providerReference: apiResponse.reference,
-        providerResponse: apiResponse,
-      };
+      transaction.providerResponse = apiResponse;
       transaction.statusHistory.push({ 
         status: 'pending', 
         note: `Order received: ${apiResponse.reference}`, 
         timestamp: new Date() 
       });
       await transaction.save();
-      await scheduleTransactionPolling(transaction, 'airtimenigeria_airtime_purchase_initiated');
 
       res.status(200).json({
         status: 'success',
@@ -1302,12 +1234,13 @@ exports.purchaseAirtimeNigeriaAirtime = async (req, res, next) => {
         },
       });
     } catch (err) {
-      await VtuTransactionLifecycleService.markFailed(transaction._id, {
-        source: 'provider-initiation',
-        note: err.message,
-        providerName: 'airtimenigeria',
-        notificationMessage: `Your airtime purchase of N${amount} failed during provider initiation. Amount has been refunded.`,
-      });
+      // Refund wallet on failure
+      await wallet.credit(amount, 'Airtime purchase refund');
+
+      transaction.status = 'failed';
+      transaction.failureReason = err.message;
+      transaction.statusHistory.push({ status: 'failed', note: err.message, timestamp: new Date() });
+      await transaction.save();
 
       logger.error(`AirtimeNigeria airtime purchase failed → ${err.message}`);
       return next(new AppError(`Airtime purchase failed: ${err.message}`, 500));
@@ -1363,15 +1296,6 @@ exports.airtimeNigeriaWebhook = async (req, res) => {
     
     // Update transaction based on delivery status
     if (result.status === 'success') {
-      await VtuTransactionLifecycleService.markSuccessful(transaction._id, {
-        source: 'webhook:airtimenigeria',
-        note: result.message || 'Delivered successfully',
-        providerName: transaction.service?.provider,
-        providerReference: result.reference,
-        providerResponse: payload,
-      });
-      return res.status(200).send('OK');
-
       transaction.status = 'successful';
       transaction.statusHistory.push({
         status: 'successful',
@@ -1390,16 +1314,6 @@ exports.airtimeNigeriaWebhook = async (req, res) => {
         reference: transaction.reference,
       });
     } else {
-      await VtuTransactionLifecycleService.markFailed(transaction._id, {
-        source: 'webhook:airtimenigeria',
-        note: result.message || 'Delivery failed',
-        providerName: transaction.service?.provider,
-        providerReference: result.reference,
-        providerResponse: payload,
-        notificationMessage: `Your ${transaction.type} of N${transaction.amount} failed. Amount has been refunded.`,
-      });
-      return res.status(200).send('OK');
-
       transaction.status = 'failed';
       transaction.statusHistory.push({
         status: 'failed',
@@ -1544,19 +1458,13 @@ exports.purchaseSmePlugData = async (req, res, next) => {
 
       transaction.status = 'pending';
       transaction.service.orderId = apiResponse.reference;
-      transaction.provider = {
-        ...(transaction.provider || {}),
-        name: 'smeplug',
-        providerReference: apiResponse.reference,
-        providerResponse: apiResponse,
-      };
+      transaction.providerResponse = apiResponse;
       transaction.statusHistory.push({ 
         status: 'pending', 
         note: `Order received: ${apiResponse.reference}`, 
         timestamp: new Date() 
       });
       await transaction.save();
-      await scheduleTransactionPolling(transaction, 'smeplug_data_purchase_initiated');
 
       res.status(200).json({
         status: 'success',
@@ -1573,12 +1481,13 @@ exports.purchaseSmePlugData = async (req, res, next) => {
         },
       });
     } catch (err) {
-      await VtuTransactionLifecycleService.markFailed(transaction._id, {
-        source: 'provider-initiation',
-        note: err.message,
-        providerName: 'smeplug',
-        notificationMessage: `Your data purchase of N${sellingPrice} failed during provider initiation. Amount has been refunded.`,
-      });
+      // Refund wallet on failure
+      await wallet.credit(sellingPrice, 'Data purchase refund');
+
+      transaction.status = 'failed';
+      transaction.failureReason = err.message;
+      transaction.statusHistory.push({ status: 'failed', note: err.message, timestamp: new Date() });
+      await transaction.save();
 
       logger.error(`SMEPlug data purchase failed → ${err.message}`);
       return next(new AppError(`Data purchase failed: ${err.message}`, 500));
@@ -1660,19 +1569,13 @@ exports.purchaseSmePlugAirtime = async (req, res, next) => {
 
       transaction.status = 'pending';
       transaction.service.orderId = apiResponse.reference;
-      transaction.provider = {
-        ...(transaction.provider || {}),
-        name: 'smeplug',
-        providerReference: apiResponse.reference,
-        providerResponse: apiResponse,
-      };
+      transaction.providerResponse = apiResponse;
       transaction.statusHistory.push({ 
         status: 'pending', 
         note: `Order received: ${apiResponse.reference}`, 
         timestamp: new Date() 
       });
       await transaction.save();
-      await scheduleTransactionPolling(transaction, 'smeplug_airtime_purchase_initiated');
 
       res.status(200).json({
         status: 'success',
@@ -1688,12 +1591,13 @@ exports.purchaseSmePlugAirtime = async (req, res, next) => {
         },
       });
     } catch (err) {
-      await VtuTransactionLifecycleService.markFailed(transaction._id, {
-        source: 'provider-initiation',
-        note: err.message,
-        providerName: 'smeplug',
-        notificationMessage: `Your airtime purchase of N${sellingPrice} failed during provider initiation. Amount has been refunded.`,
-      });
+      // Refund wallet on failure
+      await wallet.credit(sellingPrice, 'Airtime purchase refund');
+
+      transaction.status = 'failed';
+      transaction.failureReason = err.message;
+      transaction.statusHistory.push({ status: 'failed', note: err.message, timestamp: new Date() });
+      await transaction.save();
 
       logger.error(`SMEPlug airtime purchase failed → ${err.message}`);
       return next(new AppError(`Airtime purchase failed: ${err.message}`, 500));
