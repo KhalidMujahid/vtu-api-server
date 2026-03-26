@@ -37,6 +37,22 @@ class SmePlugService {
     return this.networkMap[network.toLowerCase()] || network;
   }
 
+  static formatPhoneNumber(phone) {
+    if (!phone) {
+      return phone;
+    }
+
+    if (phone.startsWith('+234')) {
+      return `0${phone.substring(4)}`;
+    }
+
+    if (phone.startsWith('234')) {
+      return `0${phone.substring(3)}`;
+    }
+
+    return phone;
+  }
+
   /**
    * Get Wallet Balance
    */
@@ -176,14 +192,8 @@ class SmePlugService {
     try {
       const networkId = this.getNetworkId(network);
       
-      // Format phone number: SMEPlug expects 0 prefix (e.g., 09013678439)
-      // Try with 0 prefix first
-      let formattedPhone = phone;
-      if (phone.startsWith('234')) {
-        formattedPhone = '0' + phone.substring(3);
-      } else if (phone.startsWith('+234')) {
-        formattedPhone = '0' + phone.substring(4);
-      }
+      // SMEPlug expects a local 0-prefixed MSISDN.
+      const formattedPhone = this.formatPhoneNumber(phone);
       
       console.log('SMEPlug purchase - network:', network, '-> networkId:', networkId, 'phone:', formattedPhone);
       
@@ -248,10 +258,11 @@ class SmePlugService {
     
     try {
       const networkId = this.getNetworkId(network);
+      const formattedPhone = this.formatPhoneNumber(phone);
       
       const requestBody = {
         network_id: networkId,
-        phone,
+        phone: formattedPhone,
         amount: parseInt(amount),
         customer_reference: customerReference || '',
       };
@@ -261,6 +272,8 @@ class SmePlugService {
         requestBody.callback_url = callbackUrl;
       }
       
+      logger.info(`SMEPlug purchaseAirtime request: ${JSON.stringify(requestBody)}`);
+
       const response = await axios.post(
         `${this.getConfig().baseUrl}/airtime/purchase`,
         requestBody,
@@ -269,6 +282,8 @@ class SmePlugService {
           timeout: this.getConfig().timeout,
         }
       );
+
+      logger.info(`SMEPlug purchaseAirtime response: ${JSON.stringify(response.data)}`);
 
       if (response.data?.status) {
         return {
@@ -282,7 +297,17 @@ class SmePlugService {
       throw new Error(response.data?.message || 'Airtime purchase failed');
     } catch (error) {
       logger.error('SmePlug purchaseAirtime error:', error.response?.data || error.message);
-      throw new Error(error.response?.data?.message || error.message || 'Airtime purchase failed');
+
+      const errorData = error.response?.data;
+      const errorMsg = errorData?.message
+        || errorData?.msg
+        || errorData?.error
+        || errorData?.data?.message
+        || errorData?.data?.msg
+        || error.message
+        || 'Airtime purchase failed';
+
+      throw new Error(`Airtime purchase failed: ${errorMsg}`);
     }
   }
 
