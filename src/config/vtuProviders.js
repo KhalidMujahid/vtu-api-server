@@ -334,19 +334,15 @@ module.exports = {
 
       switch (source) {
         case 'nellobytes':
-          // ClubKonnect format: { MOBILE_NETWORK: { MTN: [...], Glo: [...], m_9mobile: [...], Airtel: [...] } }
           normalizedData = this._normalizeNelloBytes(data);
           break;
         case 'smeplug':
-          // SMEPlug format: { plans: { mtn: [...], glo: [...], airtel: [...], 9mobile: [...] } }
           normalizedData = this._normalizeSmePlug(data);
           break;
         case 'airtimenigeria':
-          // AirtimeNigeria format: { data: { mtn: [...], glo: [...], airtel: [...], 9mobile: [...] } }
           normalizedData = this._normalizeAirtimeNigeria(data);
           break;
         default:
-          // Return as-is if unknown source
           return data;
       }
 
@@ -409,7 +405,17 @@ module.exports = {
    */
   _normalizeSmePlug(data) {
     const result = {};
-    const plans = data.plans || data;
+    
+    // Handle different response formats:
+    // 1. { plans: { mtn: [...] } }
+    // 2. { data: { mtn: [...] }, source: "smeplug" }
+    // 3. { mtn: [...] }
+    let plans = data.plans || data.data || data;
+    
+    // If data has source field at top level, it means data plans are nested inside
+    if (data.data && data.source) {
+      plans = data.data;
+    }
     
     const networkMap = {
       'MTN': 'mtn',

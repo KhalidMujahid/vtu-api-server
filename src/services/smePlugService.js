@@ -176,10 +176,21 @@ class SmePlugService {
     try {
       const networkId = this.getNetworkId(network);
       
+      // Format phone number: SMEPlug expects 0 prefix (e.g., 09013678439)
+      // Try with 0 prefix first
+      let formattedPhone = phone;
+      if (phone.startsWith('234')) {
+        formattedPhone = '0' + phone.substring(3);
+      } else if (phone.startsWith('+234')) {
+        formattedPhone = '0' + phone.substring(4);
+      }
+      
+      console.log('SMEPlug purchase - network:', network, '-> networkId:', networkId, 'phone:', formattedPhone);
+      
       const requestBody = {
         network_id: networkId,
-        phone,
-        plan_id: planId,
+        phone: formattedPhone,
+        plan_id: Number(planId), // Ensure it's sent as a number
         customer_reference: customerReference || '',
       };
       
@@ -187,6 +198,8 @@ class SmePlugService {
       if (callbackUrl) {
         requestBody.callback_url = callbackUrl;
       }
+      
+      logger.info(`SMEPlug purchaseData request: ${JSON.stringify(requestBody)}`);
       
       const response = await axios.post(
         `${this.getConfig().baseUrl}/data/purchase`,
@@ -196,6 +209,8 @@ class SmePlugService {
           timeout: this.getConfig().timeout,
         }
       );
+
+      logger.info(`SMEPlug purchaseData response: ${JSON.stringify(response.data)}`);
 
       if (response.data?.status) {
         return {
@@ -209,7 +224,18 @@ class SmePlugService {
       throw new Error(response.data?.message || 'Data purchase failed');
     } catch (error) {
       logger.error('SmePlug purchaseData error:', error.response?.data || error.message);
-      throw new Error(error.response?.data?.message || error.message || 'Data purchase failed');
+      console.error('SmePlug purchaseData full error:', error.response);
+      
+      // Try to get the actual error message from SMEPlug response
+      const errorData = error.response?.data;
+      const errorMsg = errorData?.message 
+        || errorData?.msg 
+        || errorData?.error 
+        || errorData?.data?.message
+        || errorData?.data?.msg
+        || error.message 
+        || 'Data purchase failed';
+      throw new Error(`Data purchase failed: ${errorMsg}`);
     }
   }
 
