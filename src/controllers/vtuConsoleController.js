@@ -170,6 +170,14 @@ exports.getProviderConfig = async (req, res, next) => {
     dbStatuses.forEach(s => {
       statusMap[s.providerName] = s;
     });
+
+    const balanceEntries = await Promise.all(
+      providers.map(async (provider) => [
+        provider.id,
+        await VtuProviderService.getProviderBalance(provider.id),
+      ])
+    );
+    const balanceMap = Object.fromEntries(balanceEntries);
     
     // Return only public configuration (no API keys) but include DB status
     const publicConfig = providers.map(p => {
@@ -195,6 +203,7 @@ exports.getProviderConfig = async (req, res, next) => {
         successRate: dbStatus.successRate || 100,
         uptime: dbStatus.uptime || 100,
         lastChecked: dbStatus.lastChecked || null,
+        balance: balanceMap[p.id] || null,
       };
     });
     

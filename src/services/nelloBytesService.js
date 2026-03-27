@@ -68,6 +68,26 @@ class NelloBytesService {
     }
   }
 
+  /**
+   * Get wallet balance
+   */
+  static async getWalletBalance() {
+    const endpoint = '/APIWalletBalanceV1.asp';
+    const response = await this.request(endpoint);
+
+    const balanceValue = Number(response?.balance ?? 0);
+
+    return {
+      success: true,
+      id: response?.id || this.config.userId,
+      phoneNumber: response?.phoneno || null,
+      balance: Number.isNaN(balanceValue) ? 0 : balanceValue,
+      currency: 'NGN',
+      date: response?.date || null,
+      raw: response,
+    };
+  }
+
   // ============================================
   // DATA BUNDLE API
   // ============================================

@@ -7,6 +7,9 @@ const axios = require('axios');
 const ProviderStatus = require('../models/ProviderStatus');
 const vtuConfig = require('../config/vtuProviders');
 const logger = require('../utils/logger');
+const AirtimeNigeriaService = require('./airtimeNigeriaService');
+const SmePlugService = require('./smePlugService');
+const NelloBytesService = require('./nelloBytesService');
 
 class VtuProviderService {
   
@@ -34,7 +37,10 @@ class VtuProviderService {
     }
 
     try {
-      const dbStatus = await ProviderStatus.findOne({ providerName: providerId });
+      const [dbStatus, balance] = await Promise.all([
+        ProviderStatus.findOne({ providerName: providerId }),
+        this.getProviderBalance(providerId),
+      ]);
       
       return {
         providerId,
@@ -53,6 +59,7 @@ class VtuProviderService {
         color: provider.color,
         icon: provider.icon,
         features: provider.features,
+        balance,
       };
     } catch (error) {
       logger.error(`Error getting provider status for ${providerId}:`, error);
@@ -63,6 +70,15 @@ class VtuProviderService {
         isDefault: provider.isDefault,
         priority: provider.priority,
         color: provider.color,
+        balance: {
+          providerId,
+          providerName: provider.name,
+          available: false,
+          balance: null,
+          currency: 'NGN',
+          message: error.message || 'Unable to fetch provider balance',
+          lastUpdated: new Date(),
+        },
       };
     }
   }
@@ -368,18 +384,82 @@ class VtuProviderService {
       throw new Error(`Provider ${providerId} not found`);
     }
 
-    // Mock balance response - in production, this would call the provider's API
-    return {
-      providerId,
-      providerName: provider.name,
-      balance: Math.floor(Math.random() * 1000000),
-      currency: 'NGN',
-      lastUpdated: new Date(),
-      quota: {
-        used: Math.floor(Math.random() * 20000),
-        total: 20000,
-      },
-    };
+    try {
+      switch (provider.source) {
+        case 'airtimenigeria': {
+          const result = await AirtimeNigeriaService.getWalletBalance();
+          const wallets = result?.data || {};
+          const primaryBalance =
+            Number(wallets.universalWallet) ||
+            Number(wallets.mtnDataWallet) ||
+            Number(wallets.airtelEdsWallet) ||
+            Number(wallets.gloCgWallet) ||
+            Number(wallets.smsWallet) ||
+            0;
+
+          return {
+            providerId,
+            providerName: provider.name,
+            available: true,
+            balance: primaryBalance,
+            currency: 'NGN',
+            breakdown: wallets,
+            lastUpdated: new Date(),
+          };
+        }
+
+        case 'smeplug': {
+          const result = await SmePlugService.getWalletBalance();
+          return {
+            providerId,
+            providerName: provider.name,
+            available: true,
+            balance: Number(result?.balance || 0),
+            currency: result?.currency || 'NGN',
+            raw: result,
+            lastUpdated: new Date(),
+          };
+        }
+
+        case 'nellobytes':
+        case 'clubkonnect': {
+          const result = await NelloBytesService.getWalletBalance();
+          return {
+            providerId,
+            providerName: provider.name,
+            available: true,
+            balance: Number(result?.balance || 0),
+            currency: result?.currency || 'NGN',
+            accountId: result?.id || null,
+            phoneNumber: result?.phoneNumber || null,
+            raw: result?.raw || result,
+            lastUpdated: new Date(),
+          };
+        }
+
+        default:
+          return {
+            providerId,
+            providerName: provider.name,
+            available: false,
+            balance: null,
+            currency: 'NGN',
+            message: 'Balance endpoint is not implemented for this provider yet',
+            lastUpdated: new Date(),
+          };
+      }
+    } catch (error) {
+      logger.warn(`Unable to fetch balance for provider ${providerId}: ${error.message}`);
+      return {
+        providerId,
+        providerName: provider.name,
+        available: false,
+        balance: null,
+        currency: 'NGN',
+        message: error.message || 'Failed to fetch provider balance',
+        lastUpdated: new Date(),
+      };
+    }
   }
 
   /**

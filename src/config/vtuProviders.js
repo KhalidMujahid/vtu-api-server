@@ -160,7 +160,6 @@ module.exports = {
     return this.providers[this.defaults.primaryProvider];
   },
 
-  // Sync version for backward compatibility
   getProviderForServiceSync(serviceType) {
     const providerId = this.serviceRouting[serviceType] || this.defaults.primaryProvider;
     if (providerId && this.providers[providerId]) {
@@ -176,14 +175,12 @@ module.exports = {
    */
   async getProviderIdForService(serviceType) {
     try {
-      // Always try to fetch fresh config from database
       const VtuConfig = require('../models/VtuConfig');
       
       if (VtuConfig.db && VtuConfig.db.collection) {
         const dbConfig = await VtuConfig.findOne({ key: 'serviceRouting' }).lean();
         
         if (dbConfig && dbConfig.value && dbConfig.value[serviceType]) {
-          // Update in-memory config and return
           this.serviceRouting[serviceType] = dbConfig.value[serviceType];
           console.log('getProviderIdForService - fetched from DB:', serviceType, '=', dbConfig.value[serviceType]);
           return dbConfig.value[serviceType];
@@ -193,11 +190,9 @@ module.exports = {
       console.error('getProviderIdForService - DB fetch error:', error.message);
     }
     
-    // Fallback to in-memory config
     return this.serviceRouting[serviceType] || this.defaults.primaryProvider;
   },
 
-  // Sync version for backward compatibility
   getProviderIdForServiceSync(serviceType) {
     return this.serviceRouting[serviceType] || this.defaults.primaryProvider;
   },
@@ -225,7 +220,6 @@ module.exports = {
     return { ...this.serviceRouting };
   },
 
-  // Map source name to service class
   getDataPlansService(source) {
     const serviceMap = {
       'nellobytes': require('../services/nelloBytesService'),
@@ -235,7 +229,6 @@ module.exports = {
     return serviceMap[source] || null;
   },
 
-  // Map source name to service class for airtime
   getAirtimeService(source) {
     const serviceMap = {
       'nellobytes': require('../services/nelloBytesService'),
@@ -251,12 +244,10 @@ module.exports = {
   async loadFromDatabase() {
     let VtuConfig;
     try {
-      // Dynamic import to avoid circular dependency
       VtuConfig = require('../models/VtuConfig');
       
       console.log('Loading VTU config from database...');
       
-      // Check if the model is ready
       if (!VtuConfig.db || !VtuConfig.db.collection) {
         console.log('Database not ready yet, using default config');
         return this.serviceRouting;
@@ -266,7 +257,6 @@ module.exports = {
       console.log('Database query result:', dbConfig);
       
       if (dbConfig && dbConfig.value) {
-        // Merge database config with default config
         this.serviceRouting = { ...this.serviceRouting, ...dbConfig.value };
         console.log('✓ VTU service routing loaded from database:', JSON.stringify(dbConfig.value));
       } else {
@@ -334,19 +324,15 @@ module.exports = {
 
       switch (source) {
         case 'nellobytes':
-          // ClubKonnect format: { MOBILE_NETWORK: { MTN: [...], Glo: [...], m_9mobile: [...], Airtel: [...] } }
           normalizedData = this._normalizeNelloBytes(data);
           break;
         case 'smeplug':
-          // SMEPlug format: { plans: { mtn: [...], glo: [...], airtel: [...], 9mobile: [...] } }
           normalizedData = this._normalizeSmePlug(data);
           break;
         case 'airtimenigeria':
-          // AirtimeNigeria format: { data: { mtn: [...], glo: [...], airtel: [...], 9mobile: [...] } }
           normalizedData = this._normalizeAirtimeNigeria(data);
           break;
         default:
-          // Return as-is if unknown source
           return data;
       }
 
