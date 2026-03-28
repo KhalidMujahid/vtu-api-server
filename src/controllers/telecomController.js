@@ -20,34 +20,190 @@ function generateReference(prefix = 'TX') {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
 }
 
+const SOURCE_TO_PROVIDER = {
+  nellobytes: 'clubkonnect',
+  airtimenigeria: 'airtimenigeria',
+  smeplug: 'smeplug',
+};
+
+const DATA_NETWORKS = ['mtn', 'glo', 'airtel', '9mobile'];
+
+function normalizeNetwork(network) {
+  if (!network) {
+    return network;
+  }
+
+  const rawValue = Array.isArray(network) ? network[0] : network;
+  const sanitized = String(rawValue)
+    .trim()
+    .toLowerCase()
+    .replace(/^[^a-z0-9]+/, '')
+    .replace(/[^a-z0-9]+$/g, '');
+
+  const aliases = {
+    etisalat: '9mobile',
+    '9mobile': '9mobile',
+    mtn: 'mtn',
+    airtel: 'airtel',
+    glo: 'glo',
+  };
+
+  return aliases[sanitized] || sanitized;
+}
+
+function buildDataPlansResponse(plans) {
+  return plans.reduce((acc, plan) => {
+    const network = normalizeNetwork(plan.network);
+    if (!network) {
+      return acc;
+    }
+
+    if (!acc[network]) {
+      acc[network] = [];
+    }
+
+    acc[network].push({
+      id: plan._id,
+      planCode: plan.planCode,
+      providerPlanId: plan.providerPlanId || plan.planCode,
+      variationCode: plan.variationCode || null,
+      provider: plan.provider,
+      planName: plan.planName,
+      size: plan.size || plan.dataAmount,
+      price: plan.sellingPrice,
+      costPrice: plan.costPrice,
+      validity: plan.validity,
+      isAvailable: plan.isAvailable,
+      availabilityMessage: plan.availabilityMessage || null,
+      providerPlanType: plan.providerPlanType || null,
+    });
+    return acc;
+  }, {});
+}
+
+async function getConfiguredDataPlans(providerId, network = null, includeUnavailable = true) {
+  const query = {
+    serviceType: 'data_recharge',
+    provider: providerId,
+    isActive: true,
+  };
+
+  if (!includeUnavailable) {
+    query.isAvailable = true;
+  }
+
+  if (network) {
+    query.network = normalizeNetwork(network);
+  }
+
+  return ServicePricing.find(query)
+    .sort({ priority: 1, sellingPrice: 1, planName: 1 })
+    .select('-createdBy -updatedBy')
+    .lean();
+}
+
+async function resolveDataPricing({ providerId, network, planIdentifier, allowUnavailable = false, fallbackPlan = null }) {
+  const normalizedNetwork = normalizeNetwork(network);
+  const availabilityFilter = allowUnavailable ? [true, false] : [true];
+  const planValue = String(planIdentifier);
+
+  let pricing = await ServicePricing.findOne({
+    serviceType: 'data_recharge',
+    provider: providerId,
+    network: normalizedNetwork,
+    isActive: true,
+    isAvailable: { $in: availabilityFilter },
+    $or: [
+      { planCode: planValue },
+      { providerPlanId: planValue },
+      { variationCode: planValue },
+      { planName: planValue },
+    ],
+  });
+
+  if (!pricing && fallbackPlan) {
+    pricing = await ServicePricing.findOne({
+      serviceType: 'data_recharge',
+      provider: providerId,
+      network: normalizedNetwork,
+      isActive: true,
+      isAvailable: { $in: availabilityFilter },
+      $or: [
+        { planName: fallbackPlan.planName },
+        { size: fallbackPlan.size },
+        { dataAmount: fallbackPlan.dataAmount },
+      ].filter((entry) => Object.values(entry)[0]),
+    });
+  }
+
+  return pricing;
+}
+
+function isProviderBalanceError(error) {
+  const message = `${error?.response?.data?.message || ''} ${error?.message || ''}`.toLowerCase();
+  return message.includes('insufficient') && message.includes('balance');
+}
+
+function getProviderAttemptOrder(network, preferredProvider) {
+  const ordered = [];
+
+  if (preferredProvider) {
+    ordered.push(preferredProvider);
+  }
+
+  for (const provider of VtuProviderService.getProvidersForNetwork(network)) {
+    if (!ordered.includes(provider.id) && provider.supportedServices.includes('data_recharge')) {
+      ordered.push(provider.id);
+    }
+  }
+
+  return ordered;
+}
+
+function normalizePhoneForSmePlug(phoneNumber) {
+  if (phoneNumber.startsWith('0')) {
+    return `234${phoneNumber.substring(1)}`;
+  }
+  if (!phoneNumber.startsWith('234')) {
+    return `234${phoneNumber}`;
+  }
+  return phoneNumber;
+}
+
 exports.getDataPlans = async (req, res, next) => {
   try {
     const { network, source } = req.query;
-    
-    // Get active provider from config (API console setting) - always fetches fresh from DB
+    const normalizedNetwork = normalizeNetwork(network);
+
+    if (normalizedNetwork && !DATA_NETWORKS.includes(normalizedNetwork)) {
+      return next(new AppError('Invalid network provider', 400));
+    }
+
     const activeProviderId = await vtuConfig.getProviderIdForService('data');
     const activeProvider = vtuConfig.providers[activeProviderId];
     const providerSource = activeProvider?.source || 'nellobytes';
-    
-    // If source is explicitly specified in query, use that
     const selectedSource = source || providerSource;
-    
-    console.log('getDataPlans - activeProviderId:', activeProviderId, 'providerSource:', providerSource, 'selectedSource:', selectedSource);
-    
-    // Get the service class based on source
+    const selectedProviderId = SOURCE_TO_PROVIDER[selectedSource] || activeProviderId;
+
+    const configuredPlans = await getConfiguredDataPlans(selectedProviderId, normalizedNetwork, true);
+    if (configuredPlans.length > 0) {
+      const responseData = buildDataPlansResponse(configuredPlans);
+      return res.status(200).json({
+        status: 'success',
+        results: configuredPlans.length,
+        data: responseData,
+        source: 'admin',
+        provider: selectedProviderId,
+      });
+    }
+
     const DataService = vtuConfig.getDataPlansService(selectedSource);
     
     if (DataService && DataService.getDataPlans) {
-      // Fetch from provider API
-      const rawPlans = await DataService.getDataPlans(network);
-      
-      // Transform to unified format
+      const rawPlans = await DataService.getDataPlans(normalizedNetwork);
       const unifiedPlans = vtuConfig.transformDataPlans(selectedSource, rawPlans);
-      
-      // Filter by network if specified
       let responseData = unifiedPlans;
-      if (network) {
-        const normalizedNetwork = network.toLowerCase();
+      if (normalizedNetwork) {
         responseData = { [normalizedNetwork]: unifiedPlans[normalizedNetwork] || [] };
       }
       
@@ -55,41 +211,26 @@ exports.getDataPlans = async (req, res, next) => {
         status: 'success',
         data: responseData,
         source: selectedSource,
-        provider: activeProviderId,
+        provider: selectedProviderId,
       });
     }
-    
-    // Fallback: fetch from database if provider not recognized
-    console.log('getDataPlans - falling back to database, selectedSource:', selectedSource);
-    const query = { serviceType: 'data_recharge', isActive: true, isAvailable: true };
 
-    if (network) {
-      const allowedNetworks = ['mtn', 'glo', 'airtel', '9mobile'];
-      if (!allowedNetworks.includes(network.toLowerCase())) {
-        return next(new AppError('Invalid network provider', 400));
-      }
-      query.network = network.toLowerCase();
-    }
-
-    const dataPlans = await ServicePricing.find(query)
-      .sort({ sellingPrice: 1 })
-      .select('-costPrice -profitMargin -createdBy -updatedBy')
+    const fallbackPlans = await ServicePricing.find({
+      serviceType: 'data_recharge',
+      isActive: true,
+      ...(normalizedNetwork ? { network: normalizedNetwork } : {}),
+    })
+      .sort({ priority: 1, sellingPrice: 1 })
+      .select('-createdBy -updatedBy')
       .lean();
 
-    const groupedPlans = dataPlans.reduce((acc, plan) => {
-      acc[plan.network] = acc[plan.network] || [];
-      acc[plan.network].push({
-        id: plan._id,
-        planCode: plan.planCode,
-        planName: plan.planName,
-        size: plan.size,
-        price: plan.sellingPrice,
-        validity: plan.validity,
-      });
-      return acc;
-    }, {});
-
-    res.status(200).json({ status: 'success', results: dataPlans.length, data: groupedPlans, source: 'database', provider: activeProviderId });
+    res.status(200).json({
+      status: 'success',
+      results: fallbackPlans.length,
+      data: buildDataPlansResponse(fallbackPlans),
+      source: 'database',
+      provider: selectedProviderId,
+    });
   } catch (error) {
     console.error('getDataPlans error:', error);
     next(error);
@@ -99,40 +240,21 @@ exports.getDataPlans = async (req, res, next) => {
 exports.purchaseData = async (req, res, next) => {
   try {
     const { phoneNumber, network, dataPlan, planId, transactionPin, amount, provider, source } = req.body;
-    
-    // Support both dataPlan and planId for backward compatibility
     const planIdentifier = dataPlan || planId;
-    
-    // Get default provider for data from config - always fetches fresh from DB
+    const normalizedNetwork = normalizeNetwork(network);
     const defaultProvider = await vtuConfig.getProviderIdForService('data');
+    const requestedProvider = source
+      ? (SOURCE_TO_PROVIDER[source] || defaultProvider)
+      : (provider || defaultProvider);
     
-    // Determine active provider: source parameter overrides default config
-    // source maps to provider's source property (nellobytes, airtimenigeria, smeplug)
-    let activeProvider;
-    if (source) {
-      // Map source to provider ID
-      const sourceToProvider = {
-        'nellobytes': 'clubkonnect',
-        'airtimenigeria': 'airtimenigeria',
-        'smeplug': 'smeplug'
-      };
-      activeProvider = sourceToProvider[source] || defaultProvider;
-    } else if (provider) {
-      activeProvider = provider;
-    } else {
-      activeProvider = defaultProvider;
-    }
-    
-    // Get provider info to determine which source/service to use
-    const providerConfig = vtuConfig.providers[activeProvider];
-    const activeSource = providerConfig?.source || 'nellobytes';
-    
-    // More specific validation
     if (!phoneNumber) {
       return next(new AppError('Phone number is required', 400));
     }
-    if (!network) {
+    if (!normalizedNetwork) {
       return next(new AppError('Network is required', 400));
+    }
+    if (!DATA_NETWORKS.includes(normalizedNetwork)) {
+      return next(new AppError('Invalid network provider', 400));
     }
     if (!planIdentifier) {
       return next(new AppError('Data plan is required (dataPlan or planId)', 400));
@@ -160,77 +282,25 @@ exports.purchaseData = async (req, res, next) => {
       return next(new AppError('Wallet not found', 404));
     }
 
-    // Get pricing from database, provider API, or use provided amount
-    let pricing = null;
-    let sellingPrice = 0;
+    const requestedPricing = await resolveDataPricing({
+      providerId: requestedProvider,
+      network: normalizedNetwork,
+      planIdentifier,
+      allowUnavailable: true,
+    });
+
+    if (requestedPricing && requestedPricing.isAvailable === false) {
+      return next(new AppError(requestedPricing.availabilityMessage || 'Service Temporarily Unavailable', 503));
+    }
+
+    let sellingPrice = requestedPricing?.sellingPrice || 0;
 
     if (amount && !isNaN(amount) && parseFloat(amount) > 0) {
-      // Use amount provided by user
       sellingPrice = parseFloat(amount);
-      pricing = { sellingPrice };
-    } else {
-      // Try to get pricing from database first
-      pricing = await ServicePricing.findOne({
-        serviceType: 'data_recharge',
-        network: network.toLowerCase(),
-        planCode: planIdentifier,
-        isActive: true,
-        isAvailable: true,
-      });
+    }
 
-      if (!pricing) {
-        // If not in database, try to get from provider API
-        console.log('Plan not in database, trying provider API for:', planIdentifier);
-        
-        // Get price from provider API based on activeSource
-        try {
-          let providerPrice = null;
-          
-          if (activeSource === 'airtimenigeria') {
-            // Get price from AirtimeNigeria
-            const plans = await AirtimeNigeriaService.getDataPlans(network.toLowerCase());
-            const plan = plans?.data?.[network.toLowerCase()]?.find(p => 
-              p.planId == planIdentifier || p.planCode === planIdentifier || p.planName === planIdentifier
-            );
-            providerPrice = plan?.price;
-          } else if (activeSource === 'smeplug') {
-            // Get price from SMEPlug
-            const plans = await SmePlugService.getDataPlans(network.toLowerCase());
-            const plan = plans?.plans?.[network.toLowerCase()]?.find(p => 
-              p.id == planIdentifier || p.planCode === planIdentifier || p.planName === planIdentifier
-            );
-            providerPrice = plan?.price;
-          } else {
-            // Default: Get price from NelloBytes
-            const plans = await NelloBytesService.getDataPlans(network.toLowerCase());
-            // Find in nested structure
-            const mobileNetwork = plans?.MOBILE_NETWORK || {};
-            for (const networkKey of Object.values(mobileNetwork)) {
-              if (Array.isArray(networkKey)) {
-                const plan = networkKey.find(p => 
-                  p.PRODUCT_ID == planIdentifier || p.PRODUCT_CODE === planIdentifier || p.PRODUCT_NAME === planIdentifier
-                );
-                if (plan) {
-                  providerPrice = parseFloat(plan.PRODUCT_AMOUNT);
-                  break;
-                }
-              }
-            }
-          }
-          
-          if (providerPrice) {
-            sellingPrice = providerPrice;
-            console.log('Found price from provider API:', sellingPrice);
-          } else {
-            return next(new AppError('Data plan not found. Please provide an amount.', 404));
-          }
-        } catch (apiError) {
-          console.error('Error fetching price from provider API:', apiError.message);
-          return next(new AppError('Data plan not available. Please provide an amount.', 404));
-        }
-      } else {
-        sellingPrice = pricing.sellingPrice;
-      }
+    if (!sellingPrice) {
+      return next(new AppError('Data plan pricing is not configured for this provider', 404));
     }
 
     if (wallet.balance < sellingPrice) {
@@ -253,121 +323,92 @@ exports.purchaseData = async (req, res, next) => {
       previousBalance: wallet.balance + sellingPrice,
       newBalance: wallet.balance,
       status: 'pending',
-      description: `${network.toUpperCase()} ${planIdentifier} for ${phoneNumber}`,
+      description: `${normalizedNetwork.toUpperCase()} ${requestedPricing?.planName || planIdentifier} for ${phoneNumber}`,
       service: {
-        provider: activeProvider,
-        network: network.toLowerCase(),
+        provider: requestedProvider,
+        network: normalizedNetwork,
         plan: planIdentifier,
         phoneNumber,
       },
-      statusHistory: [{ status: 'pending', note: `Purchase initiated via ${activeProvider}`, timestamp: new Date() }],
+      statusHistory: [{ status: 'pending', note: `Purchase initiated via ${requestedProvider}`, timestamp: new Date() }],
     });
 
     try {
       let apiResponse;
-      
-      // Route to the appropriate provider based on source
-      // activeSource comes from provider config (nellobytes, airtimenigeria, smeplug)
-      if (activeSource === 'airtimenigeria') {
-        // Use AirtimeNigeria API
-        
-        // Resolve plan name to plan ID if needed
-        let resolvedPlanId = planIdentifier;
-        if (isNaN(parseInt(planIdentifier)) && !planIdentifier.includes('_')) {
-          // It's a plan name, not an ID - fetch from API to get the ID
-          try {
-            const plansData = await AirtimeNigeriaService.getDataPlans(network.toLowerCase());
-            const plans = plansData?.data?.[network.toLowerCase()] || [];
-            const foundPlan = plans.find(p => p.planName === planIdentifier || p.planId == planIdentifier || p.planCode === planIdentifier);
-            if (foundPlan) {
-              resolvedPlanId = foundPlan.planId?.toString() || foundPlan.planCode;
-              console.log('Resolved AirtimeNigeria plan:', planIdentifier, '->', resolvedPlanId);
-            }
-          } catch (e) {
-            console.error('Error resolving plan ID:', e.message);
+      let successfulProvider = requestedProvider;
+      let activePricing = requestedPricing;
+      let lastProviderError;
+
+      for (const providerId of getProviderAttemptOrder(normalizedNetwork, requestedProvider)) {
+        const providerConfig = vtuConfig.providers[providerId];
+        if (!providerConfig) {
+          continue;
+        }
+
+        const attemptPricing = providerId === requestedProvider
+          ? requestedPricing
+          : await resolveDataPricing({
+              providerId,
+              network: normalizedNetwork,
+              planIdentifier,
+              fallbackPlan: requestedPricing,
+            });
+
+        if (!attemptPricing || attemptPricing.isAvailable === false) {
+          continue;
+        }
+
+        try {
+          if (providerConfig.source === 'airtimenigeria') {
+            apiResponse = await AirtimeNigeriaService.purchaseData({
+              phone: phoneNumber,
+              variationCode: attemptPricing.variationCode,
+              packageCode: attemptPricing.planCode || attemptPricing.providerPlanId || planIdentifier,
+              planId: attemptPricing.providerPlanId,
+              callbackUrl,
+              customerReference: reference,
+            });
+          } else if (providerConfig.source === 'smeplug') {
+            apiResponse = await SmePlugService.purchaseData({
+              phone: normalizePhoneForSmePlug(phoneNumber),
+              network: normalizedNetwork,
+              planId: attemptPricing.providerPlanId || attemptPricing.planCode || planIdentifier,
+              customerReference: reference,
+              callbackUrl: `${SERVER_URL}/api/v1/telecom/webhook/smeplug`,
+            });
+          } else {
+            apiResponse = await NelloBytesService.purchaseData({
+              network: normalizedNetwork,
+              dataPlan: attemptPricing.providerPlanId || attemptPricing.planCode || planIdentifier,
+              mobileNumber: phoneNumber,
+              callBackURL: callbackUrl,
+            });
+          }
+
+          successfulProvider = providerId;
+          activePricing = attemptPricing;
+          break;
+        } catch (providerError) {
+          lastProviderError = providerError;
+          if (!isProviderBalanceError(providerError)) {
+            throw providerError;
           }
         }
-        
-        apiResponse = await AirtimeNigeriaService.purchaseData({
-          phone: phoneNumber,
-          packageCode: resolvedPlanId,
-          callbackUrl,
-          customerReference: reference,
-        });
-        transaction.service.provider = 'airtimenigeria';
-        
-      } else if (activeSource === 'smeplug') {
-        // Use SMEPlug API
-        const smeCallbackUrl = `${SERVER_URL}/api/v1/telecom/webhook/smeplug`;
-        
-        // Format phone number for SMEPlug (remove leading 0, add 234)
-        let formattedPhone = phoneNumber;
-        if (phoneNumber.startsWith('0')) {
-          formattedPhone = '234' + phoneNumber.substring(1);
-        } else if (!phoneNumber.startsWith('234')) {
-          formattedPhone = '234' + phoneNumber;
-        }
-        console.log('SMEPlug formatted phone:', formattedPhone);
-        
-        // Resolve plan name to plan ID if needed
-        let resolvedPlanId = planIdentifier;
-        
-        // First check if it's a numeric ID already
-        if (!isNaN(parseInt(planIdentifier))) {
-          resolvedPlanId = parseInt(planIdentifier).toString();
-          console.log('SMEPlug using numeric planId:', resolvedPlanId);
-        } else {
-          // It's a plan name, not an ID - fetch from API to get the ID
-          try {
-            console.log('SMEPlug resolving plan name:', planIdentifier, 'network:', network.toLowerCase());
-            const plansData = await SmePlugService.getDataPlans(network.toLowerCase());
-            console.log('SMEPlug plans response keys:', Object.keys(plansData || {}));
-            const plans = plansData?.plans?.[network.toLowerCase()] || [];
-            console.log('SMEPlug plans for', network, ':', plans.length, 'plans');
-            
-            const foundPlan = plans.find(p => p.planName === planIdentifier);
-            if (foundPlan) {
-              resolvedPlanId = foundPlan.id.toString();
-              console.log('Resolved SMEPlug plan:', planIdentifier, '-> id:', resolvedPlanId);
-            } else {
-              console.log('Plan not found in SMEPlug plans, trying direct purchase with name');
-            }
-          } catch (e) {
-            console.error('Error resolving plan ID:', e.message);
-          }
-        }
-        
-        console.log('SMEPlug final - phone:', formattedPhone, 'planId:', resolvedPlanId, 'network:', network.toLowerCase());
-        
-        apiResponse = await SmePlugService.purchaseData({
-          phone: formattedPhone,
-          network: network.toLowerCase(),
-          planId: resolvedPlanId,
-          customerReference: reference,
-          callbackUrl: smeCallbackUrl,
-        });
-        transaction.service.provider = 'smeplug';
-        
-      } else {
-        // Default: Use NelloBytes (Club Konnect) - also handles 'nellobytes' source
-        apiResponse = await NelloBytesService.purchaseData({
-          network: network.toLowerCase(),
-          dataPlan: planIdentifier,
-          mobileNumber: phoneNumber,
-          callBackURL: callbackUrl,
-        });
-        transaction.service.provider = activeProvider; // Use the actual provider ID
-        transaction.service.provider = 'nellobytes';
       }
 
-      // Check if successful
+      if (!apiResponse) {
+        throw lastProviderError || new AppError('Service Temporarily Unavailable', 503);
+      }
+
       if (apiResponse.success || apiResponse.status === 'success' || apiResponse.statusCode === '100') {
         transaction.status = 'pending';
+        transaction.service.provider = successfulProvider;
+        transaction.service.plan = activePricing?.providerPlanId || activePricing?.variationCode || activePricing?.planCode || planIdentifier;
         transaction.service.orderId = apiResponse.reference || apiResponse.orderId;
         transaction.providerResponse = apiResponse;
         transaction.statusHistory.push({ 
           status: 'pending', 
-          note: `Order received: ${apiResponse.reference || apiResponse.orderId}`, 
+          note: `Order received from ${successfulProvider}: ${apiResponse.reference || apiResponse.orderId}`, 
           timestamp: new Date() 
         });
         await transaction.save();
@@ -379,11 +420,11 @@ exports.purchaseData = async (req, res, next) => {
             reference,
             orderId: apiResponse.reference || apiResponse.orderId,
             phoneNumber,
-            network,
-            dataPlan: planIdentifier,
+            network: normalizedNetwork,
+            dataPlan: activePricing?.planName || planIdentifier,
             amount: sellingPrice,
             status: 'pending',
-            provider: activeProvider,
+            provider: successfulProvider,
           },
         });
       } else {
@@ -423,15 +464,27 @@ const profitConfig = {
 
 exports.purchaseAirtime = async (req, res, next) => {
   try {
-    const { phoneNumber, network, amount, transactionPin, provider } = req.body;
+    const { phoneNumber, network, amount, transactionPin, provider, source, bonusType } = req.body;
+    const normalizedNetwork = normalizeNetwork(network);
+    const parsedAmount = Number(amount);
 
     if (!phoneNumber || !network || !amount || !transactionPin) {
       return next(new AppError("All fields required", 400));
     }
 
-    // Get default provider for airtime from config - always fetches fresh from DB
+    if (!normalizedNetwork || !DATA_NETWORKS.includes(normalizedNetwork)) {
+      return next(new AppError("Invalid network selected", 400));
+    }
+
+    if (Number.isNaN(parsedAmount) || parsedAmount < 50 || parsedAmount > 200000) {
+      return next(new AppError("Airtime amount must be between 50 and 200000", 400));
+    }
+
     const defaultProvider = await vtuConfig.getProviderIdForService('airtime');
-    const activeProvider = provider || defaultProvider;
+    const activeProvider = source
+      ? (SOURCE_TO_PROVIDER[source] || defaultProvider)
+      : (provider || defaultProvider);
+    const providerConfig = vtuConfig.providers[activeProvider];
 
     const user = await User.findById(req.user.id).select("+transactionPin");
 
@@ -450,11 +503,11 @@ exports.purchaseAirtime = async (req, res, next) => {
       return next(new AppError("Wallet not found", 404));
     }
 
-    if (wallet.balance < amount) {
+    if (wallet.balance < parsedAmount) {
       return next(new AppError("Insufficient wallet balance", 400));
     }
 
-    const networkCode = networkMap[network.toUpperCase()];
+    const networkCode = networkMap[normalizedNetwork.toUpperCase()];
     if (!networkCode) {
       return next(new AppError("Invalid network selected", 400));
     }
@@ -463,24 +516,24 @@ exports.purchaseAirtime = async (req, res, next) => {
       .randomBytes(3)
       .toString("hex")}`;
 
-    const profitPercent = profitConfig[network.toUpperCase()] || 0;
-    const profit = (profitPercent / 100) * amount;
+    const profitPercent = profitConfig[normalizedNetwork.toUpperCase()] || 0;
+    const profit = (profitPercent / 100) * parsedAmount;
 
-    await wallet.debit(amount, "Airtime purchase");
+    await wallet.debit(parsedAmount, "Airtime purchase");
 
     const transaction = await Transaction.create({
       reference: requestId,
       user: user._id,
       type: "airtime_recharge",
       category: "telecom",
-      amount,
+      amount: parsedAmount,
       profit,
-      totalAmount: amount,
+      totalAmount: parsedAmount,
       status: "pending",
-      description: `${network} airtime for ${phoneNumber}`,
+      description: `${normalizedNetwork} airtime for ${phoneNumber}`,
       service: {
         provider: activeProvider,
-        network,
+        network: normalizedNetwork,
         phoneNumber,
       },
       statusHistory: [
@@ -494,49 +547,49 @@ exports.purchaseAirtime = async (req, res, next) => {
 
     let apiResponse;
     let responseData;
+    const airtimeCallbackUrl = `${SERVER_URL}/api/v1/telecom/webhook/airtimenigeria`;
 
     // Route to the appropriate provider
-    if (activeProvider === 'airtimenigeria') {
-      // Use AirtimeNigeria API
+    if (providerConfig?.source === 'airtimenigeria') {
       apiResponse = await AirtimeNigeriaService.purchaseAirtime({
-        network: network.toLowerCase(),
+        network: normalizedNetwork,
         phone: phoneNumber,
-        amount: parseInt(amount),
-        maxAmount: parseInt(amount),
+        amount: parsedAmount,
+        maxAmount: parsedAmount,
+        callbackUrl: airtimeCallbackUrl,
         customerReference: requestId,
       });
-      responseData = { status: apiResponse.status === 'success' ? 'ORDER_RECEIVED' : 'FAILED' };
+      responseData = {
+        status: apiResponse.success ? "ORDER_RECEIVED" : "FAILED",
+        orderid: apiResponse.reference,
+        raw: apiResponse,
+      };
       
-    } else if (activeProvider === 'smeplug') {
-      // Use SMEPlug API
+    } else if (providerConfig?.source === 'smeplug') {
       const smeCallbackUrl = `${SERVER_URL}/api/v1/telecom/webhook/smeplug`;
       apiResponse = await SmePlugService.purchaseAirtime({
-        phone: phoneNumber,
-        network: network.toLowerCase(),
-        amount: parseInt(amount),
+        phone: normalizePhoneForSmePlug(phoneNumber),
+        network: normalizedNetwork,
+        amount: parsedAmount,
         customerReference: requestId,
         callbackUrl: smeCallbackUrl,
       });
-      responseData = { status: apiResponse.status === 'success' ? 'ORDER_RECEIVED' : 'FAILED' };
+      responseData = {
+        status: apiResponse.success ? "ORDER_RECEIVED" : "FAILED",
+        orderid: apiResponse.reference,
+        raw: apiResponse,
+      };
       
     } else {
-      // Default: Use NelloBytes
-      apiResponse = await axios.get(
-        "https://www.nellobytesystems.com/APIAirtimeV1.asp",
-        {
-          params: {
-            UserID: process.env.NELLO_USER_ID,
-            APIKey: process.env.NELLO_API_KEY,
-            MobileNetwork: networkCode,
-            Amount: amount,
-            MobileNumber: phoneNumber,
-            RequestID: requestId,
-            CallBackURL: AIRTIME_CALLBACK_URL,
-          },
-          timeout: 10000,
-        }
-      );
-      responseData = apiResponse.data;
+      apiResponse = await NelloBytesService.purchaseAirtime({
+        network: normalizedNetwork,
+        amount: parsedAmount,
+        mobileNumber: phoneNumber,
+        requestId,
+        callBackURL: AIRTIME_CALLBACK_URL,
+        bonusType,
+      });
+      responseData = apiResponse.response;
     }
 
     if (responseData.status === "ORDER_RECEIVED") {
@@ -565,7 +618,7 @@ exports.purchaseAirtime = async (req, res, next) => {
 
       await transaction.save();
 
-      await wallet.credit(amount, "Airtime refund");
+      await wallet.credit(parsedAmount, "Airtime refund");
     }
 
     res.status(200).json({
@@ -657,19 +710,7 @@ exports.airtimeCallback = async (req, res) => {
 };
 
 exports.queryAirtimeStatus = async (requestId) => {
-
-  const response = await axios.get(
-    "https://www.nellobytesystems.com/APIQueryV1.asp",
-    {
-      params: {
-        UserID: process.env.NELLO_USER_ID,
-        APIKey: process.env.NELLO_API_KEY,
-        RequestID: requestId,
-      },
-    }
-  );
-
-  return response.data;
+  return NelloBytesService.queryAirtimeTransaction({ requestId });
 };
 
 exports.airtimeWebhook = async (req, res) => {
@@ -743,27 +784,54 @@ exports.airtimeWebhook = async (req, res) => {
 
 exports.purchaseRechargePin = async (req, res, next) => {
   try {
-    const { network, pinType, quantity = 1, transactionPin } = req.body;
-    if (!network || !pinType || !transactionPin) return next(new AppError('All fields required', 400));
+    const { network, pinType, value, quantity = 1, transactionPin } = req.body;
+    const normalizedNetwork = normalizeNetwork(network);
+    const parsedQuantity = Number(quantity);
+    const parsedValue = Number(
+      String(value ?? pinType)
+        .replace(/[^\d]/g, '')
+    );
 
-    const user = await User.findById(req.user.id).select('+transactionPin walletBalance');
-    if (!(await user.compareTransactionPin(transactionPin))) return next(new AppError('Invalid transaction PIN', 401));
+    if (!network || (!pinType && !value) || !transactionPin) {
+      return next(new AppError('All fields required', 400));
+    }
 
-    const pricing = await ServicePricing.findOne({ serviceType: 'recharge_pin', network, planName: pinType, isActive: true });
-    if (!pricing) return next(new AppError('PIN not available', 404));
+    if (!normalizedNetwork || !DATA_NETWORKS.includes(normalizedNetwork)) {
+      return next(new AppError('Invalid network selected', 400));
+    }
 
-    const totalAmount = pricing.sellingPrice * quantity;
-    if (user.walletBalance < totalAmount) return next(new AppError('Insufficient balance', 400));
+    if (!Number.isInteger(parsedQuantity) || parsedQuantity < 1 || parsedQuantity > 100) {
+      return next(new AppError('Quantity must be between 1 and 100', 400));
+    }
 
-    user.walletBalance -= totalAmount;
-    await user.save();
+    const user = await User.findById(req.user.id).select('+transactionPin');
+    if (!user) {
+      return next(new AppError('User not found', 404));
+    }
+
+    if (!(await user.compareTransactionPin(transactionPin))) {
+      return next(new AppError('Invalid transaction PIN', 401));
+    }
+
+    const wallet = await Wallet.findOne({ user: user._id });
+    if (!wallet) {
+      return next(new AppError('Wallet not found', 404));
+    }
+
+    if (![100, 200, 500].includes(parsedValue)) {
+      return next(new AppError('Recharge PIN value must be 100, 200, or 500', 400));
+    }
+
+    const pinValue = parsedValue;
+    const totalAmount = pinValue * parsedQuantity;
+    if (wallet.balance < totalAmount) {
+      return next(new AppError('Insufficient balance', 400));
+    }
+
+    await wallet.debit(totalAmount, 'Recharge PIN purchase');
 
     const reference = generateReference('PIN');
-    const pins = Array.from({ length: quantity }, (_, i) => ({
-      pin: Math.floor(1000000000 + Math.random() * 9000000000).toString(),
-      serial: `SN${Date.now()}${i}`.substring(0, 12),
-      expiry: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
-    }));
+    const callbackUrl = `${SERVER_URL}/api/v1/telecom/webhook/nellobytes`;
 
     const transaction = await Transaction.create({
       reference,
@@ -772,18 +840,79 @@ exports.purchaseRechargePin = async (req, res, next) => {
       category: 'telecom',
       amount: totalAmount,
       totalAmount,
-      status: 'successful',
-      description: `${network.toUpperCase()} ${pinType} x${quantity}`,
-      service: { provider: network, plan: pinType, quantity },
-      providerResponse: { pins },
-      statusHistory: [{ status: 'successful', note: 'Recharge PIN generated', timestamp: new Date() }],
+      previousBalance: wallet.balance + totalAmount,
+      newBalance: wallet.balance,
+      status: 'pending',
+      description: `${normalizedNetwork.toUpperCase()} ${pinValue} x${parsedQuantity}`,
+      service: {
+        provider: 'clubkonnect',
+        network: normalizedNetwork,
+        plan: String(pinValue),
+        quantity: parsedQuantity,
+      },
+      statusHistory: [{ status: 'pending', note: 'Recharge PIN purchase initiated', timestamp: new Date() }],
     });
 
-    res.status(200).json({
-      status: 'success',
-      message: 'Recharge PIN generated successfully',
-      data: { reference, network, pinType, quantity, pins },
-    });
+    try {
+      const providerResponse = await NelloBytesService.buyEPIN({
+        mobileNetwork: normalizedNetwork,
+        value: pinValue,
+        quantity: parsedQuantity,
+        requestId: reference,
+        callBackURL: callbackUrl,
+      });
+
+      transaction.service.orderId = providerResponse.orderId || reference;
+      transaction.providerResponse = providerResponse;
+
+      if (providerResponse.epins?.length) {
+        transaction.status = 'successful';
+        transaction.statusHistory.push({
+          status: 'successful',
+          note: 'Recharge PIN generated by provider',
+          timestamp: new Date(),
+        });
+      } else {
+        transaction.status = 'pending';
+        transaction.statusHistory.push({
+          status: 'pending',
+          note: providerResponse.status || 'Recharge PIN request queued',
+          timestamp: new Date(),
+        });
+      }
+
+      await transaction.save();
+
+      res.status(200).json({
+        status: 'success',
+        message: providerResponse.epins?.length
+          ? 'Recharge PIN generated successfully'
+          : 'Recharge PIN request submitted successfully',
+        data: {
+          reference,
+          orderId: providerResponse.orderId || reference,
+          network: normalizedNetwork,
+          pinType: String(pinValue),
+          quantity: parsedQuantity,
+          pins: providerResponse.epins || [],
+          provider: 'clubkonnect',
+          providerStatus: providerResponse.status,
+        },
+      });
+    } catch (err) {
+      await wallet.credit(totalAmount, 'Recharge PIN refund');
+
+      transaction.status = 'failed';
+      transaction.failureReason = err.message;
+      transaction.statusHistory.push({
+        status: 'failed',
+        note: err.message || 'Recharge PIN purchase failed',
+        timestamp: new Date(),
+      });
+      await transaction.save();
+
+      return next(new AppError(`Recharge PIN purchase failed: ${err.message}`, 500));
+    }
   } catch (error) {
     next(error);
   }
@@ -1389,6 +1518,7 @@ exports.getSmePlugBalance = async (req, res, next) => {
 exports.purchaseSmePlugData = async (req, res, next) => {
   try {
     const { phoneNumber, network, planId, transactionPin } = req.body;
+    const normalizedNetwork = normalizeNetwork(network);
     
     if (!phoneNumber || !network || !planId) {
       return next(new AppError('Phone number, network, and plan ID are required', 400));
@@ -1413,9 +1543,17 @@ exports.purchaseSmePlugData = async (req, res, next) => {
       return next(new AppError('Wallet not found', 404));
     }
 
-    // For SMEPlug, we'll use a default price since we don't have the plan list
-    // In production, you should fetch the plan price first
-    const sellingPrice = 200; // Default placeholder - should fetch from API
+    const pricing = await resolveDataPricing({
+      providerId: 'smeplug',
+      network: normalizedNetwork,
+      planIdentifier: planId,
+    });
+
+    if (!pricing) {
+      return next(new AppError('Data plan pricing is not configured for SMEPlug', 404));
+    }
+
+    const sellingPrice = pricing.sellingPrice;
     
     if (wallet.balance < sellingPrice) {
       return next(new AppError('Insufficient wallet balance', 400));
@@ -1439,8 +1577,8 @@ exports.purchaseSmePlugData = async (req, res, next) => {
       description: `${network.toUpperCase()} data for ${phoneNumber}`,
       service: {
         provider: 'smeplug',
-        network: network.toLowerCase(),
-        plan: planId,
+        network: normalizedNetwork,
+        plan: pricing.providerPlanId || pricing.planCode || planId,
         phoneNumber,
       },
       statusHistory: [{ status: 'pending', note: 'Purchase initiated via SMEPlug', timestamp: new Date() }],
@@ -1449,9 +1587,9 @@ exports.purchaseSmePlugData = async (req, res, next) => {
     try {
       const callbackUrl = `${SERVER_URL}/api/v1/telecom/webhook/smeplug`;
       const apiResponse = await SmePlugService.purchaseData({
-        phone: phoneNumber,
-        network: network.toLowerCase(),
-        planId,
+        phone: normalizePhoneForSmePlug(phoneNumber),
+        network: normalizedNetwork,
+        planId: pricing.providerPlanId || pricing.planCode || planId,
         customerReference: reference,
         callbackUrl,
       });
@@ -1503,6 +1641,7 @@ exports.purchaseSmePlugData = async (req, res, next) => {
 exports.purchaseSmePlugAirtime = async (req, res, next) => {
   try {
     const { phoneNumber, network, amount, transactionPin } = req.body;
+    const normalizedNetwork = normalizeNetwork(network);
     
     if (!phoneNumber || !network || !amount) {
       return next(new AppError('Phone number, network, and amount are required', 400));
@@ -1551,7 +1690,7 @@ exports.purchaseSmePlugAirtime = async (req, res, next) => {
       description: `${network.toUpperCase()} ${amount} airtime for ${phoneNumber}`,
       service: {
         provider: 'smeplug',
-        network: network.toLowerCase(),
+        network: normalizedNetwork,
         phoneNumber,
       },
       statusHistory: [{ status: 'pending', note: 'Airtime purchase initiated via SMEPlug', timestamp: new Date() }],
@@ -1560,8 +1699,8 @@ exports.purchaseSmePlugAirtime = async (req, res, next) => {
     try {
       const callbackUrl = `${SERVER_URL}/api/v1/telecom/webhook/smeplug`;
       const apiResponse = await SmePlugService.purchaseAirtime({
-        phone: phoneNumber,
-        network: network.toLowerCase(),
+        phone: normalizePhoneForSmePlug(phoneNumber),
+        network: normalizedNetwork,
         amount: parseFloat(amount),
         customerReference: reference,
         callbackUrl,

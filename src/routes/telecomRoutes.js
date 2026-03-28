@@ -27,6 +27,7 @@ router.post('/webhook/smedata', telecomController.smedataWebhook);
  *         description: Webhook processed
  */
 router.post('/webhook/nellobytes', telecomController.nelloBytesWebhook);
+router.get('/webhook/nellobytes', telecomController.nelloBytesWebhook);
 
 /**
  * @swagger
@@ -298,6 +299,7 @@ router.get('/airtime/webhook', telecomController.airtimeWebhook);
  *         description: E-PIN plans
  */
 router.get('/epin/plans', telecomController.getEPINPlans);
+router.get('/recharge-pin/plans', telecomController.getEPINPlans);
 
 /**
  * @swagger
@@ -326,6 +328,7 @@ router.get('/epin/plans', telecomController.getEPINPlans);
  *         description: E-PIN purchased
  */
 router.post('/epin/purchase', requireTransactionPin, telecomController.purchaseRechargePin);
+router.post('/recharge-pin/purchase', requireTransactionPin, telecomController.purchaseRechargePin);
 
 /**
  * @swagger

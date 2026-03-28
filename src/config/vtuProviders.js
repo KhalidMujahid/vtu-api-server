@@ -133,8 +133,8 @@ module.exports = {
 
   billPaymentServices: {
     electricity: {
-      providers: ['airtimenigeria', 'smeplug'],
-      defaultProvider: 'smeplug',
+      providers: ['clubkonnect', 'airtimenigeria', 'smeplug'],
+      defaultProvider: 'clubkonnect',
     },
     cable_tv: {
       providers: ['clubkonnect', 'airtimenigeria', 'smeplug'],
@@ -148,7 +148,7 @@ module.exports = {
     airtimepin: 'airtimenigeria',
     education: 'smeplug',
     electricity: 'clubkonnect',
-    cable: 'airtimenigeria',
+    cable: 'clubkonnect',
     airtime2cash: 'smeplug',
   },
 

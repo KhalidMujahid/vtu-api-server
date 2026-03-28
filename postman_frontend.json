@@ -25,8 +25,15 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/auth/register",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "auth", "register"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "register"
+              ]
             },
             "description": "Register a new user account"
           },
@@ -48,8 +55,15 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/agents/register",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "agents", "register"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agents",
+                "register"
+              ]
             },
             "description": "Register as an agent (requires approval)"
           },
@@ -71,8 +85,15 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/auth/login",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "auth", "login"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
             },
             "description": "Login with email and password"
           },
@@ -94,8 +115,15 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/agents/login",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "agents", "login"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agents",
+                "login"
+              ]
             },
             "description": "Agent login (separate endpoint)"
           },
@@ -117,8 +145,15 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/auth/verify-otp",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "auth", "verify-otp"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "verify-otp"
+              ]
             },
             "description": "Verify OTP sent to email or phone"
           },
@@ -140,8 +175,15 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/auth/resend-otp",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "auth", "resend-otp"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "resend-otp"
+              ]
             },
             "description": "Resend OTP to email or phone"
           },
@@ -163,8 +205,15 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/auth/forgot-password",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "auth", "forgot-password"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "forgot-password"
+              ]
             },
             "description": "Request password reset link"
           },
@@ -186,8 +235,16 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/auth/reset-password/:token",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "auth", "reset-password", ":token"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "reset-password",
+                ":token"
+              ],
               "variable": [
                 {
                   "key": "token",
@@ -219,8 +276,15 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/auth/change-password",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "auth", "change-password"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "change-password"
+              ]
             },
             "description": "Change password (requires authentication)"
           },
@@ -238,8 +302,15 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/auth/profile",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "auth", "profile"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "profile"
+              ]
             },
             "description": "Get user profile (requires authentication)"
           },
@@ -265,8 +336,15 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/auth/profile",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "auth", "profile"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "profile"
+              ]
             },
             "description": "Update user profile"
           },
@@ -292,8 +370,15 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/auth/set-transaction-pin",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "auth", "set-transaction-pin"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "set-transaction-pin"
+              ]
             },
             "description": "Set transaction PIN (4 digits)"
           },
@@ -316,8 +401,15 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/agents/dashboard",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "agents", "dashboard"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agents",
+                "dashboard"
+              ]
             },
             "description": "Get agent dashboard statistics"
           },
@@ -335,8 +427,15 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/agents/services",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "agents", "services"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agents",
+                "services"
+              ]
             },
             "description": "Get available services for agents"
           },
@@ -358,8 +457,16 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/agents/wallet/create",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "agents", "wallet", "create"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agents",
+                "wallet",
+                "create"
+              ]
             },
             "description": "Create wallet for agent"
           },
@@ -377,8 +484,16 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/agents/wallet/status",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "agents", "wallet", "status"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agents",
+                "wallet",
+                "status"
+              ]
             },
             "description": "Check if agent has a wallet"
           },
@@ -396,8 +511,16 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/agents/wallet/balance",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "agents", "wallet", "balance"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agents",
+                "wallet",
+                "balance"
+              ]
             },
             "description": "Get agent wallet balance"
           },
@@ -423,8 +546,16 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/agents/wallet/fund",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "agents", "wallet", "fund"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agents",
+                "wallet",
+                "fund"
+              ]
             },
             "description": "Fund agent wallet"
           },
@@ -450,8 +581,16 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/agents/wallet/transfer",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "agents", "wallet", "transfer"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agents",
+                "wallet",
+                "transfer"
+              ]
             },
             "description": "Transfer funds to another user"
           },
@@ -477,8 +616,16 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/agents/wallet/withdraw",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "agents", "wallet", "withdraw"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agents",
+                "wallet",
+                "withdraw"
+              ]
             },
             "description": "Withdraw funds to bank account"
           },
@@ -496,8 +643,16 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/agents/wallet/transactions?page=1&limit=20",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "agents", "wallet", "transactions"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agents",
+                "wallet",
+                "transactions"
+              ]
             },
             "description": "Get agent transaction history"
           },
@@ -515,8 +670,16 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/agents/wallet/accounts",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "agents", "wallet", "accounts"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agents",
+                "wallet",
+                "accounts"
+              ]
             },
             "description": "Get agent virtual bank accounts"
           },
@@ -542,8 +705,16 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/agents/wallet/set-pin",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "agents", "wallet", "set-pin"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agents",
+                "wallet",
+                "set-pin"
+              ]
             },
             "description": "Set agent transaction PIN"
           },
@@ -561,8 +732,15 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/agents/commission",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "agents", "commission"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agents",
+                "commission"
+              ]
             },
             "description": "Get agent commission balance"
           },
@@ -588,8 +766,16 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/agents/commission/withdraw",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "agents", "commission", "withdraw"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agents",
+                "commission",
+                "withdraw"
+              ]
             },
             "description": "Withdraw agent commission to bank account"
           },
@@ -615,8 +801,16 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/agents/purchase/airtime",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "agents", "purchase", "airtime"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agents",
+                "purchase",
+                "airtime"
+              ]
             },
             "description": "Purchase airtime as agent"
           },
@@ -642,8 +836,16 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/agents/purchase/data",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "agents", "purchase", "data"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agents",
+                "purchase",
+                "data"
+              ]
             },
             "description": "Purchase data plan as agent"
           },
@@ -669,8 +871,15 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/agents/pay-bill",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "agents", "pay-bill"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agents",
+                "pay-bill"
+              ]
             },
             "description": "Pay bills (electricity, cable TV) as agent"
           },
@@ -696,8 +905,15 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/agents/verify-customer",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "agents", "verify-customer"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agents",
+                "verify-customer"
+              ]
             },
             "description": "Verify customer details for bill payments"
           },
@@ -715,8 +931,15 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/agents/profile",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "agents", "profile"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agents",
+                "profile"
+              ]
             },
             "description": "Get agent profile details"
           },
@@ -734,8 +957,15 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/agents/agents?page=1&limit=20&search=smith&state=Lagos&isVerified=true&minCommission=0&maxCommission=10000",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "agents", "agents"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agents",
+                "agents"
+              ],
               "query": [
                 {
                   "key": "page",
@@ -783,8 +1013,16 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/agents/agents/:id",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "agents", "agents", ":id"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agents",
+                "agents",
+                ":id"
+              ],
               "variable": [
                 {
                   "key": "id",
@@ -816,8 +1054,15 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/agents/agents",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "agents", "agents"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agents",
+                "agents"
+              ]
             },
             "description": "Create new agent (Admin only)"
           },
@@ -843,8 +1088,16 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/agents/agents/:id",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "agents", "agents", ":id"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agents",
+                "agents",
+                ":id"
+              ],
               "variable": [
                 {
                   "key": "id",
@@ -876,8 +1129,17 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/agents/agents/:id/verify-documents",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "agents", "agents", ":id", "verify-documents"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agents",
+                "agents",
+                ":id",
+                "verify-documents"
+              ],
               "variable": [
                 {
                   "key": "id",
@@ -901,8 +1163,17 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/agents/agents/:id/performance?period=monthly",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "agents", "agents", ":id", "performance"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agents",
+                "agents",
+                ":id",
+                "performance"
+              ],
               "query": [
                 {
                   "key": "period",
@@ -932,8 +1203,17 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/agents/agents/:id/commission-report?startDate=2024-01-01&endDate=2024-12-31&page=1&limit=20",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "agents", "agents", ":id", "commission-report"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agents",
+                "agents",
+                ":id",
+                "commission-report"
+              ],
               "query": [
                 {
                   "key": "startDate",
@@ -983,8 +1263,17 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/agents/agents/:id/withdraw-commission",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "agents", "agents", ":id", "withdraw-commission"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agents",
+                "agents",
+                ":id",
+                "withdraw-commission"
+              ],
               "variable": [
                 {
                   "key": "id",
@@ -1013,8 +1302,15 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/wallet/balance",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "wallet", "balance"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "wallet",
+                "balance"
+              ]
             },
             "description": "Get wallet balance and details"
           },
@@ -1040,8 +1336,15 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/wallet/fund",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "wallet", "fund"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "wallet",
+                "fund"
+              ]
             },
             "description": "Initialize wallet funding via payment gateway"
           },
@@ -1067,8 +1370,15 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/wallet/transfer",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "wallet", "transfer"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "wallet",
+                "transfer"
+              ]
             },
             "description": "Transfer funds to another user"
           },
@@ -1094,8 +1404,15 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/wallet/withdraw",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "wallet", "withdraw"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "wallet",
+                "withdraw"
+              ]
             },
             "description": "Withdraw funds to bank account"
           },
@@ -1113,8 +1430,15 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/wallet/transactions?page=1&limit=20&type=data_recharge&startDate=2024-01-01&endDate=2024-12-31",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "wallet", "transactions"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "wallet",
+                "transactions"
+              ],
               "query": [
                 {
                   "key": "page",
@@ -1162,8 +1486,15 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/wallet/set-pin",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "wallet", "set-pin"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "wallet",
+                "set-pin"
+              ]
             },
             "description": "Set wallet transaction PIN"
           },
@@ -1186,8 +1517,16 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/telecom/data/plans?network=mtn",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "telecom", "data", "plans"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "telecom",
+                "data",
+                "plans"
+              ],
               "query": [
                 {
                   "key": "network",
@@ -1215,12 +1554,20 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"phoneNumber\": \"08012345678\",\n  \"network\": \"mtn\",\n  \"planId\": \"{{plan_id}}\",\n  \"transactionPin\": \"1234\"\n}"
+              "raw": "{\n  \"phoneNumber\": \"08012345678\",\n  \"network\": \"mtn\",\n  \"dataPlan\": \"1000\",\n  \"transactionPin\": \"1234\",\n  \"source\": \"nellobytes\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/telecom/data/purchase",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "telecom", "data", "purchase"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "telecom",
+                "data",
+                "purchase"
+              ]
             },
             "description": "Purchase data plan for a phone number"
           },
@@ -1242,12 +1589,20 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"phoneNumber\": \"08012345678\",\n  \"network\": \"mtn\",\n  \"amount\": 500,\n  \"transactionPin\": \"1234\"\n}"
+              "raw": "{\n  \"phoneNumber\": \"08012345678\",\n  \"network\": \"mtn\",\n  \"amount\": 1000,\n  \"transactionPin\": \"1234\",\n  \"source\": \"nellobytes\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/telecom/airtime/purchase",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "telecom", "airtime", "purchase"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "telecom",
+                "airtime",
+                "purchase"
+              ]
             },
             "description": "Purchase airtime for a phone number"
           },
@@ -1273,8 +1628,16 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/telecom/airtime/swap",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "telecom", "airtime", "swap"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "telecom",
+                "airtime",
+                "swap"
+              ]
             },
             "description": "Convert airtime to wallet balance"
           },
@@ -1300,8 +1663,16 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/telecom/recharge-pin/purchase",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "telecom", "recharge-pin", "purchase"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "telecom",
+                "recharge-pin",
+                "purchase"
+              ]
             },
             "description": "Purchase recharge PINs"
           },
@@ -1328,12 +1699,20 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"meterNumber\": \"12345678901\",\n  \"disco\": \"aedc\",\n  \"meterType\": \"prepaid\"\n}"
+              "raw": "{\n  \"meterNumber\": \"12345678901\",\n  \"disco\": \"ekedc\",\n  \"meterType\": \"prepaid\",\n  \"source\": \"nellobytes\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/bills/electricity/verify",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "bills", "electricity", "verify"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bills",
+                "electricity",
+                "verify"
+              ]
             },
             "description": "Verify electricity customer details"
           },
@@ -1355,12 +1734,20 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"meterNumber\": \"12345678901\",\n  \"disco\": \"aedc\",\n  \"amount\": 2000,\n  \"phoneNumber\": \"08012345678\",\n  \"transactionPin\": \"1234\"\n}"
+              "raw": "{\n  \"meterNumber\": \"12345678901\",\n  \"disco\": \"ekedc\",\n  \"meterType\": \"prepaid\",\n  \"amount\": 2000,\n  \"phoneNumber\": \"08012345678\",\n  \"transactionPin\": \"1234\",\n  \"source\": \"nellobytes\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/bills/electricity/purchase",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "bills", "electricity", "purchase"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bills",
+                "electricity",
+                "purchase"
+              ]
             },
             "description": "Purchase electricity credit"
           },
@@ -1378,8 +1765,16 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/bills/cable/plans?provider=dstv",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "bills", "cable", "plans"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bills",
+                "cable",
+                "plans"
+              ],
               "query": [
                 {
                   "key": "provider",
@@ -1407,12 +1802,20 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"smartCardNumber\": \"123456789012\",\n  \"provider\": \"dstv\",\n  \"planId\": \"{{plan_id}}\",\n  \"months\": 1,\n  \"transactionPin\": \"1234\"\n}"
+              "raw": "{\n  \"smartCardNumber\": \"1234567890\",\n  \"provider\": \"dstv\",\n  \"planId\": \"dstv-padi\",\n  \"months\": 1,\n  \"transactionPin\": \"1234\",\n  \"source\": \"nellobytes\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/bills/cable/purchase",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "bills", "cable", "purchase"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bills",
+                "cable",
+                "purchase"
+              ]
             },
             "description": "Purchase cable TV subscription"
           },
@@ -1434,12 +1837,20 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"examType\": \"WAEC\",\n  \"quantity\": 1,\n  \"transactionPin\": \"1234\"\n}"
+              "raw": "{\n  \"examType\": \"waecdirect\",\n  \"phoneNumber\": \"08012345678\",\n  \"quantity\": 1,\n  \"transactionPin\": \"1234\",\n  \"source\": \"nellobytes\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/bills/education/purchase",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "bills", "education", "purchase"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bills",
+                "education",
+                "purchase"
+              ]
             },
             "description": "Purchase education PINs (WAEC, NECO, etc.)"
           },
@@ -1466,8 +1877,15 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/auth/login",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "auth", "login"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
             },
             "description": "Admin login (uses same endpoint)"
           },
@@ -1485,8 +1903,15 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/admin/dashboard",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "admin", "dashboard"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "dashboard"
+              ]
             },
             "description": "Get admin dashboard statistics"
           },
@@ -1504,8 +1929,15 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/admin/users?page=1&limit=20&search=john&role=user&isActive=true",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "admin", "users"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users"
+              ],
               "query": [
                 {
                   "key": "page",
@@ -1545,8 +1977,16 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/admin/users/:id",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "admin", "users", ":id"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users",
+                ":id"
+              ],
               "variable": [
                 {
                   "key": "id",
@@ -1578,8 +2018,17 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/admin/users/:id/suspend",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "admin", "users", ":id", "suspend"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users",
+                ":id",
+                "suspend"
+              ],
               "variable": [
                 {
                   "key": "id",
@@ -1611,8 +2060,17 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/admin/users/:id/activate",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "admin", "users", ":id", "activate"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users",
+                ":id",
+                "activate"
+              ],
               "variable": [
                 {
                   "key": "id",
@@ -1644,8 +2102,17 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/admin/users/:id/reset-pin",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "admin", "users", ":id", "reset-pin"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users",
+                ":id",
+                "reset-pin"
+              ],
               "variable": [
                 {
                   "key": "id",
@@ -1669,8 +2136,15 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/admin/pending-agents?page=1&limit=20",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "admin", "pending-agents"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "pending-agents"
+              ],
               "query": [
                 {
                   "key": "page",
@@ -1706,8 +2180,17 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/admin/users/:id/assign-role",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "admin", "users", ":id", "assign-role"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users",
+                ":id",
+                "assign-role"
+              ],
               "variable": [
                 {
                   "key": "id",
@@ -1739,8 +2222,17 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/admin/users/:id/approve-agent",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "admin", "users", ":id", "approve-agent"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users",
+                ":id",
+                "approve-agent"
+              ],
               "variable": [
                 {
                   "key": "id",
@@ -1772,8 +2264,17 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/admin/users/:id/reject-agent",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "admin", "users", ":id", "reject-agent"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users",
+                ":id",
+                "reject-agent"
+              ],
               "variable": [
                 {
                   "key": "id",
@@ -1805,8 +2306,17 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/admin/users/:id/lock",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "admin", "users", ":id", "lock"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users",
+                ":id",
+                "lock"
+              ],
               "variable": [
                 {
                   "key": "id",
@@ -1838,8 +2348,17 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/admin/users/:id/unlock",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "admin", "users", ":id", "unlock"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users",
+                ":id",
+                "unlock"
+              ],
               "variable": [
                 {
                   "key": "id",
@@ -1863,8 +2382,15 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/admin/wallets?page=1&limit=20&minBalance=0&maxBalance=1000000",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "admin", "wallets"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "wallets"
+              ],
               "query": [
                 {
                   "key": "page",
@@ -1900,8 +2426,16 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/admin/wallets/:userId",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "admin", "wallets", ":userId"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "wallets",
+                ":userId"
+              ],
               "variable": [
                 {
                   "key": "userId",
@@ -1933,8 +2467,17 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/admin/wallets/:userId/credit",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "admin", "wallets", ":userId", "credit"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "wallets",
+                ":userId",
+                "credit"
+              ],
               "variable": [
                 {
                   "key": "userId",
@@ -1966,8 +2509,17 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/admin/wallets/:userId/debit",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "admin", "wallets", ":userId", "debit"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "wallets",
+                ":userId",
+                "debit"
+              ],
               "variable": [
                 {
                   "key": "userId",
@@ -1999,8 +2551,17 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/admin/wallets/:userId/lock",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "admin", "wallets", ":userId", "lock"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "wallets",
+                ":userId",
+                "lock"
+              ],
               "variable": [
                 {
                   "key": "userId",
@@ -2032,8 +2593,17 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/admin/wallets/:userId/unlock",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "admin", "wallets", ":userId", "unlock"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "wallets",
+                ":userId",
+                "unlock"
+              ],
               "variable": [
                 {
                   "key": "userId",
@@ -2057,8 +2627,15 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/admin/transactions?page=1&limit=20&type=data_recharge&status=successful&startDate=2024-01-01&endDate=2024-12-31",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "admin", "transactions"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "transactions"
+              ],
               "query": [
                 {
                   "key": "page",
@@ -2102,8 +2679,16 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/admin/transactions/:id",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "admin", "transactions", ":id"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "transactions",
+                ":id"
+              ],
               "variable": [
                 {
                   "key": "id",
@@ -2135,8 +2720,17 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/admin/transactions/:id/refund",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "admin", "transactions", ":id", "refund"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "transactions",
+                ":id",
+                "refund"
+              ],
               "variable": [
                 {
                   "key": "id",
@@ -2168,8 +2762,16 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/admin/transactions/retry-failed",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "admin", "transactions", "retry-failed"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "transactions",
+                "retry-failed"
+              ]
             },
             "description": "Retry multiple failed transactions"
           },
@@ -2187,8 +2789,15 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/admin/pricing?serviceType=data_recharge&network=mtn&isActive=true",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "admin", "pricing"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "pricing"
+              ],
               "query": [
                 {
                   "key": "serviceType",
@@ -2228,8 +2837,15 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/admin/pricing",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "admin", "pricing"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "pricing"
+              ]
             },
             "description": "Create new service pricing"
           },
@@ -2255,8 +2871,16 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/admin/pricing/:id",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "admin", "pricing", ":id"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "pricing",
+                ":id"
+              ],
               "variable": [
                 {
                   "key": "id",
@@ -2280,8 +2904,16 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/admin/pricing/:id",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "admin", "pricing", ":id"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "pricing",
+                ":id"
+              ],
               "variable": [
                 {
                   "key": "id",
@@ -2305,8 +2937,15 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/admin/providers?status=active&serviceType=data_recharge",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "admin", "providers"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "providers"
+              ],
               "query": [
                 {
                   "key": "status",
@@ -2342,8 +2981,17 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/admin/providers/:name/status",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "admin", "providers", ":name", "status"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "providers",
+                ":name",
+                "status"
+              ],
               "variable": [
                 {
                   "key": "name",
@@ -2367,8 +3015,15 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/admin/logs?page=1&limit=20&action=update&entity=user&startDate=2024-01-01",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "admin", "logs"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "logs"
+              ],
               "query": [
                 {
                   "key": "page",
@@ -2408,8 +3063,15 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/admin/staff?page=1&limit=20&search=john&role=support",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "admin", "staff"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "staff"
+              ],
               "query": [
                 {
                   "key": "page",
@@ -2453,8 +3115,15 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/admin/staff",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "admin", "staff"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "staff"
+              ]
             },
             "description": "Add a new staff member (Super Admin only)"
           },
@@ -2480,8 +3149,17 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/admin/staff/:staffId/role",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "admin", "staff", ":staffId", "role"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "staff",
+                ":staffId",
+                "role"
+              ]
             },
             "description": "Update staff member role (Super Admin only)"
           },
@@ -2499,8 +3177,16 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/admin/staff/:staffId",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "admin", "staff", ":staffId"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "staff",
+                ":staffId"
+              ]
             },
             "description": "Remove a staff member (Super Admin only)"
           },
@@ -2526,8 +3212,15 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/admin/broadcast",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "admin", "broadcast"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "broadcast"
+              ]
             },
             "description": "Send broadcast notification to users"
           },
@@ -2553,8 +3246,16 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/notifications/admin/broadcast",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "notifications", "admin", "broadcast"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "admin",
+                "broadcast"
+              ]
             },
             "description": "Admin broadcast notification to all users"
           },
@@ -2580,8 +3281,16 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/notifications/admin/send",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "notifications", "admin", "send"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "admin",
+                "send"
+              ]
             },
             "description": "Send notification to specific user"
           },
@@ -2599,8 +3308,15 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/admin/settings",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "admin", "settings"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "settings"
+              ]
             },
             "description": "Get system settings"
           },
@@ -2626,8 +3342,15 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/admin/settings",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "admin", "settings"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "settings"
+              ]
             },
             "description": "Update system settings"
           },
@@ -2653,8 +3376,15 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/admin/export",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "admin", "export"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "export"
+              ]
             },
             "description": "Export data (transactions, users, wallets)"
           },
@@ -2677,8 +3407,15 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/console/providers",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "console", "providers"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "console",
+                "providers"
+              ]
             },
             "description": "Get all VTU service providers"
           },
@@ -2696,8 +3433,16 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/console/providers/config",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "console", "providers", "config"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "console",
+                "providers",
+                "config"
+              ]
             },
             "description": "Get provider configuration"
           },
@@ -2723,8 +3468,15 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/console/config",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "console", "config"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "console",
+                "config"
+              ]
             },
             "description": "Save service configuration"
           },
@@ -2742,8 +3494,16 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/console/providers/:providerId",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "console", "providers", ":providerId"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "console",
+                "providers",
+                ":providerId"
+              ]
             },
             "description": "Get specific provider details"
           },
@@ -2761,8 +3521,17 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/console/providers/:providerId/stats",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "console", "providers", ":providerId", "stats"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "console",
+                "providers",
+                ":providerId",
+                "stats"
+              ]
             },
             "description": "Get provider statistics"
           },
@@ -2780,8 +3549,17 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/console/providers/:providerId/balance",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "console", "providers", ":providerId", "balance"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "console",
+                "providers",
+                ":providerId",
+                "balance"
+              ]
             },
             "description": "Get provider wallet balance"
           },
@@ -2807,8 +3585,15 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/console/switch",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "console", "switch"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "console",
+                "switch"
+              ]
             },
             "description": "Switch to a different provider"
           },
@@ -2834,8 +3619,15 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/console/health",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "console", "health"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "console",
+                "health"
+              ]
             },
             "description": "Run health check on all providers"
           },
@@ -2861,8 +3653,17 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/console/providers/:providerId/health",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "console", "providers", ":providerId", "health"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "console",
+                "providers",
+                ":providerId",
+                "health"
+              ]
             },
             "description": "Run health check on specific provider"
           },
@@ -2880,8 +3681,15 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/console/balances",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "console", "balances"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "console",
+                "balances"
+              ]
             },
             "description": "Get all provider balances"
           },
@@ -2899,8 +3707,15 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/console/logs?page=1&limit=50",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "console", "logs"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "console",
+                "logs"
+              ],
               "query": [
                 {
                   "key": "page",
@@ -2936,8 +3751,17 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/console/providers/:providerId/status",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "console", "providers", ":providerId", "status"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "console",
+                "providers",
+                ":providerId",
+                "status"
+              ]
             },
             "description": "Update provider status (active/inactive)"
           },
@@ -2963,8 +3787,15 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/console/init",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "console", "init"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "console",
+                "init"
+              ]
             },
             "description": "Initialize/re-seed providers"
           },
@@ -2982,8 +3813,16 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/console/bill-payment/providers",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "console", "bill-payment", "providers"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "console",
+                "bill-payment",
+                "providers"
+              ]
             },
             "description": "Get all bill payment providers"
           },
@@ -3009,8 +3848,16 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/console/bill-payment/switch",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "console", "bill-payment", "switch"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "console",
+                "bill-payment",
+                "switch"
+              ]
             },
             "description": "Switch bill payment provider"
           },
@@ -3041,8 +3888,15 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/webhook/paystack",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "webhook", "paystack"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "webhook",
+                "paystack"
+              ]
             },
             "description": "Paystack payment webhook"
           },
@@ -3064,8 +3918,15 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/webhook/monnify",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "webhook", "monnify"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "webhook",
+                "monnify"
+              ]
             },
             "description": "Monnify payment webhook"
           },
@@ -3091,8 +3952,15 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/webhook/flutterwave",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "webhook", "flutterwave"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "webhook",
+                "flutterwave"
+              ]
             },
             "description": "Flutterwave payment webhook"
           },
@@ -3114,8 +3982,16 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/webhook/provider/:providerName",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "webhook", "provider", ":providerName"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "webhook",
+                "provider",
+                ":providerName"
+              ],
               "variable": [
                 {
                   "key": "providerName",
@@ -3139,8 +4015,14 @@
             "header": [],
             "url": {
               "raw": "{{base_url}}/api/v1/health",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "health"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "health"
+              ]
             },
             "description": "Check API health status"
           },
@@ -3158,8 +4040,16 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/admin/check-provider/:providerId",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "admin", "check-provider", ":providerId"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "check-provider",
+                ":providerId"
+              ],
               "variable": [
                 {
                   "key": "providerId",
@@ -3183,8 +4073,16 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/transaction/status/:reference",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "transaction", "status", ":reference"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "transaction",
+                "status",
+                ":reference"
+              ],
               "variable": [
                 {
                   "key": "reference",
@@ -3195,6 +4093,67 @@
             "description": "Check transaction status by reference"
           },
           "response": []
+        }
+      ]
+    },
+    {
+      "name": "SMS Services",
+      "item": [
+        {
+          "name": "Get Bulk SMS Balance",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/sms/balance",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sms",
+                "balance"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Send Bulk SMS",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"from\": \"Yareema\",\n  \"to\": \"08012345678,09050030090\",\n  \"body\": \"Hello from Yareema Data Hub\",\n  \"gateway\": \"direct-corporate\",\n  \"appendSender\": \"hosted\",\n  \"transactionPin\": \"1234\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/sms/send",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sms",
+                "send"
+              ]
+            }
+          }
         }
       ]
     }

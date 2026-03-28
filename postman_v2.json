@@ -37,8 +37,15 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/auth/register",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "auth", "register"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "register"
+              ]
             }
           }
         },
@@ -58,8 +65,15 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/auth/login",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "auth", "login"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
             }
           }
         },
@@ -83,8 +97,15 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/auth/set-transaction-pin",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "auth", "set-transaction-pin"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "set-transaction-pin"
+              ]
             }
           }
         }
@@ -105,8 +126,16 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/telecom/data/plans",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "telecom", "data", "plans"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "telecom",
+                "data",
+                "plans"
+              ]
             }
           }
         },
@@ -122,8 +151,16 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/telecom/data/plans?source=nellobytes&network=mtn",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "telecom", "data", "plans"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "telecom",
+                "data",
+                "plans"
+              ],
               "query": [
                 {
                   "key": "source",
@@ -153,12 +190,20 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"phoneNumber\": \"08012345678\",\n  \"network\": \"mtn\",\n  \"dataPlan\": \"1000\",\n  \"transactionPin\": \"1234\",\n  \"amount\": 567\n}"
+              "raw": "{\n  \"phoneNumber\": \"08012345678\",\n  \"network\": \"mtn\",\n  \"dataPlan\": \"1000\",\n  \"transactionPin\": \"1234\",\n  \"source\": \"nellobytes\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/telecom/data/purchase",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "telecom", "data", "purchase"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "telecom",
+                "data",
+                "purchase"
+              ]
             }
           }
         }
@@ -183,12 +228,20 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"phoneNumber\": \"08012345678\",\n  \"network\": \"mtn\",\n  \"amount\": 1000,\n  \"transactionPin\": \"1234\"\n}"
+              "raw": "{\n  \"phoneNumber\": \"08012345678\",\n  \"network\": \"mtn\",\n  \"amount\": 1000,\n  \"transactionPin\": \"1234\",\n  \"source\": \"nellobytes\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/telecom/airtime/purchase",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "telecom", "airtime", "purchase"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "telecom",
+                "airtime",
+                "purchase"
+              ]
             }
           }
         }
@@ -209,8 +262,49 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/telecom/epin/plans",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "telecom", "epin", "plans"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "telecom",
+                "epin",
+                "plans"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Purchase EPIN",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"network\": \"mtn\",\n  \"value\": 100,\n  \"quantity\": 1,\n  \"transactionPin\": \"1234\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/telecom/epin/purchase",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "telecom",
+                "epin",
+                "purchase"
+              ]
             }
           }
         }
@@ -235,12 +329,20 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"meterNumber\": \"12345678901\",\n  \"disco\": \"ekedc\",\n  \"meterType\": \"prepaid\"\n}"
+              "raw": "{\n  \"meterNumber\": \"12345678901\",\n  \"disco\": \"ekedc\",\n  \"meterType\": \"prepaid\",\n  \"source\": \"nellobytes\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/bills/electricity/verify",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "bills", "electricity", "verify"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bills",
+                "electricity",
+                "verify"
+              ]
             }
           }
         },
@@ -260,12 +362,20 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"meterNumber\": \"12345678901\",\n  \"disco\": \"ekedc\",\n  \"meterType\": \"prepaid\",\n  \"amount\": 2000,\n  \"transactionPin\": \"1234\"\n}"
+              "raw": "{\n  \"meterNumber\": \"12345678901\",\n  \"disco\": \"ekedc\",\n  \"meterType\": \"prepaid\",\n  \"amount\": 2000,\n  \"phoneNumber\": \"08012345678\",\n  \"transactionPin\": \"1234\",\n  \"source\": \"nellobytes\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/bills/electricity/purchase",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "bills", "electricity", "purchase"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bills",
+                "electricity",
+                "purchase"
+              ]
             }
           }
         }
@@ -286,8 +396,16 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/bills/cable/plans",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "bills", "cable", "plans"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bills",
+                "cable",
+                "plans"
+              ]
             }
           }
         },
@@ -303,8 +421,16 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/bills/cable/plans?source=nellobytes&provider=dstv",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "bills", "cable", "plans"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bills",
+                "cable",
+                "plans"
+              ],
               "query": [
                 {
                   "key": "source",
@@ -334,12 +460,20 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"smartCardNumber\": \"1234567890\",\n  \"provider\": \"dstv\",\n  \"planId\": \"dstvpadi\",\n  \"months\": 1,\n  \"transactionPin\": \"1234\"\n}"
+              "raw": "{\n  \"smartCardNumber\": \"1234567890\",\n  \"provider\": \"dstv\",\n  \"planId\": \"dstv-padi\",\n  \"months\": 1,\n  \"transactionPin\": \"1234\",\n  \"source\": \"nellobytes\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/bills/cable/purchase",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "bills", "cable", "purchase"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bills",
+                "cable",
+                "purchase"
+              ]
             }
           }
         }
@@ -364,12 +498,53 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"examType\": \"waecdirect\",\n  \"quantity\": 1,\n  \"transactionPin\": \"1234\"\n}"
+              "raw": "{\n  \"examType\": \"waecdirect\",\n  \"phoneNumber\": \"08012345678\",\n  \"quantity\": 1,\n  \"transactionPin\": \"1234\",\n  \"source\": \"nellobytes\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/bills/education/purchase",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "bills", "education", "purchase"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bills",
+                "education",
+                "purchase"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Purchase JAMB PIN",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"examType\": \"de\",\n  \"phoneNumber\": \"08012345678\",\n  \"quantity\": 1,\n  \"transactionPin\": \"1234\",\n  \"source\": \"nellobytes\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/bills/education/purchase",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bills",
+                "education",
+                "purchase"
+              ]
             }
           }
         }
@@ -390,8 +565,14 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/notifications",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "notifications"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications"
+              ]
             }
           }
         },
@@ -407,8 +588,15 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/notifications/unread-count",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "notifications", "unread-count"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "unread-count"
+              ]
             }
           }
         },
@@ -424,8 +612,16 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/notifications/64f1234567890abcdef12345/read",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "notifications", "64f1234567890abcdef12345", "read"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "64f1234567890abcdef12345",
+                "read"
+              ]
             }
           }
         },
@@ -441,8 +637,15 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/notifications/mark-all-read",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "notifications", "mark-all-read"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "mark-all-read"
+              ]
             }
           }
         },
@@ -458,8 +661,15 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/notifications/64f1234567890abcdef12345",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "notifications", "64f1234567890abcdef12345"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "64f1234567890abcdef12345"
+              ]
             }
           }
         },
@@ -475,8 +685,14 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/notifications",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "notifications"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications"
+              ]
             }
           }
         }
@@ -522,8 +738,16 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/telecom/webhook/nellobytes",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "telecom", "webhook", "nellobytes"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "telecom",
+                "webhook",
+                "nellobytes"
+              ]
             }
           }
         },
@@ -564,8 +788,16 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/bills/webhook/nellobytes",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "bills", "webhook", "nellobytes"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bills",
+                "webhook",
+                "nellobytes"
+              ]
             }
           }
         },
@@ -575,8 +807,16 @@
             "method": "GET",
             "url": {
               "raw": "{{base_url}}/api/v1/telecom/nellobyte/callback?orderid=12345&statuscode=200&orderstatus=ORDER_COMPLETED&orderremark=Airtime%20delivered",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "telecom", "nellobyte", "callback"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "telecom",
+                "nellobyte",
+                "callback"
+              ],
               "query": [
                 {
                   "key": "orderid",
@@ -615,8 +855,15 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/wallet/create",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "wallet", "create"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "wallet",
+                "create"
+              ]
             }
           }
         },
@@ -632,8 +879,15 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/wallet/balance",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "wallet", "balance"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "wallet",
+                "balance"
+              ]
             }
           }
         },
@@ -649,8 +903,15 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/wallet/transactions",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "wallet", "transactions"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "wallet",
+                "transactions"
+              ]
             }
           }
         }
@@ -671,8 +932,15 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/reports/my-report?type=monthly",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "reports", "my-report"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reports",
+                "my-report"
+              ],
               "query": [
                 {
                   "key": "type",
@@ -694,8 +962,15 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/reports/dashboard",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "reports", "dashboard"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reports",
+                "dashboard"
+              ]
             }
           }
         },
@@ -711,8 +986,15 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/reports/transactions?type=monthly",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "reports", "transactions"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reports",
+                "transactions"
+              ],
               "query": [
                 {
                   "key": "type",
@@ -734,8 +1016,15 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/reports/financial?type=monthly",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "reports", "financial"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reports",
+                "financial"
+              ],
               "query": [
                 {
                   "key": "type",
@@ -757,8 +1046,15 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/reports/users?type=monthly",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "reports", "users"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reports",
+                "users"
+              ],
               "query": [
                 {
                   "key": "type",
@@ -780,8 +1076,15 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/reports/agents?type=monthly",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "reports", "agents"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reports",
+                "agents"
+              ],
               "query": [
                 {
                   "key": "type",
@@ -803,13 +1106,81 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/reports/services?type=monthly",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "reports", "services"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reports",
+                "services"
+              ],
               "query": [
                 {
                   "key": "type",
                   "value": "monthly"
                 }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "SMS Services",
+      "item": [
+        {
+          "name": "Get Bulk SMS Balance",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/sms/balance",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sms",
+                "balance"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Send Bulk SMS",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"from\": \"Yareema\",\n  \"to\": \"08012345678,09050030090\",\n  \"body\": \"Hello from Yareema Data Hub\",\n  \"gateway\": \"direct-corporate\",\n  \"appendSender\": \"hosted\",\n  \"transactionPin\": \"1234\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/sms/send",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sms",
+                "send"
               ]
             }
           }

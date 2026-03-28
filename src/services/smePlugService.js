@@ -8,6 +8,7 @@ const logger = require('../utils/logger');
 
 class SmePlugService {
   static baseUrl = 'https://smeplug.ng/api/v1';
+  static blockedMtnWeeklyShareIds = new Set(['423', '424', '425']);
   
   static getConfig() {
     return {
@@ -35,6 +36,26 @@ class SmePlugService {
 
   static getNetworkId(network) {
     return this.networkMap[network.toLowerCase()] || network;
+  }
+
+  static shouldExcludeDataPlan(network, plan = {}) {
+    if (network !== 'mtn') {
+      return false;
+    }
+
+    const identifiers = [
+      plan.id,
+      plan.plan_id,
+      plan.product_id,
+      plan.product_code,
+    ]
+      .filter(Boolean)
+      .map((value) => String(value).trim());
+
+    const label = `${plan.name || ''} ${plan.product_name || ''} ${plan.size || ''}`.toLowerCase();
+
+    return identifiers.some((value) => this.blockedMtnWeeklyShareIds.has(value))
+      || (label.includes('weekly') && label.includes('share'));
   }
 
   /**
@@ -134,15 +155,17 @@ class SmePlugService {
             }
             
             if (Array.isArray(plansData)) {
-              allPlans[net] = plansData.map(plan => ({
-                id: plan.id || plan.plan_id || plan.product_id,
-                planCode: plan.plan_id || plan.product_code,
-                planName: plan.name || plan.product_name,
-                size: plan.size || plan.data_size,
-                price: plan.selling_price || plan.price || plan.amount,
-                validity: plan.validity,
-                network: net,
-              }));
+              allPlans[net] = plansData
+                .filter(plan => !this.shouldExcludeDataPlan(net, plan))
+                .map(plan => ({
+                  id: plan.id || plan.plan_id || plan.product_id,
+                  planCode: plan.plan_id || plan.product_code,
+                  planName: plan.name || plan.product_name,
+                  size: plan.size || plan.data_size,
+                  price: plan.selling_price || plan.price || plan.amount,
+                  validity: plan.validity,
+                  network: net,
+                }));
             }
           }
         } catch (err) {

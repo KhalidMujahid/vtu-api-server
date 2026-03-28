@@ -25,6 +25,7 @@ const notificationSchema = new mongoose.Schema(
         'wallet_debit',
         'airtime',
         'data',
+        'bulk_sms',
         'login',
         'security',
         'system',

@@ -75,10 +75,10 @@ class AirtimeNigeriaService {
 
   /**
    * Purchase Data
-   * @param {Object} options - { phone, packageCode, planId, maxAmount, callbackUrl, customerReference }
+   * @param {Object} options - { phone, packageCode, planId, variationCode, maxAmount, callbackUrl, customerReference }
    */
   static async purchaseData(options) {
-    const { phone, packageCode, planId, maxAmount, callbackUrl, customerReference } = options;
+    const { phone, packageCode, planId, variationCode, maxAmount, callbackUrl, customerReference } = options;
     
     try {
       const requestBody = {
@@ -88,13 +88,15 @@ class AirtimeNigeriaService {
         customer_reference: customerReference || '',
       };
 
-      // Use either package_code or plan_id
-      if (packageCode) {
+      // Variation code is preferred for MTN SME plans.
+      if (variationCode) {
+        requestBody.variation_code = variationCode;
+      } else if (packageCode) {
         requestBody.package_code = packageCode;
       } else if (planId) {
         requestBody.plan_id = planId;
       } else {
-        throw new Error('Either packageCode or planId is required');
+        throw new Error('Either variationCode, packageCode, or planId is required');
       }
 
       const response = await axios.post(
@@ -193,7 +195,7 @@ class AirtimeNigeriaService {
   static async getDataPlans(network = null) {
     try {
       const response = await axios.get(
-        `${this.getConfig().baseUrl}/data/plans`,
+        `${this.getConfig().baseUrl}/variations/data`,
         {
           headers: this.getHeaders(),
           timeout: 30000,
@@ -201,26 +203,44 @@ class AirtimeNigeriaService {
       );
 
       if (response.data.success) {
-        let plans = response.data.data;
+        let plans = response.data.data || response.data.variations || response.data.details || [];
+        if (!Array.isArray(plans) && Array.isArray(plans?.data)) {
+          plans = plans.data;
+        }
+        if (!Array.isArray(plans)) {
+          plans = Object.values(plans || {}).flat().filter(Boolean);
+        }
         
         // Filter by network if specified
         if (network) {
-          plans = plans.filter(plan => plan.network_operator === network.toLowerCase());
+          plans = plans.filter((plan) => {
+            const planNetwork = (plan.network_operator || plan.network || plan.provider || '').toLowerCase();
+            return planNetwork === network.toLowerCase();
+          });
         }
 
         // Group plans by network
         const groupedPlans = plans.reduce((acc, plan) => {
-          const network = plan.network_operator;
-          if (!acc[network]) {
-            acc[network] = [];
+          const normalizedNetwork = (plan.network_operator || plan.network || plan.provider || '').toLowerCase();
+          if (!normalizedNetwork) {
+            return acc;
           }
-          acc[network].push({
-            planCode: plan.package_code,
+
+          if (!acc[normalizedNetwork]) {
+            acc[normalizedNetwork] = [];
+          }
+
+          const planName = plan.plan_summary || plan.name || plan.package || plan.variation || '';
+          const size = plan.size || plan.data_size || planName.split('|')[1] || plan.data_amount || '';
+
+          acc[normalizedNetwork].push({
+            planCode: plan.package_code || plan.plan_code || plan.variation_code,
             planId: plan.plan_id,
-            planName: plan.plan_summary,
-            size: plan.plan_summary.split('|')[1] || '',
-            price: plan.agent_price,
-            validity: plan.validity,
+            variationCode: plan.variation_code || plan.package_code || plan.plan_code,
+            planName,
+            size,
+            price: plan.agent_price || plan.price || plan.amount || 0,
+            validity: plan.validity || plan.valid_for || '',
             currency: plan.currency,
           });
           return acc;
@@ -235,9 +255,55 @@ class AirtimeNigeriaService {
 
       throw new Error(response.data.message || 'Failed to get data plans');
     } catch (error) {
+      if (error.response?.status === 404) {
+        return this.getLegacyDataPlans(network);
+      }
       logger.error('AirtimeNigeria getDataPlans error:', error.response?.data || error.message);
       throw new Error(error.response?.data?.message || error.message || 'Failed to get data plans');
     }
+  }
+
+  static async getLegacyDataPlans(network = null) {
+    const response = await axios.get(
+      `${this.getConfig().baseUrl}/data/plans`,
+      {
+        headers: this.getHeaders(),
+        timeout: 30000,
+      }
+    );
+
+    if (!response.data.success) {
+      throw new Error(response.data.message || 'Failed to get data plans');
+    }
+
+    let plans = response.data.data || [];
+    if (network) {
+      plans = plans.filter(plan => plan.network_operator === network.toLowerCase());
+    }
+
+    const groupedPlans = plans.reduce((acc, plan) => {
+      const normalizedNetwork = plan.network_operator;
+      if (!acc[normalizedNetwork]) {
+        acc[normalizedNetwork] = [];
+      }
+      acc[normalizedNetwork].push({
+        planCode: plan.package_code,
+        planId: plan.plan_id,
+        variationCode: plan.variation_code || plan.package_code,
+        planName: plan.plan_summary,
+        size: plan.plan_summary.split('|')[1] || '',
+        price: plan.agent_price,
+        validity: plan.validity,
+        currency: plan.currency,
+      });
+      return acc;
+    }, {});
+
+    return {
+      success: true,
+      data: groupedPlans,
+      rawData: plans,
+    };
   }
 
   /**

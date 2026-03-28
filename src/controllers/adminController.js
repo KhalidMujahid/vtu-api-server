@@ -1838,6 +1838,8 @@ class AdminController {
         query.$or = [
           { planName: { $regex: search, $options: 'i' } },
           { planCode: { $regex: search, $options: 'i' } },
+          { providerPlanId: { $regex: search, $options: 'i' } },
+          { variationCode: { $regex: search, $options: 'i' } },
         ];
       }
       

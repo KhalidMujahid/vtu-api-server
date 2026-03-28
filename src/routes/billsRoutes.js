@@ -15,6 +15,7 @@ const { protect, requireTransactionPin } = require('../middlewares/auth');
  *         description: Webhook processed
  */
 router.post('/webhook/nellobytes', billsController.nelloBytesWebhook);
+router.get('/webhook/nellobytes', billsController.nelloBytesWebhook);
 
 router.use(protect);
 

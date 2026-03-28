@@ -41,6 +41,18 @@ class NelloBytesService {
     postpaid: '02',
   };
 
+  static normalizeMobileNumber(phoneNumber) {
+    if (!phoneNumber) {
+      return '';
+    }
+
+    return String(phoneNumber)
+      .trim()
+      .replace(/^\+234/, '')
+      .replace(/^234/, '')
+      .replace(/^0/, '');
+  }
+
   static async request(endpoint, params = {}) {
     const defaultParams = {
       UserID: this.config.userId,
@@ -147,7 +159,7 @@ class NelloBytesService {
     const response = await this.request(endpoint, {
       MobileNetwork: networkCode,
       DataPlan: dataPlan,
-      MobileNumber: mobileNumber ? mobileNumber.replace(/^0/, '').replace(/^\+234/, '') : '',
+      MobileNumber: this.normalizeMobileNumber(mobileNumber),
       RequestID: requestId,
       CallBackURL: callBackURL || '',
     });
@@ -158,6 +170,50 @@ class NelloBytesService {
       statusCode: response.statuscode,
       orderId: response.orderid,
       requestId: requestId,
+      response,
+    };
+  }
+
+  /**
+   * Purchase airtime
+   * @param {Object} options
+   * @param {string} options.network - mtn, glo, airtel, 9mobile
+   * @param {number|string} options.amount - Airtime amount
+   * @param {string} options.mobileNumber - Recipient phone number
+   * @param {string} options.requestId - Optional external request ID
+   * @param {string} options.callBackURL - Callback URL
+   * @param {string} options.bonusType - Optional promo/bonus code
+   */
+  static async purchaseAirtime({ network, amount, mobileNumber, requestId = null, callBackURL, bonusType = null }) {
+    const endpoint = '/APIAirtimeV1.asp';
+    const networkCode = this.networkCodes[network.toLowerCase()];
+
+    if (!networkCode) {
+      throw new AppError('Invalid network. Use: mtn, glo, airtel, or 9mobile', 400);
+    }
+
+    const normalizedAmount = Number(amount);
+    if (Number.isNaN(normalizedAmount) || normalizedAmount < 50 || normalizedAmount > 200000) {
+      throw new AppError('Airtime amount must be between 50 and 200000', 400);
+    }
+
+    const resolvedRequestId = requestId || uuidv4().substring(0, 8).toUpperCase();
+
+    const response = await this.request(endpoint, {
+      MobileNetwork: networkCode,
+      Amount: normalizedAmount,
+      MobileNumber: this.normalizeMobileNumber(mobileNumber),
+      RequestID: resolvedRequestId,
+      CallBackURL: callBackURL || '',
+      ...(bonusType ? { BonusType: bonusType } : {}),
+    });
+
+    return {
+      success: response.statuscode === '100' || response.status === 'ORDER_RECEIVED',
+      status: response.status,
+      statusCode: response.statuscode,
+      orderId: response.orderid,
+      requestId: response.requestid || resolvedRequestId,
       response,
     };
   }
@@ -184,6 +240,10 @@ class NelloBytesService {
     };
   }
 
+  static async queryAirtimeTransaction({ orderId = null, requestId = null }) {
+    return this.queryDataTransaction({ orderId, requestId });
+  }
+
   /**
    * Cancel data transaction (only if status is ORDER_RECEIVED or ORDER_ONHOLD)
    */
@@ -198,6 +258,10 @@ class NelloBytesService {
       orderId: response.orderid,
       response,
     };
+  }
+
+  static async cancelAirtimeTransaction(orderId) {
+    return this.cancelDataTransaction(orderId);
   }
 
   // ============================================
@@ -256,7 +320,7 @@ class NelloBytesService {
   /**
    * Purchase cable TV subscription
    */
-  static async purchaseCableTV({ cableTV, packageCode, smartCardNo, phoneNo, callBackURL }) {
+  static async purchaseCableTV({ cableTV, packageCode, smartCardNo, phoneNo, requestId = null, callBackURL }) {
     const endpoint = '/APICableTVV1.asp';
     
     const cableCode = this.cableCodes[cableTV.toLowerCase()];
@@ -264,14 +328,14 @@ class NelloBytesService {
       throw new AppError('Invalid cable TV provider. Use: dstv, gotv, or startimes', 400);
     }
 
-    const requestId = uuidv4().substring(0, 8).toUpperCase();
+    const resolvedRequestId = requestId || uuidv4().substring(0, 8).toUpperCase();
 
     const response = await this.request(endpoint, {
       CableTV: cableCode,
       Package: packageCode,
       SmartCardNo: smartCardNo,
-      PhoneNo: phoneNo ? phoneNo.replace(/^0/, '').replace(/^\+234/, '') : '',
-      RequestID: requestId,
+      PhoneNo: this.normalizeMobileNumber(phoneNo),
+      RequestID: resolvedRequestId,
       CallBackURL: callBackURL || '',
     });
 
@@ -280,7 +344,7 @@ class NelloBytesService {
       status: response.status,
       statusCode: response.statuscode,
       orderId: response.orderid,
-      requestId: requestId,
+      requestId: response.requestid || resolvedRequestId,
       response,
     };
   }
@@ -365,7 +429,7 @@ class NelloBytesService {
   /**
    * Pay electricity bill
    */
-  static async payElectricityBill({ electricCompany, meterNo, meterType, amount, phoneNo, callBackURL }) {
+  static async payElectricityBill({ electricCompany, meterNo, meterType, amount, phoneNo, requestId = null, callBackURL }) {
     const endpoint = '/APIElectricityV1.asp';
     
     const discoCode = this.electricityCodes[electricCompany.toLowerCase()];
@@ -374,15 +438,15 @@ class NelloBytesService {
     }
 
     const typeCode = this.meterTypes[meterType.toLowerCase()] || '01';
-    const requestId = uuidv4().substring(0, 8).toUpperCase();
+    const resolvedRequestId = requestId || uuidv4().substring(0, 8).toUpperCase();
 
     const response = await this.request(endpoint, {
       ElectricCompany: discoCode,
       MeterNo: meterNo,
       MeterType: typeCode,
       Amount: amount,
-      PhoneNo: phoneNo ? phoneNo.replace(/^0/, '').replace(/^\+234/, '') : '',
-      RequestID: requestId,
+      PhoneNo: this.normalizeMobileNumber(phoneNo),
+      RequestID: resolvedRequestId,
       CallBackURL: callBackURL || '',
     });
 
@@ -392,7 +456,7 @@ class NelloBytesService {
       statusCode: response.statuscode,
       orderId: response.orderid,
       meterToken: response.metertoken,
-      requestId: requestId,
+      requestId: response.requestid || resolvedRequestId,
       response,
     };
   }
@@ -451,7 +515,7 @@ class NelloBytesService {
   /**
    * Buy Airtime EPIN
    */
-  static async buyEPIN({ mobileNetwork, value, quantity, callBackURL }) {
+  static async buyEPIN({ mobileNetwork, value, quantity, requestId = null, callBackURL = null }) {
     const endpoint = '/APIEPINV1.asp';
     
     const networkCode = this.networkCodes[mobileNetwork.toLowerCase()];
@@ -470,13 +534,13 @@ class NelloBytesService {
       throw new AppError('Invalid quantity. Allowed: 1 to 100', 400);
     }
 
-    const requestId = uuidv4().substring(0, 8).toUpperCase();
+    const resolvedRequestId = requestId || uuidv4().substring(0, 8).toUpperCase();
 
     const response = await this.request(endpoint, {
       MobileNetwork: networkCode,
       Value: value,
       Quantity: quantity,
-      RequestID: requestId,
+      RequestID: resolvedRequestId,
       CallBackURL: callBackURL || '',
     });
 
@@ -485,7 +549,7 @@ class NelloBytesService {
       status: response.status,
       statusCode: response.statuscode,
       orderId: response.orderid,
-      requestId: requestId,
+      requestId: response.requestid || resolvedRequestId,
       epins: response.TXN_EPIN || [],
       response,
     };
@@ -534,15 +598,15 @@ class NelloBytesService {
    * @param {string} options.phoneNo - Recipient phone number
    * @param {string} options.callBackURL - Callback URL
    */
-  static async buyWAECEPIN({ examType, phoneNo, callBackURL }) {
+  static async buyWAECEPIN({ examType, phoneNo, requestId = null, callBackURL }) {
     const endpoint = '/APIWAECV1.asp';
     
-    const requestId = uuidv4().substring(0, 8).toUpperCase();
+    const resolvedRequestId = requestId || uuidv4().substring(0, 8).toUpperCase();
 
     const response = await this.request(endpoint, {
       ExamType: examType,
-      PhoneNo: phoneNo ? phoneNo.replace(/^0/, '').replace(/^\+234/, '') : '',
-      RequestID: requestId,
+      PhoneNo: this.normalizeMobileNumber(phoneNo),
+      RequestID: resolvedRequestId,
       CallBackURL: callBackURL || '',
     });
 
@@ -551,7 +615,7 @@ class NelloBytesService {
       status: response.status,
       statusCode: response.statuscode,
       orderId: response.orderid,
-      requestId: requestId,
+      requestId: response.requestid || resolvedRequestId,
       cardDetails: response.carddetails,
       amountCharged: response.amountcharged,
       response,
@@ -631,15 +695,15 @@ class NelloBytesService {
   /**
    * Buy JAMB e-PIN
    */
-  static async buyJAMPEPIN({ examType, phoneNo, callBackURL }) {
+  static async buyJAMPEPIN({ examType, phoneNo, requestId = null, callBackURL }) {
     const endpoint = '/APIJAMBV1.asp';
     
-    const requestId = uuidv4().substring(0, 8).toUpperCase();
+    const resolvedRequestId = requestId || uuidv4().substring(0, 8).toUpperCase();
 
     const response = await this.request(endpoint, {
       ExamType: examType,
-      PhoneNo: phoneNo ? phoneNo.replace(/^0/, '').replace(/^\+234/, '') : '',
-      RequestID: requestId,
+      PhoneNo: this.normalizeMobileNumber(phoneNo),
+      RequestID: resolvedRequestId,
       CallBackURL: callBackURL || '',
     });
 
@@ -648,7 +712,7 @@ class NelloBytesService {
       status: response.status,
       statusCode: response.statuscode,
       orderId: response.orderid,
-      requestId: requestId,
+      requestId: response.requestid || resolvedRequestId,
       cardDetails: response.carddetails,
       amountCharged: response.amountcharged,
       response,

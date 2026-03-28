@@ -18,6 +18,7 @@ const paymentRoutes = require("./routes/paymentRoutes");
 const notificationRoutes = require('./routes/notificationRoutes');
 const reportRoutes = require('./routes/reportRoutes');
 const vtuConsoleRoutes = require('./routes/vtuConsoleRoutes');
+const smsRoutes = require('./routes/smsRoutes');
 
 const { errorHandler } = require('./middlewares/errorHandler');
 const logger = require('./utils/logger');
@@ -54,6 +55,7 @@ app.use("/api/v1/payments", paymentRoutes);
 app.use("/api/v1/notifications", notificationRoutes);
 app.use("/api/v1/reports", reportRoutes);
 app.use("/api/v1/console", vtuConsoleRoutes);
+app.use("/api/v1/sms", smsRoutes);
 
 app.get('/api/v1/health', (req, res) => {
   res.status(200).json({

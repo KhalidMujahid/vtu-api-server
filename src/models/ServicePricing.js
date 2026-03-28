@@ -40,6 +40,13 @@ const servicePricingSchema = new mongoose.Schema({
     required: true,
   },
   planCode: String,
+  providerPlanId: String,
+  variationCode: String,
+  providerPlanType: String,
+  providerMeta: {
+    type: mongoose.Schema.Types.Mixed,
+    default: null,
+  },
   validity: String,
   dataAmount: String,
   
