@@ -7,6 +7,56 @@ const Wallet = require('../models/Wallet');
 const { AppError } = require('../middlewares/errorHandler');
 const logger = require('../utils/logger');
 
+const FUNDING_FEE = 50;
+
+function calculateNetFundingAmount(grossAmount) {
+  const parsedAmount = Number(grossAmount) || 0;
+  return {
+    grossAmount: parsedAmount,
+    fee: FUNDING_FEE,
+    netAmount: Math.max(parsedAmount - FUNDING_FEE, 0),
+  };
+}
+
+async function applyFundingSuccess({ transaction, grossAmount, note, metadata = {} }) {
+  const wallet = await Wallet.findOne({ user: transaction.user });
+
+  if (!wallet) {
+    throw new AppError('Wallet not found', 404);
+  }
+
+  const { netAmount, fee } = calculateNetFundingAmount(grossAmount);
+  const previousBalance = wallet.balance;
+
+  wallet.balance += netAmount;
+  wallet.totalFunded += netAmount;
+  wallet.lastTransaction = new Date();
+  await wallet.save();
+
+  transaction.status = 'successful';
+  transaction.amount = netAmount;
+  transaction.fee = fee;
+  transaction.totalAmount = Number(grossAmount) || transaction.totalAmount || transaction.amount;
+  transaction.previousBalance = previousBalance;
+  transaction.newBalance = wallet.balance;
+  transaction.completedAt = new Date();
+  transaction.metadata = {
+    ...(transaction.metadata || {}),
+    grossAmount: Number(grossAmount) || 0,
+    fundingFee: fee,
+    netAmount,
+    ...metadata,
+  };
+  transaction.statusHistory.push({
+    status: 'successful',
+    note,
+    timestamp: new Date(),
+  });
+  await transaction.save();
+
+  return { wallet, netAmount, fee };
+}
+
 /**
  * SMEPlug Webhook Handler
  */
@@ -126,6 +176,7 @@ exports.budpayWebhook = async (req, res) => {
     const amount = Number(data.amount);
     const accountNumber = data.craccount;
     const reference = data.paymentReference;
+    const { netAmount, fee } = calculateNetFundingAmount(amount);
 
     const existingTx = await Transaction.findOne({ reference });
 
@@ -146,9 +197,12 @@ exports.budpayWebhook = async (req, res) => {
       { _id: wallet._id },
       {
         $inc: {
-          balance: amount,
-          totalFunded: amount
-        }
+          balance: netAmount,
+          totalFunded: netAmount
+        },
+        $set: {
+          lastTransaction: new Date()
+        },
       }
     );
 
@@ -157,14 +211,20 @@ exports.budpayWebhook = async (req, res) => {
       user: wallet.user,
       type: "fund_wallet",
       category: "funding",
-      amount,
+      amount: netAmount,
+      fee,
       totalAmount: amount,
       status: "successful",
       description: "Wallet funded via BudPay virtual account",
+      metadata: {
+        grossAmount: amount,
+        fundingFee: fee,
+        netAmount,
+      },
       statusHistory: [
         {
           status: "successful",
-          note: "Funding confirmed from BudPay webhook",
+          note: `Funding confirmed from BudPay webhook. Gross ₦${amount}, fee ₦${fee}, net credited ₦${netAmount}`,
           timestamp: new Date()
         }
       ]
@@ -291,14 +351,11 @@ exports.providerCallback = async (req, res, next) => {
     
     logger.info(`Provider callback received from ${providerName}:`, callbackData);
     
-    // Process provider callback based on provider
     switch (providerName.toLowerCase()) {
       case 'mtn':
       case 'airtel':
       case 'glo':
       case '9mobile':
-        // Handle provider-specific callback logic
-        // You might want to update transaction status based on the callback
         break;
       default:
         logger.warn(`Unknown provider callback: ${providerName}`);
@@ -326,23 +383,16 @@ async function handleSuccessfulPayment(paymentData) {
       return;
     }
     
-    await WalletService.creditWallet(
-      transaction.user,
-      amount,
-      reference,
-      'Wallet funding via payment gateway'
-    );
-    
-    transaction.status = 'successful';
-    transaction.statusHistory.push({
-      status: 'successful',
-      note: 'Payment confirmed via webhook',
-      timestamp: new Date(),
+    const { netAmount } = await applyFundingSuccess({
+      transaction,
+      grossAmount: amount,
+      note: `Payment confirmed via webhook. Gross ₦${amount}, fee ₦${FUNDING_FEE}, net credited ₦${Math.max(Number(amount || 0) - FUNDING_FEE, 0)}`,
+      metadata: {
+        providerWebhookData: paymentData,
+      },
     });
-    transaction.completedAt = new Date();
-    await transaction.save();
     
-    logger.info(`Payment successful via webhook: ${reference}, Amount: ${amount}`);
+    logger.info(`Payment successful via webhook: ${reference}, Gross: ${amount}, Net Credited: ${netAmount}`);
   } catch (error) {
     logger.error('Error handling successful payment:', error);
     throw error;

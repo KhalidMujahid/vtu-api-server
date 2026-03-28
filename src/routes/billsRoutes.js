@@ -21,6 +21,21 @@ router.use(protect);
 
 /**
  * @swagger
+ * /api/v1/bills/electricity/discos:
+ *   get:
+ *     summary: Get electricity discos from ClubKonnect
+ *     tags: [Bills - Electricity]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Electricity discos fetched
+ */
+router.get('/electricity/discos', billsController.getElectricityDiscos);
+router.get('/electricity/plans', billsController.getElectricityDiscos);
+
+/**
+ * @swagger
  * /api/v1/bills/electricity/verify:
  *   post:
  *     summary: Verify electricity customer

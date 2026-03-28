@@ -182,7 +182,7 @@ module.exports = {
         
         if (dbConfig && dbConfig.value && dbConfig.value[serviceType]) {
           this.serviceRouting[serviceType] = dbConfig.value[serviceType];
-          console.log('getProviderIdForService - fetched from DB:', serviceType, '=', dbConfig.value[serviceType]);
+          console.log('getProviderIdForService - routing config fetched from DB:', serviceType, '=', dbConfig.value[serviceType]);
           return dbConfig.value[serviceType];
         }
       }

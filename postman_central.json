@@ -1,10 +1,62 @@
 {
   "info": {
-    "_postman_id": "yareema-data-hub-api",
-    "name": "Yareema Data Hub API",
-    "description": "Complete Nigerian VTU & Utility Platform API with Agent System",
+    "_postman_id": "yareema-data-hub-api-central",
+    "name": "Yareema Data Hub API Central",
+    "description": "Central Postman collection containing all merged endpoints for the project.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:5000",
+      "type": "string"
+    },
+    {
+      "key": "auth_token",
+      "value": "user_jwt_token_here",
+      "type": "string"
+    },
+    {
+      "key": "admin_token",
+      "value": "admin_jwt_token_here",
+      "type": "string"
+    },
+    {
+      "key": "agent_token",
+      "value": "agent_jwt_token_here",
+      "type": "string"
+    },
+    {
+      "key": "plan_id",
+      "value": "data_plan_id_here",
+      "type": "string"
+    },
+    {
+      "key": "user_id_here",
+      "value": "user_object_id_here",
+      "type": "string"
+    },
+    {
+      "key": "agent_id_here",
+      "value": "agent_object_id_here",
+      "type": "string"
+    },
+    {
+      "key": "transaction_id_here",
+      "value": "transaction_object_id_here",
+      "type": "string"
+    },
+    {
+      "key": "pricing_id_here",
+      "value": "pricing_object_id_here",
+      "type": "string"
+    },
+    {
+      "key": "reset_token_here",
+      "value": "password_reset_token_here",
+      "type": "string"
+    }
+  ],
   "item": [
     {
       "name": "Authentication",
@@ -383,6 +435,94 @@
             "description": "Set transaction PIN (4 digits)"
           },
           "response": []
+        },
+        {
+          "name": "Register User [POST {{base_url}}/api/v1/auth/register]",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\",\n  \"email\": \"john.doe@example.com\",\n  \"phoneNumber\": \"08012345678\",\n  \"password\": \"Password@123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/register",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "register"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Login [POST {{base_url}}/api/v1/auth/login]",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"john.doe@example.com\",\n  \"password\": \"Password@123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Set Transaction PIN [POST {{base_url}}/api/v1/auth/set-transaction-pin]",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transactionPin\": \"1234\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/set-transaction-pin",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "set-transaction-pin"
+              ]
+            }
+          }
         }
       ]
     },
@@ -1499,6 +1639,78 @@
             "description": "Set wallet transaction PIN"
           },
           "response": []
+        },
+        {
+          "name": "Create Wallet",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/wallet/create",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "wallet",
+                "create"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Balance",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/wallet/balance",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "wallet",
+                "balance"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Transactions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/wallet/transactions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "wallet",
+                "transactions"
+              ]
+            }
+          }
         }
       ]
     },
@@ -3338,6 +3550,217 @@
             "description": "Remove a staff member. Cannot remove self or last superadmin. Requires SUPER ADMIN authentication."
           },
           "response": []
+        },
+        {
+          "name": "Admin: Get All Staff",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/staff?page=1&limit=20&search=john&role=support",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "staff"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "search",
+                  "value": "john"
+                },
+                {
+                  "key": "role",
+                  "value": "support"
+                }
+              ]
+            },
+            "description": "Get all staff members (Super Admin only)"
+          },
+          "response": []
+        },
+        {
+          "name": "Admin: Add Staff",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\",\n  \"email\": \"john.doe@yareemadata.com\",\n  \"phone\": \"+2348012345678\",\n  \"role\": \"support\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/staff",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "staff"
+              ]
+            },
+            "description": "Add a new staff member (Super Admin only)"
+          },
+          "response": []
+        },
+        {
+          "name": "Admin: Update Staff Role",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"admin\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/staff/:staffId/role",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "staff",
+                ":staffId",
+                "role"
+              ]
+            },
+            "description": "Update staff member role (Super Admin only)"
+          },
+          "response": []
+        },
+        {
+          "name": "Admin: Remove Staff",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/staff/:staffId",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "staff",
+                ":staffId"
+              ]
+            },
+            "description": "Remove a staff member (Super Admin only)"
+          },
+          "response": []
+        },
+        {
+          "name": "Notification Admin: Broadcast",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Important Update\",\n  \"message\": \"This is a notification to all users\",\n  \"type\": \"broadcast\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/notifications/admin/broadcast",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "admin",
+                "broadcast"
+              ]
+            },
+            "description": "Admin broadcast notification to all users"
+          },
+          "response": []
+        },
+        {
+          "name": "Notification Admin: Send to User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"64f1234567890abcdef1234\",\n  \"title\": \"Account Update\",\n  \"message\": \"Your account has been verified\",\n  \"type\": \"system\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/notifications/admin/send",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "admin",
+                "send"
+              ]
+            },
+            "description": "Send notification to specific user"
+          },
+          "response": []
         }
       ]
     },
@@ -3569,6 +3992,39 @@
             "description": "Check transaction status by reference"
           },
           "response": []
+        },
+        {
+          "name": "Check Provider Status [GET {{base_url}}/api/v1/admin/check-provider/:providerId]",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/check-provider/:providerId",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "check-provider",
+                ":providerId"
+              ],
+              "variable": [
+                {
+                  "key": "providerId",
+                  "value": "mtn"
+                }
+              ]
+            },
+            "description": "Check specific provider status"
+          },
+          "response": []
         }
       ]
     },
@@ -3632,85 +4088,1448 @@
           }
         }
       ]
+    },
+    {
+      "name": "Data Services",
+      "item": [
+        {
+          "name": "Get Data Plans (Database)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/telecom/data/plans",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "telecom",
+                "data",
+                "plans"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Data Plans (NelloBytes)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/telecom/data/plans?source=nellobytes&network=mtn",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "telecom",
+                "data",
+                "plans"
+              ],
+              "query": [
+                {
+                  "key": "source",
+                  "value": "nellobytes"
+                },
+                {
+                  "key": "network",
+                  "value": "mtn"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Purchase Data (NelloBytes)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phoneNumber\": \"08012345678\",\n  \"network\": \"mtn\",\n  \"dataPlan\": \"1000\",\n  \"transactionPin\": \"1234\",\n  \"source\": \"nellobytes\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/telecom/data/purchase",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "telecom",
+                "data",
+                "purchase"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Airtime Services",
+      "item": [
+        {
+          "name": "Purchase Airtime",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phoneNumber\": \"08012345678\",\n  \"network\": \"mtn\",\n  \"amount\": 1000,\n  \"transactionPin\": \"1234\",\n  \"source\": \"nellobytes\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/telecom/airtime/purchase",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "telecom",
+                "airtime",
+                "purchase"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "EPIN Services",
+      "item": [
+        {
+          "name": "Get EPIN Plans",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/telecom/epin/plans",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "telecom",
+                "epin",
+                "plans"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Purchase EPIN",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"network\": \"mtn\",\n  \"value\": 100,\n  \"quantity\": 1,\n  \"transactionPin\": \"1234\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/telecom/epin/purchase",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "telecom",
+                "epin",
+                "purchase"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Electricity Services",
+      "item": [
+        {
+          "name": "Get Electricity Discos (ClubKonnect)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/bills/electricity/discos",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bills",
+                "electricity",
+                "discos"
+              ]
+            },
+            "description": "Fetch live electricity discos from ClubKonnect/NelloBytes"
+          },
+          "response": []
+        },
+        {
+          "name": "Verify Meter Number",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/bills/electricity/verify",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bills",
+                "electricity",
+                "verify"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"disco\": \"ekedc\",\n  \"meterNumber\": \"12345678901\",\n  \"meterType\": \"prepaid\",\n  \"source\": \"nellobytes\"\n}"
+            },
+            "description": "Verify electricity customer details via ClubKonnect"
+          },
+          "response": []
+        },
+        {
+          "name": "Purchase Electricity",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/bills/electricity/purchase",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bills",
+                "electricity",
+                "purchase"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"disco\": \"ekedc\",\n  \"meterNumber\": \"12345678901\",\n  \"meterType\": \"prepaid\",\n  \"amount\": 2000,\n  \"phoneNumber\": \"08012345678\",\n  \"transactionPin\": \"1234\",\n  \"source\": \"nellobytes\"\n}"
+            },
+            "description": "Purchase electricity token via ClubKonnect"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Cable TV Services",
+      "item": [
+        {
+          "name": "Get Cable Plans (Database)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/bills/cable/plans",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bills",
+                "cable",
+                "plans"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Cable Plans (NelloBytes)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/bills/cable/plans?source=nellobytes&provider=dstv",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bills",
+                "cable",
+                "plans"
+              ],
+              "query": [
+                {
+                  "key": "source",
+                  "value": "nellobytes"
+                },
+                {
+                  "key": "provider",
+                  "value": "dstv"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Purchase Cable TV",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"smartCardNumber\": \"1234567890\",\n  \"provider\": \"dstv\",\n  \"planId\": \"dstv-padi\",\n  \"months\": 1,\n  \"transactionPin\": \"1234\",\n  \"source\": \"nellobytes\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/bills/cable/purchase",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bills",
+                "cable",
+                "purchase"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Education PIN Services",
+      "item": [
+        {
+          "name": "Purchase WAEC PIN",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"examType\": \"waecdirect\",\n  \"phoneNumber\": \"08012345678\",\n  \"quantity\": 1,\n  \"transactionPin\": \"1234\",\n  \"source\": \"nellobytes\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/bills/education/purchase",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bills",
+                "education",
+                "purchase"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Purchase JAMB PIN",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"examType\": \"de\",\n  \"phoneNumber\": \"08012345678\",\n  \"quantity\": 1,\n  \"transactionPin\": \"1234\",\n  \"source\": \"nellobytes\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/bills/education/purchase",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bills",
+                "education",
+                "purchase"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Notifications",
+      "item": [
+        {
+          "name": "Get All Notifications",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/notifications",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Unread Count",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/notifications/unread-count",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "unread-count"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Mark Notification as Read",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/notifications/64f1234567890abcdef12345/read",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "64f1234567890abcdef12345",
+                "read"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Mark All as Read",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/notifications/mark-all-read",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "mark-all-read"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Notification",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/notifications/64f1234567890abcdef12345",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "64f1234567890abcdef12345"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete All Notifications",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/notifications",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Webhooks (For Testing)",
+      "item": [
+        {
+          "name": "NelloBytes Data Webhook",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "orderid",
+                  "value": "12345",
+                  "type": "text"
+                },
+                {
+                  "key": "statuscode",
+                  "value": "200",
+                  "type": "text"
+                },
+                {
+                  "key": "orderstatus",
+                  "value": "ORDER_COMPLETED",
+                  "type": "text"
+                },
+                {
+                  "key": "orderremark",
+                  "value": "Data purchase successful",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/telecom/webhook/nellobytes",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "telecom",
+                "webhook",
+                "nellobytes"
+              ]
+            }
+          }
+        },
+        {
+          "name": "NelloBytes Bills Webhook",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "orderid",
+                  "value": "12345",
+                  "type": "text"
+                },
+                {
+                  "key": "statuscode",
+                  "value": "200",
+                  "type": "text"
+                },
+                {
+                  "key": "orderstatus",
+                  "value": "ORDER_COMPLETED",
+                  "type": "text"
+                },
+                {
+                  "key": "orderremark",
+                  "value": "Payment successful",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/bills/webhook/nellobytes",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bills",
+                "webhook",
+                "nellobytes"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Airtime Callback (NelloBytes)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/telecom/nellobyte/callback?orderid=12345&statuscode=200&orderstatus=ORDER_COMPLETED&orderremark=Airtime%20delivered",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "telecom",
+                "nellobyte",
+                "callback"
+              ],
+              "query": [
+                {
+                  "key": "orderid",
+                  "value": "12345"
+                },
+                {
+                  "key": "statuscode",
+                  "value": "200"
+                },
+                {
+                  "key": "orderstatus",
+                  "value": "ORDER_COMPLETED"
+                },
+                {
+                  "key": "orderremark",
+                  "value": "Airtime delivered"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reports",
+      "item": [
+        {
+          "name": "My Report (User)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/my-report?type=monthly",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reports",
+                "my-report"
+              ],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "monthly"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Dashboard Summary",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/dashboard",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reports",
+                "dashboard"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Transaction Report",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/transactions?type=monthly",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reports",
+                "transactions"
+              ],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "monthly"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Financial Report",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/financial?type=monthly",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reports",
+                "financial"
+              ],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "monthly"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "User Report",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/users?type=monthly",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reports",
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "monthly"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Agent Report",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/agents?type=monthly",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reports",
+                "agents"
+              ],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "monthly"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Service Report",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/services?type=monthly",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reports",
+                "services"
+              ],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "monthly"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "VTU Console (Admin)",
+      "item": [
+        {
+          "name": "Get All Providers",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/console/providers",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "console",
+                "providers"
+              ]
+            },
+            "description": "Get all VTU service providers"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Provider Config",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/console/providers/config",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "console",
+                "providers",
+                "config"
+              ]
+            },
+            "description": "Get provider configuration"
+          },
+          "response": []
+        },
+        {
+          "name": "Save Service Config",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/console/config",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "console",
+                "config"
+              ]
+            },
+            "description": "Save service configuration"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Provider Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/console/providers/:providerId",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "console",
+                "providers",
+                ":providerId"
+              ]
+            },
+            "description": "Get specific provider details"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Provider Stats",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/console/providers/:providerId/stats",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "console",
+                "providers",
+                ":providerId",
+                "stats"
+              ]
+            },
+            "description": "Get provider statistics"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Provider Balance",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/console/providers/:providerId/balance",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "console",
+                "providers",
+                ":providerId",
+                "balance"
+              ]
+            },
+            "description": "Get provider wallet balance"
+          },
+          "response": []
+        },
+        {
+          "name": "Switch Provider",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/console/switch",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "console",
+                "switch"
+              ]
+            },
+            "description": "Switch to a different provider"
+          },
+          "response": []
+        },
+        {
+          "name": "Run Health Check",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/console/health",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "console",
+                "health"
+              ]
+            },
+            "description": "Run health check on all providers"
+          },
+          "response": []
+        },
+        {
+          "name": "Run Provider Health Check",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/console/providers/:providerId/health",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "console",
+                "providers",
+                ":providerId",
+                "health"
+              ]
+            },
+            "description": "Run health check on specific provider"
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Provider Balances",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/console/balances",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "console",
+                "balances"
+              ]
+            },
+            "description": "Get all provider balances"
+          },
+          "response": []
+        },
+        {
+          "name": "Get API Logs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/console/logs?page=1&limit=50",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "console",
+                "logs"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "Get API logs"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Provider Status",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/console/providers/:providerId/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "console",
+                "providers",
+                ":providerId",
+                "status"
+              ]
+            },
+            "description": "Update provider status (active/inactive)"
+          },
+          "response": []
+        },
+        {
+          "name": "Initialize Providers",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/console/init",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "console",
+                "init"
+              ]
+            },
+            "description": "Initialize/re-seed providers"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Bill Payment Providers",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/console/bill-payment/providers",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "console",
+                "bill-payment",
+                "providers"
+              ]
+            },
+            "description": "Get all bill payment providers"
+          },
+          "response": []
+        },
+        {
+          "name": "Switch Bill Payment Provider",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/console/bill-payment/switch",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "console",
+                "bill-payment",
+                "switch"
+              ]
+            },
+            "description": "Switch bill payment provider"
+          },
+          "response": []
+        }
+      ]
     }
-  ],
-  "variable": [
-    {
-      "key": "base_url",
-      "value": "http://localhost:5000",
-      "type": "string"
-    },
-    {
-      "key": "auth_token",
-      "value": "user_jwt_token_here",
-      "type": "string"
-    },
-    {
-      "key": "admin_token",
-      "value": "admin_jwt_token_here",
-      "type": "string"
-    },
-    {
-      "key": "agent_token",
-      "value": "agent_jwt_token_here",
-      "type": "string"
-    },
-    {
-      "key": "plan_id",
-      "value": "data_plan_id_here",
-      "type": "string"
-    },
-    {
-      "key": "user_id_here",
-      "value": "user_object_id_here",
-      "type": "string"
-    },
-    {
-      "key": "agent_id_here",
-      "value": "agent_object_id_here",
-      "type": "string"
-    },
-    {
-      "key": "transaction_id_here",
-      "value": "transaction_object_id_here",
-      "type": "string"
-    },
-    {
-      "key": "pricing_id_here",
-      "value": "pricing_object_id_here",
-      "type": "string"
-    },
-    {
-      "key": "reset_token_here",
-      "value": "password_reset_token_here",
-      "type": "string"
-    }
-  ],
-  "event": [
-    {
-      "listen": "prerequest",
-      "script": {
-        "type": "text/javascript",
-        "exec": [
-          "console.log('Request started at: ' + new Date().toISOString());"
-        ]
-      }
-    },
-    {
-      "listen": "test",
-      "script": {
-        "type": "text/javascript",
-        "exec": [
-          "pm.test('Status code is 200', function () {",
-          "    pm.response.to.have.status(200);",
-          "});",
-          "",
-          "pm.test('Response time is less than 500ms', function () {",
-          "    pm.expect(pm.response.responseTime).to.be.below(500);",
-          "});"
-        ]
-      }
-    }
-  ],
-  "auth": null
+  ]
 }

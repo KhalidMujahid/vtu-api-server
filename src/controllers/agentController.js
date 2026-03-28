@@ -8,6 +8,32 @@ const { AppError } = require('../middlewares/errorHandler');
 const logger = require('../utils/logger');
 const crypto = require('crypto');
 const jwt = require("jsonwebtoken");
+const NelloBytesService = require('../services/nelloBytesService');
+const vtuConfig = require('../config/vtuProviders');
+
+function normalizeElectricityDiscos(rawDiscos) {
+  if (Array.isArray(rawDiscos)) {
+    return rawDiscos.map((item) => {
+      if (typeof item === 'string') {
+        return { code: item, name: item };
+      }
+
+      return {
+        code: item.code || item.id || item.disco_code || item.value || item.name,
+        name: item.name || item.disco || item.label || item.code || item.id,
+      };
+    });
+  }
+
+  if (rawDiscos && typeof rawDiscos === 'object') {
+    return Object.entries(rawDiscos).map(([code, value]) => ({
+      code,
+      name: typeof value === 'string' ? value : value?.name || value?.disco || code,
+    }));
+  }
+
+  return [];
+}
 
 const signToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, {
@@ -1597,6 +1623,136 @@ class AgentController {
           if (!validServices.includes(serviceType)) {
             return next(new AppError('Invalid service type', 400));
           }
+
+          if (serviceType === 'electricity') {
+            const activeProvider = await vtuConfig.getProviderIdForService('electricity');
+
+            if (activeProvider !== 'clubkonnect') {
+              return next(new AppError(`Electricity provider ${activeProvider} is not implemented for agent bill payment`, 400));
+            }
+
+            const billAmount = Number(amount);
+            if (Number.isNaN(billAmount) || billAmount < 500 || billAmount > 100000) {
+              return next(new AppError('Amount must be between ₦500 and ₦100,000', 400));
+            }
+
+            const meterType = customerDetails?.meterType || 'prepaid';
+            const verification = await NelloBytesService.verifyElectricityMeter({
+              electricCompany: provider,
+              meterNo: meterNumber,
+              meterType,
+            });
+
+            if (!verification.valid) {
+              return next(new AppError('Invalid meter number', 400));
+            }
+
+            if (wallet.balance < billAmount) {
+              return next(new AppError('Insufficient wallet balance', 400));
+            }
+
+            const reference = requestId || `${serviceType.toUpperCase()}-${Date.now()}`;
+            const previousBalance = wallet.balance;
+
+            wallet.balance -= billAmount;
+            await wallet.save();
+
+            const transaction = await Transaction.create({
+              reference,
+              user: agent._id,
+              type: serviceType,
+              category: 'bills',
+              amount: billAmount,
+              fee: 0,
+              totalAmount: billAmount,
+              previousBalance,
+              newBalance: wallet.balance,
+              status: 'pending',
+              description: `${serviceType} payment for ${meterNumber}`,
+              metadata: {
+                serviceType,
+                meterNumber,
+                provider,
+                amount: billAmount,
+                customerDetails,
+                customerName: verification.customerName,
+                source: 'nellobytes',
+              },
+              service: {
+                provider: 'clubkonnect',
+                disco: provider,
+                meterNumber,
+                customerName: verification.customerName,
+              },
+            });
+
+            const apiResponse = await NelloBytesService.payElectricityBill({
+              electricCompany: provider,
+              meterNo: meterNumber,
+              meterType,
+              amount: billAmount,
+              phoneNo: customerDetails?.phone || agent.phoneNumber,
+              requestId: reference,
+              callBackURL: `${process.env.SERVER_URL || 'https://api.yareemadata.com'}/api/v1/bills/webhook/nellobytes`,
+            });
+
+            if (apiResponse.success || apiResponse.statusCode === '100') {
+              transaction.status = apiResponse.statusCode === '200' ? 'successful' : 'pending';
+              transaction.metadata.apiResponse = apiResponse.response;
+              transaction.metadata.providerUsed = 'clubkonnect';
+              transaction.service.orderId = apiResponse.orderId;
+              transaction.service.meterType = meterType;
+              transaction.statusHistory.push({
+                status: transaction.status,
+                note: transaction.status === 'successful' ? 'Bill payment successful' : 'Bill payment initiated',
+                timestamp: new Date(),
+              });
+
+              if (transaction.status === 'successful') {
+                transaction.completedAt = new Date();
+              }
+
+              await transaction.save();
+
+              return res.status(200).json({
+                status: 'success',
+                message: transaction.status === 'successful' ? 'Bill payment successful' : 'Bill payment initiated',
+                data: {
+                  transaction: {
+                    id: transaction._id,
+                    reference: transaction.reference,
+                    amount: transaction.amount,
+                    status: transaction.status,
+                    timestamp: transaction.createdAt,
+                  },
+                  billDetails: {
+                    serviceType,
+                    meterNumber,
+                    amount: billAmount,
+                    provider,
+                    customerName: verification.customerName,
+                    source: 'nellobytes',
+                  },
+                  walletBalance: wallet.balance,
+                },
+              });
+            }
+
+            wallet.balance += billAmount;
+            await wallet.save();
+
+            transaction.status = 'failed';
+            transaction.metadata.apiResponse = apiResponse.response || apiResponse;
+            transaction.metadata.providerUsed = 'clubkonnect';
+            transaction.statusHistory.push({
+              status: 'failed',
+              note: apiResponse.status || apiResponse.message || 'Bill payment failed',
+              timestamp: new Date(),
+            });
+            await transaction.save();
+
+            return next(new AppError(apiResponse.status || apiResponse.message || 'Bill payment failed', 500));
+          }
           
           // Get service pricing
           let service;
@@ -1797,11 +1953,41 @@ class AgentController {
       static async getServices(req, res, next) {
         try {
           const { serviceType, network, provider } = req.query;
+          const activeProvider = await vtuConfig.getProviderIdForService('electricity');
+
+          if (serviceType === 'electricity') {
+            if (activeProvider === 'clubkonnect') {
+              const electricityDiscos = await NelloBytesService.getElectricityDiscos();
+              const discos = electricityDiscos.discos || normalizeElectricityDiscos(electricityDiscos);
+
+              return res.status(200).json({
+                status: 'success',
+                data: {
+                  services: {
+                    electricity: discos,
+                  },
+                  providers: [
+                    {
+                      providerName: 'clubkonnect',
+                      displayName: 'Club Konnect (NelloBytes)',
+                      status: 'active',
+                    },
+                  ],
+                  source: 'nellobytes',
+                  timestamp: new Date(),
+                },
+              });
+            }
+          }
           
           const query = {
             isActive: true,
             isAvailable: true,
           };
+
+          if (!serviceType && activeProvider === 'clubkonnect') {
+            query.serviceType = { $ne: 'electricity' };
+          }
           
           if (serviceType) query.serviceType = serviceType;
           if (network) query.network = network;
@@ -1824,12 +2010,18 @@ class AgentController {
           const providers = await ProviderStatus.find({
             status: { $in: ['active', 'degraded'] },
           }).lean();
+
+          if (!serviceType && activeProvider === 'clubkonnect') {
+            const electricityDiscos = await NelloBytesService.getElectricityDiscos();
+            groupedServices.electricity = electricityDiscos.discos || normalizeElectricityDiscos(electricityDiscos);
+          }
           
           res.status(200).json({
             status: 'success',
             data: {
               services: groupedServices,
               providers,
+              ...(activeProvider === 'clubkonnect' ? { electricitySource: 'nellobytes' } : {}),
               timestamp: new Date(),
             },
           });
@@ -1843,7 +2035,7 @@ class AgentController {
       // Verify customer (for electricity, cable TV, etc.)
       static async verifyCustomer(req, res, next) {
         try {
-          const { serviceType, customerId, provider } = req.body;
+          const { serviceType, customerId, provider, meterType = 'prepaid' } = req.body;
           
           if (!serviceType || !customerId) {
             return next(new AppError('Please provide service type and customer ID', 400));
@@ -1852,6 +2044,31 @@ class AgentController {
           const validServices = ['electricity', 'cable_tv'];
           if (!validServices.includes(serviceType)) {
             return next(new AppError('Invalid service type', 400));
+          }
+
+          if (serviceType === 'electricity') {
+            const activeProvider = await vtuConfig.getProviderIdForService('electricity');
+
+            if (activeProvider === 'clubkonnect') {
+              const result = await NelloBytesService.verifyElectricityMeter({
+                electricCompany: provider,
+                meterNo: customerId,
+                meterType,
+              });
+
+              return res.status(200).json({
+                status: 'success',
+                message: 'Customer verification successful',
+                data: {
+                  customerName: result.customerName,
+                  customerId,
+                  provider,
+                  meterType,
+                  verified: result.valid,
+                  source: 'nellobytes',
+                },
+              });
+            }
           }
           
           // TODO: Integrate with verification API

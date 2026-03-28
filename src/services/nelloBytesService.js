@@ -29,6 +29,8 @@ class NelloBytesService {
     ekedc: '01',
     ikedc: '02',
     aedc: '03',
+    kedco: '04',
+    kaedco: '04',
     kaedc: '04',
     phedc: '05',
     jedc: '06',
@@ -41,6 +43,17 @@ class NelloBytesService {
     postpaid: '02',
   };
 
+  static electricityCodeNames = {
+    '01': 'ekedc',
+    '02': 'ikedc',
+    '03': 'aedc',
+    '04': 'kedco',
+    '05': 'phedc',
+    '06': 'jedc',
+    '07': 'ibedc',
+    '08': 'bedc',
+  };
+
   static normalizeMobileNumber(phoneNumber) {
     if (!phoneNumber) {
       return '';
@@ -51,6 +64,84 @@ class NelloBytesService {
       .replace(/^\+234/, '')
       .replace(/^234/, '')
       .replace(/^0/, '');
+  }
+
+  static resolveElectricityCompany(electricCompany) {
+    const value = String(electricCompany || '').trim().toLowerCase();
+
+    if (!value) {
+      throw new AppError('Invalid electricity company', 400);
+    }
+
+    const aliases = {
+      eko: 'ekedc',
+      ekoelectric: 'ekedc',
+      ekoelectricity: 'ekedc',
+      ikeja: 'ikedc',
+      ikejaelectric: 'ikedc',
+      abuja: 'aedc',
+      abujaelectric: 'aedc',
+      kedco: 'kedco',
+      kano: 'kedco',
+      kanoelectric: 'kedco',
+      portharcourt: 'phedc',
+      phed: 'phedc',
+      jos: 'jedc',
+      ibadan: 'ibedc',
+      benin: 'bedc',
+    };
+
+    const normalizedName = aliases[value] || value;
+    const code = this.electricityCodes[normalizedName] || this.electricityCodes[value] || (this.electricityCodeNames[value] ? value : null);
+
+    if (!code) {
+      throw new AppError('Invalid electricity company', 400);
+    }
+
+    return {
+      code,
+      key: this.electricityCodeNames[code] || normalizedName,
+    };
+  }
+
+  static resolveMeterType(meterType = 'prepaid') {
+    const value = String(meterType || '').trim().toLowerCase();
+    return this.meterTypes[value] || (value === '01' || value === '02' ? value : '01');
+  }
+
+  static normalizeElectricityDiscosResponse(response) {
+    const raw = response?.DISCOS || response?.discos || response?.data || response;
+
+    if (Array.isArray(raw)) {
+      return raw.map((item) => {
+        const code = String(item.code || item.id || item.disco_code || item.value || '').trim();
+        const name = String(item.name || item.disco || item.label || '').trim();
+        const resolved = code ? this.resolveElectricityCompany(code) : this.resolveElectricityCompany(name);
+
+        return {
+          code: resolved.code,
+          key: resolved.key,
+          name: name || resolved.key.toUpperCase(),
+        };
+      });
+    }
+
+    if (raw && typeof raw === 'object') {
+      return Object.entries(raw).map(([code, value]) => {
+        const resolved = this.resolveElectricityCompany(code);
+        return {
+          code: resolved.code,
+          key: resolved.key,
+          name: typeof value === 'string' ? value : value?.name || value?.disco || resolved.key.toUpperCase(),
+        };
+      });
+    }
+
+    return Object.entries(this.electricityCodeNames).map(([code, key]) => ({
+      code,
+      key,
+      name: key.toUpperCase(),
+    }));
   }
 
   static async request(endpoint, params = {}) {
@@ -397,7 +488,10 @@ class NelloBytesService {
   static async getElectricityDiscos() {
     const endpoint = '/APIElectricityDiscosV2.asp';
     const response = await this.request(endpoint);
-    return response;
+    return {
+      raw: response,
+      discos: this.normalizeElectricityDiscosResponse(response),
+    };
   }
 
   /**
@@ -405,13 +499,8 @@ class NelloBytesService {
    */
   static async verifyElectricityMeter({ electricCompany, meterNo, meterType = 'prepaid' }) {
     const endpoint = '/APIVerifyElectricityV1.asp';
-    
-    const discoCode = this.electricityCodes[electricCompany.toLowerCase()];
-    if (!discoCode) {
-      throw new AppError('Invalid electricity company', 400);
-    }
-
-    const typeCode = this.meterTypes[meterType.toLowerCase()] || '01';
+    const { code: discoCode, key } = this.resolveElectricityCompany(electricCompany);
+    const typeCode = this.resolveMeterType(meterType);
 
     const response = await this.request(endpoint, {
       ElectricCompany: discoCode,
@@ -422,6 +511,9 @@ class NelloBytesService {
     return {
       valid: response.customer_name && response.customer_name !== 'INVALID_METERNO',
       customerName: response.customer_name,
+      electricCompany: key,
+      electricCompanyCode: discoCode,
+      meterTypeCode: typeCode,
       response,
     };
   }
@@ -431,13 +523,8 @@ class NelloBytesService {
    */
   static async payElectricityBill({ electricCompany, meterNo, meterType, amount, phoneNo, requestId = null, callBackURL }) {
     const endpoint = '/APIElectricityV1.asp';
-    
-    const discoCode = this.electricityCodes[electricCompany.toLowerCase()];
-    if (!discoCode) {
-      throw new AppError('Invalid electricity company', 400);
-    }
-
-    const typeCode = this.meterTypes[meterType.toLowerCase()] || '01';
+    const { code: discoCode, key } = this.resolveElectricityCompany(electricCompany);
+    const typeCode = this.resolveMeterType(meterType);
     const resolvedRequestId = requestId || uuidv4().substring(0, 8).toUpperCase();
 
     const response = await this.request(endpoint, {
@@ -456,6 +543,9 @@ class NelloBytesService {
       statusCode: response.statuscode,
       orderId: response.orderid,
       meterToken: response.metertoken,
+      electricCompany: key,
+      electricCompanyCode: discoCode,
+      meterTypeCode: typeCode,
       requestId: response.requestid || resolvedRequestId,
       response,
     };

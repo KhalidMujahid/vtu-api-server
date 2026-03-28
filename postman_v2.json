@@ -314,6 +314,33 @@
       "name": "Electricity Services",
       "item": [
         {
+          "name": "Get Electricity Discos (ClubKonnect)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/bills/electricity/discos",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bills",
+                "electricity",
+                "discos"
+              ]
+            },
+            "description": "Fetch live electricity discos from ClubKonnect/NelloBytes"
+          },
+          "response": []
+        },
+        {
           "name": "Verify Meter Number",
           "request": {
             "method": "POST",
@@ -327,10 +354,6 @@
                 "value": "Bearer {{auth_token}}"
               }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"meterNumber\": \"12345678901\",\n  \"disco\": \"ekedc\",\n  \"meterType\": \"prepaid\",\n  \"source\": \"nellobytes\"\n}"
-            },
             "url": {
               "raw": "{{base_url}}/api/v1/bills/electricity/verify",
               "host": [
@@ -343,8 +366,14 @@
                 "electricity",
                 "verify"
               ]
-            }
-          }
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"disco\": \"ekedc\",\n  \"meterNumber\": \"12345678901\",\n  \"meterType\": \"prepaid\",\n  \"source\": \"nellobytes\"\n}"
+            },
+            "description": "Verify electricity customer details via ClubKonnect"
+          },
+          "response": []
         },
         {
           "name": "Purchase Electricity",
@@ -360,10 +389,6 @@
                 "value": "Bearer {{auth_token}}"
               }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"meterNumber\": \"12345678901\",\n  \"disco\": \"ekedc\",\n  \"meterType\": \"prepaid\",\n  \"amount\": 2000,\n  \"phoneNumber\": \"08012345678\",\n  \"transactionPin\": \"1234\",\n  \"source\": \"nellobytes\"\n}"
-            },
             "url": {
               "raw": "{{base_url}}/api/v1/bills/electricity/purchase",
               "host": [
@@ -376,8 +401,14 @@
                 "electricity",
                 "purchase"
               ]
-            }
-          }
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"disco\": \"ekedc\",\n  \"meterNumber\": \"12345678901\",\n  \"meterType\": \"prepaid\",\n  \"amount\": 2000,\n  \"phoneNumber\": \"08012345678\",\n  \"transactionPin\": \"1234\",\n  \"source\": \"nellobytes\"\n}"
+            },
+            "description": "Purchase electricity token via ClubKonnect"
+          },
+          "response": []
         }
       ]
     },

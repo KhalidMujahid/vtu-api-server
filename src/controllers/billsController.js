@@ -16,6 +16,59 @@ const BILL_SOURCE_TO_PROVIDER = {
   smeplug: 'smeplug',
 };
 
+function normalizeElectricityDiscos(rawDiscos) {
+  if (Array.isArray(rawDiscos)) {
+    return rawDiscos.map((item) => {
+      if (typeof item === 'string') {
+        return { code: item, name: item };
+      }
+
+      return {
+        code: item.code || item.id || item.disco_code || item.value || item.name,
+        name: item.name || item.disco || item.label || item.code || item.id,
+      };
+    });
+  }
+
+  if (rawDiscos && typeof rawDiscos === 'object') {
+    return Object.entries(rawDiscos).map(([code, value]) => ({
+      code,
+      name: typeof value === 'string' ? value : value?.name || value?.disco || code,
+    }));
+  }
+
+  return [];
+}
+
+exports.getElectricityDiscos = async (req, res, next) => {
+  try {
+    const { source } = req.query;
+    const defaultProvider = await vtuConfig.getProviderIdForService('electricity');
+    const activeProvider = BILL_SOURCE_TO_PROVIDER[source] || source || defaultProvider;
+    const activeSource = vtuConfig.providers[activeProvider]?.source || activeProvider;
+
+    if (!(activeProvider === 'clubkonnect' || activeSource === 'nellobytes')) {
+      return next(new AppError(`Electricity disco listing is not implemented for ${activeProvider}`, 400));
+    }
+
+    const electricityDiscos = await NelloBytesService.getElectricityDiscos();
+    const discos = electricityDiscos.discos || normalizeElectricityDiscos(electricityDiscos);
+
+    return res.status(200).json({
+      status: 'success',
+      data: {
+        discos,
+        raw: electricityDiscos.raw || electricityDiscos,
+      },
+      provider: activeProvider,
+      source: 'nellobytes',
+    });
+  } catch (error) {
+    logger.error(`NelloBytes electricity discos error: ${error.message}`);
+    next(new AppError(error.message || 'Unable to fetch electricity discos', 500));
+  }
+};
+
 exports.verifyElectricityCustomer = async (req, res, next) => {
   try {
     const { meterNumber, disco, meterType = 'prepaid', source } = req.body;

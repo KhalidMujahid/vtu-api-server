@@ -6,6 +6,62 @@ const User = require('../models/User');
 const { AppError } = require('../middlewares/errorHandler');
 const logger = require('../utils/logger');
 
+const FUNDING_FEE = 50;
+
+function calculateNetFundingAmount(grossAmount) {
+  const parsedAmount = Number(grossAmount) || 0;
+
+  return {
+    grossAmount: parsedAmount,
+    fee: FUNDING_FEE,
+    netAmount: Math.max(parsedAmount - FUNDING_FEE, 0),
+  };
+}
+
+async function applyFundingToTransaction(transaction, grossAmount, metadata = {}, note = 'Payment confirmed') {
+  const { grossAmount: resolvedGrossAmount, fee, netAmount } = calculateNetFundingAmount(grossAmount);
+
+  let wallet = await Wallet.findOne({ user: transaction.user });
+  const previousBalance = wallet?.balance || 0;
+
+  if (wallet) {
+    wallet.balance += netAmount;
+    wallet.totalFunded += netAmount;
+    wallet.lastTransaction = new Date();
+    await wallet.save();
+  } else {
+    wallet = await Wallet.create({
+      user: transaction.user,
+      balance: netAmount,
+      totalFunded: netAmount,
+      lastTransaction: new Date(),
+    });
+  }
+
+  transaction.status = 'successful';
+  transaction.amount = netAmount;
+  transaction.fee = fee;
+  transaction.totalAmount = resolvedGrossAmount;
+  transaction.previousBalance = previousBalance;
+  transaction.newBalance = wallet.balance;
+  transaction.completedAt = new Date();
+  transaction.metadata = {
+    ...(transaction.metadata || {}),
+    grossAmount: resolvedGrossAmount,
+    fundingFee: fee,
+    netAmount,
+    ...metadata,
+  };
+  transaction.statusHistory.push({
+    status: 'successful',
+    note: `${note}. Gross ₦${resolvedGrossAmount}, fee ₦${fee}, net credited ₦${netAmount}`,
+    timestamp: new Date(),
+  });
+  await transaction.save();
+
+  return { wallet, grossAmount: resolvedGrossAmount, fee, netAmount };
+}
+
 exports.initializePaystackPayment = async (req, res, next) => {
   try {
     const { amount } = req.body;
@@ -22,14 +78,21 @@ exports.initializePaystackPayment = async (req, res, next) => {
 
     const transaction = await Transaction.create({
       user: userId,
-      type: 'wallet_funding',
+      type: 'fund_wallet',
+      category: 'funding',
       amount,
+      fee: FUNDING_FEE,
       totalAmount: amount,
       reference,
       status: 'pending',
-      paymentMethod: 'paystack',
-      metadata: { provider: 'paystack', initiatedAt: new Date() },
-      statusHistory: [{ status: 'pending', note: 'Payment initiated', timestamp: new Date() }]
+      metadata: {
+        provider: 'paystack',
+        initiatedAt: new Date(),
+        grossAmount: amount,
+        fundingFee: FUNDING_FEE,
+        expectedNetAmount: Math.max(Number(amount) - FUNDING_FEE, 0),
+      },
+      statusHistory: [{ status: 'pending', note: 'Payment initiated', timestamp: new Date() }],
     });
 
     const response = await axios.post(
@@ -40,7 +103,7 @@ exports.initializePaystackPayment = async (req, res, next) => {
         reference,
         currency: 'NGN',
         callback_url: `${process.env.FRONTEND_URL}/wallet/funding/callback`,
-        metadata: { userId, transactionId: transaction._id.toString(), type: 'wallet_funding' }
+        metadata: { userId, transactionId: transaction._id.toString(), type: 'fund_wallet' },
       },
       { headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`, 'Content-Type': 'application/json' } }
     );
@@ -52,17 +115,18 @@ exports.initializePaystackPayment = async (req, res, next) => {
       data: {
         authorization_url: response.data.data.authorization_url,
         reference,
-        transactionId: transaction._id
-      }
+        transactionId: transaction._id,
+        fundingFee: FUNDING_FEE,
+        expectedNetAmount: Math.max(Number(amount) - FUNDING_FEE, 0),
+      },
     });
-
   } catch (error) {
     logger.error('Error initializing Paystack payment:', error);
 
     if (error.response?.data?.transactionId) {
       await Transaction.findByIdAndUpdate(error.response.data.transactionId, {
         status: 'failed',
-        $push: { statusHistory: { status: 'failed', note: 'Payment initialization failed', timestamp: new Date() } }
+        $push: { statusHistory: { status: 'failed', note: 'Payment initialization failed', timestamp: new Date() } },
       });
     }
 
@@ -75,7 +139,7 @@ exports.verifyPaystackPayment = async (req, res, next) => {
     const { reference } = req.params;
 
     const response = await axios.get(`https://api.paystack.co/transaction/verify/${reference}`, {
-      headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` }
+      headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` },
     });
 
     const paymentData = response.data.data;
@@ -83,28 +147,18 @@ exports.verifyPaystackPayment = async (req, res, next) => {
     if (paymentData.status === 'success') {
       const transaction = await Transaction.findOne({ reference });
       if (transaction && transaction.status === 'pending') {
-        const wallet = await Wallet.findOneAndUpdate(
-          { user: transaction.user },
-          { $inc: { balance: transaction.amount }, $push: { transactions: { type: 'credit', amount: transaction.amount, reference, description: 'Wallet funding via Paystack', balance: transaction.amount } } },
-          { new: true }
+        const { grossAmount, netAmount } = await applyFundingToTransaction(
+          transaction,
+          paymentData.amount ? paymentData.amount / 100 : transaction.totalAmount || transaction.amount,
+          { paymentData },
+          'Payment verified successfully'
         );
 
-        if (!wallet) {
-          await Wallet.create({ user: transaction.user, balance: transaction.amount, transactions: [{ type: 'credit', amount: transaction.amount, reference, description: 'Wallet funding via Paystack', balance: transaction.amount }] });
-        }
-
-        transaction.status = 'completed';
-        transaction.statusHistory.push({ status: 'completed', note: 'Payment verified successfully', timestamp: new Date() });
-        transaction.completedAt = new Date();
-        transaction.metadata.paymentData = paymentData;
-        await transaction.save();
-
-        logger.info(`Payment verified: ${reference}, Amount: ₦${transaction.amount}`);
+        logger.info(`Payment verified: ${reference}, Gross: ₦${grossAmount}, Net Credited: ₦${netAmount}`);
       }
     }
 
     res.status(200).json({ status: 'success', data: paymentData });
-
   } catch (error) {
     logger.error('Error verifying payment:', error);
     next(new AppError('Payment verification failed', 400));
@@ -130,29 +184,22 @@ exports.paystackWebhook = async (req, res) => {
 
       const transaction = await Transaction.findOne({ reference });
       if (!transaction) return res.status(200).json({ status: 'success' });
-      if (transaction.status === 'completed') return res.status(200).json({ status: 'success' });
+      if (transaction.status === 'successful') return res.status(200).json({ status: 'success' });
 
-      const wallet = await Wallet.findOneAndUpdate(
-        { user: transaction.user },
-        { $inc: { balance: transaction.amount }, $push: { transactions: { type: 'credit', amount: transaction.amount, reference, description: 'Wallet funding via Paystack', balance: transaction.amount } } },
-        { new: true }
+      const { grossAmount, netAmount } = await applyFundingToTransaction(
+        transaction,
+        paymentData.amount ? paymentData.amount / 100 : transaction.totalAmount || transaction.amount,
+        {
+          webhookData: paymentData,
+          confirmedAt: new Date(),
+        },
+        'Payment confirmed via webhook'
       );
 
-      if (!wallet) {
-        await Wallet.create({ user: transaction.user, balance: transaction.amount, transactions: [{ type: 'credit', amount: transaction.amount, reference, description: 'Wallet funding via Paystack', balance: transaction.amount }] });
-      }
-
-      transaction.status = 'completed';
-      transaction.completedAt = new Date();
-      transaction.statusHistory.push({ status: 'completed', note: 'Payment confirmed via webhook', timestamp: new Date() });
-      transaction.metadata = { ...transaction.metadata, webhookData: paymentData, confirmedAt: new Date() };
-      await transaction.save();
-
-      logger.info(`Wallet funded via webhook: ${reference}, Amount: ₦${transaction.amount}`);
+      logger.info(`Wallet funded via webhook: ${reference}, Gross: ₦${grossAmount}, Net Credited: ₦${netAmount}`);
     }
 
     res.status(200).json({ status: 'success' });
-
   } catch (error) {
     logger.error('Paystack webhook error:', error);
     res.status(200).json({ status: 'success' });
@@ -172,14 +219,15 @@ exports.getPaymentStatus = async (req, res, next) => {
       data: {
         reference: transaction.reference,
         amount: transaction.amount,
+        fee: transaction.fee || 0,
+        totalAmount: transaction.totalAmount,
         status: transaction.status,
         type: transaction.type,
         createdAt: transaction.createdAt,
         completedAt: transaction.completedAt,
-        user: transaction.user
-      }
+        user: transaction.user,
+      },
     });
-
   } catch (error) {
     logger.error('Error getting payment status:', error);
     next(new AppError('Failed to get payment status', 500));
