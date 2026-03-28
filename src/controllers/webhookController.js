@@ -1,5 +1,7 @@
 const crypto = require('crypto');
 const WalletService = require('../services/walletService');
+const NotificationService = require('../services/NotificationService');
+const SmePlugService = require('../services/smePlugService');
 const Transaction = require('../models/Transaction');
 const Wallet = require('../models/Wallet');
 const { AppError } = require('../middlewares/errorHandler');
@@ -10,7 +12,7 @@ const logger = require('../utils/logger');
  */
 exports.smePlugWebhook = async (req, res) => {
   try {
-    const payload = req.body;
+    const payload = Object.keys(req.body || {}).length ? req.body : req.query;
     logger.info('SMEPlug webhook received:', payload);
 
     const result = SmePlugService.verifyCallback(payload);
@@ -21,8 +23,14 @@ exports.smePlugWebhook = async (req, res) => {
 
     logger.info('Parsed webhook result:', result);
 
+    const lookupValues = [result.reference, result.customerReference]
+      .filter(Boolean);
+
     const transaction = await Transaction.findOne({
-      'service.orderId': result.reference,
+      $or: [
+        { 'service.orderId': { $in: lookupValues } },
+        { reference: { $in: lookupValues } },
+      ],
     });
 
     if (!transaction) {
@@ -40,6 +48,7 @@ exports.smePlugWebhook = async (req, res) => {
 
     if (successStatuses.includes(status)) {
       transaction.status = 'successful';
+      transaction.providerResponse = payload;
       transaction.statusHistory.push({
         status: 'successful',
         note: result.message || 'Delivered successfully',
@@ -64,6 +73,7 @@ exports.smePlugWebhook = async (req, res) => {
       }
 
       transaction.status = 'failed';
+      transaction.providerResponse = payload;
       transaction.statusHistory.push({
         status: 'failed',
         note: result.message || 'Delivery failed',

@@ -715,28 +715,36 @@ exports.queryAirtimeStatus = async (requestId) => {
 
 exports.airtimeWebhook = async (req, res) => {
   try {
-    const { orderid, statuscode, status } = req.body;
+    const data = { ...(req.body || {}), ...(req.query || {}) };
+    const { orderid, statuscode, status, orderstatus, orderremark } = data;
 
-    const transaction = await Transaction.findOne({ reference: orderid });
+    const transaction = await Transaction.findOne({
+      $or: [
+        { 'service.orderId': orderid },
+        { reference: orderid },
+      ],
+    });
     if (!transaction) return res.status(404).send('Transaction not found');
 
     if (transaction.status === 'successful' || transaction.status === 'failed') {
       return res.status(200).send('Already processed');
     }
 
-    if (statuscode === "100") {
+    transaction.providerResponse = data;
+
+    if (statuscode === "100" || orderstatus === 'ORDER_RECEIVED') {
       transaction.status = 'pending';
       transaction.statusHistory.push({
         status: 'pending',
-        note: status,
+        note: orderremark || status || orderstatus || 'Order received',
         timestamp: new Date(),
       });
 
-    } else if (statuscode === "200") {
+    } else if (statuscode === "200" || orderstatus === 'ORDER_COMPLETED') {
       transaction.status = 'successful';
       transaction.statusHistory.push({
         status: 'successful',
-        note: 'Confirmed by provider',
+        note: orderremark || status || 'Confirmed by provider',
         timestamp: new Date(),
       });
 
@@ -752,7 +760,7 @@ exports.airtimeWebhook = async (req, res) => {
       transaction.status = 'failed';
       transaction.statusHistory.push({
         status: 'failed',
-        note: status || 'Provider failure',
+        note: orderremark || status || orderstatus || 'Provider failure',
         timestamp: new Date(),
       });
 
@@ -1401,7 +1409,7 @@ exports.getAirtimeNigeriaBalance = async (req, res, next) => {
  */
 exports.airtimeNigeriaWebhook = async (req, res) => {
   try {
-    const payload = req.body;
+    const payload = Object.keys(req.body || {}).length ? req.body : req.query;
     logger.info('AirtimeNigeria webhook received:', payload);
     
     // Parse the callback payload
@@ -1412,7 +1420,13 @@ exports.airtimeNigeriaWebhook = async (req, res) => {
     }
     
     // Find transaction by reference
-    const transaction = await Transaction.findOne({ 'service.orderId': result.reference });
+    const lookupValues = [result.reference, result.customerReference].filter(Boolean);
+    const transaction = await Transaction.findOne({
+      $or: [
+        { 'service.orderId': { $in: lookupValues } },
+        { reference: { $in: lookupValues } },
+      ],
+    });
     
     if (!transaction) {
       logger.warn(`Transaction not found for reference: ${result.reference}`);
@@ -1426,6 +1440,7 @@ exports.airtimeNigeriaWebhook = async (req, res) => {
     // Update transaction based on delivery status
     if (result.status === 'success') {
       transaction.status = 'successful';
+      transaction.providerResponse = payload;
       transaction.statusHistory.push({
         status: 'successful',
         note: result.message || 'Delivered successfully',
@@ -1444,6 +1459,7 @@ exports.airtimeNigeriaWebhook = async (req, res) => {
       });
     } else {
       transaction.status = 'failed';
+      transaction.providerResponse = payload;
       transaction.statusHistory.push({
         status: 'failed',
         note: result.message || 'Delivery failed',

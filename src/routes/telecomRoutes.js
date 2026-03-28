@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const telecomController = require('../controllers/telecomController');
+const webhookController = require('../controllers/webhookController');
 
 const { protect, requireTransactionPin } = require('../middlewares/auth');
 
@@ -28,6 +29,8 @@ router.post('/webhook/smedata', telecomController.smedataWebhook);
  */
 router.post('/webhook/nellobytes', telecomController.nelloBytesWebhook);
 router.get('/webhook/nellobytes', telecomController.nelloBytesWebhook);
+router.post('/webhook/smeplug', webhookController.smePlugWebhook);
+router.get('/webhook/smeplug', webhookController.smePlugWebhook);
 
 /**
  * @swagger
@@ -40,6 +43,7 @@ router.get('/webhook/nellobytes', telecomController.nelloBytesWebhook);
  *         description: Webhook processed
  */
 router.post('/webhook/airtimenigeria', telecomController.airtimeNigeriaWebhook);
+router.get('/webhook/airtimenigeria', telecomController.airtimeNigeriaWebhook);
 
 /**
  * @swagger
@@ -285,6 +289,7 @@ router.post('/airtime', protect, requireTransactionPin, telecomController.purcha
  *         description: Webhook processed
  */
 router.get('/airtime/webhook', telecomController.airtimeWebhook);
+router.post('/airtime/webhook', telecomController.airtimeWebhook);
 
 /**
  * @swagger

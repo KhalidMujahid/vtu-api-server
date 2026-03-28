@@ -343,7 +343,6 @@ class AirtimeNigeriaService {
    * Verify webhook/callback payload
    */
   static verifyCallback(payload) {
-    // Airtime Nigeria sends array of transactions
     if (Array.isArray(payload) && payload.length > 0) {
       const transaction = payload[0];
       return {
@@ -354,6 +353,18 @@ class AirtimeNigeriaService {
         message: transaction.gateway_response,
       };
     }
+
+    if (payload && typeof payload === 'object') {
+      const transaction = payload.data || payload.transaction || payload;
+      return {
+        reference: transaction.reference || transaction.id || transaction.order_id || null,
+        customerReference: transaction.customer_reference || transaction.customerReference || null,
+        recipient: transaction.recipient || transaction.phone || null,
+        status: transaction.delivery_status || transaction.status || null,
+        message: transaction.gateway_response || transaction.message || null,
+      };
+    }
+
     return null;
   }
 }

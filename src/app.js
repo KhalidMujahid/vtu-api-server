@@ -33,6 +33,7 @@ app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
 app.use("/api/v1/webhook", webhookRoutes);
+app.use("/api/v1/webhooks", webhookRoutes);
 
 app.use(xss());
 app.use(mongoSanitize());
