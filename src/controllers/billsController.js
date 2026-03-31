@@ -6,6 +6,7 @@ const User = require('../models/User');
 const Wallet = require('../models/Wallet');
 const NelloBytesService = require('../services/nelloBytesService');
 const NotificationService = require('../services/NotificationService');
+const ProviderPurchaseGuardService = require('../services/providerPurchaseGuardService');
 const vtuConfig = require('../config/vtuProviders');
 
 const SERVER_URL = process.env.SERVER_URL || 'https://api.yareemadata.com';
@@ -150,6 +151,12 @@ exports.purchaseElectricity = async (req, res, next) => {
     if (wallet.balance < parsedAmount) {
       return next(new AppError('Insufficient wallet balance', 400));
     }
+
+    await ProviderPurchaseGuardService.assertSufficientProviderBalance(
+      activeProvider,
+      parsedAmount,
+      { serviceType: 'electricity', meterNumber, disco }
+    );
     
     // Debit wallet
     await wallet.debit(parsedAmount, `Electricity bill payment: ${disco}`);
@@ -343,6 +350,12 @@ exports.purchaseCableTV = async (req, res, next) => {
         if (wallet.balance < totalAmount) {
           return next(new AppError('Insufficient wallet balance', 400));
         }
+
+        await ProviderPurchaseGuardService.assertSufficientProviderBalance(
+          activeProvider,
+          totalAmount,
+          { serviceType: 'cable_tv', provider, smartCardNumber }
+        );
         
         // Debit wallet
         await wallet.debit(totalAmount, `Cable TV: ${provider}`);
@@ -440,6 +453,12 @@ exports.purchaseCableTV = async (req, res, next) => {
     if (wallet.balance < totalAmount) {
       return next(new AppError('Insufficient wallet balance', 400));
     }
+
+    await ProviderPurchaseGuardService.assertSufficientProviderBalance(
+      activeProvider,
+      totalAmount,
+      { serviceType: 'cable_tv', provider, smartCardNumber }
+    );
     
     await wallet.debit(totalAmount, `Cable TV: ${provider}`);
     
@@ -532,6 +551,12 @@ exports.purchaseEducationPin = async (req, res, next) => {
     if (wallet.balance < totalAmount) {
       return next(new AppError('Insufficient wallet balance', 400));
     }
+
+    await ProviderPurchaseGuardService.assertSufficientProviderBalance(
+      activeProvider,
+      totalAmount,
+      { serviceType: 'education_pin', examType, quantity: 1 }
+    );
 
     await wallet.debit(totalAmount, `Education PIN purchase: ${examType}`);
 

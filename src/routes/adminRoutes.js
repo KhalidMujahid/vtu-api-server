@@ -441,6 +441,7 @@ router.put('/users/:id/activate', logAction('activate', 'user'), adminController
 router.put('/users/:id/reset-pin', logAction('update', 'user'), adminController.resetTransactionPin);
 
 router.get('/wallets', adminController.getWallets);
+router.get('/wallets/export', adminController.exportWallets);
 router.get('/wallets/:userId', adminController.getUserWallet);
 router.post('/wallets/:userId/credit', logAction('credit', 'wallet'), adminController.creditWallet);
 router.post('/wallets/:userId/debit', logAction('debit', 'wallet'), adminController.debitWallet);
@@ -448,26 +449,150 @@ router.put('/wallets/:userId/lock', logAction('suspend', 'wallet'), adminControl
 router.put('/wallets/:userId/unlock', logAction('activate', 'wallet'), adminController.unlockWallet);
 
 router.get('/transactions', adminController.getTransactions);
+router.get('/transactions/export', adminController.exportTransactions);
 router.get('/transactions/:id', adminController.getTransaction);
 router.post('/transactions/:id/refund', logAction('refund', 'transaction'), adminController.refundTransaction);
 router.post('/transactions/retry-failed', logAction('update', 'transaction'), adminController.retryFailedTransactions);
+router.get('/settings/2fa', adminController.getTwoFactorSettings);
+router.post('/settings/2fa/setup', adminController.setupTwoFactor);
+router.post('/settings/2fa/verify', adminController.verifyTwoFactorSetup);
+router.post('/settings/2fa/send-code', adminController.sendDisableTwoFactorCode);
+router.post('/settings/2fa/disable', adminController.disableTwoFactor);
 
 router.use(superAdminOnly);
 router.get('/pricing', adminController.getPricing);
 router.post('/pricing', logAction('create', 'pricing'), adminController.createPricing);
+router.post('/pricing/bulk-update', logAction('update', 'pricing'), adminController.bulkUpdatePricing);
 router.put('/pricing/:id', logAction('update', 'pricing'), adminController.updatePricing);
 router.delete('/pricing/:id', logAction('delete', 'pricing'), adminController.deletePricing);
 
 router.get('/providers', adminController.getProviders);
 router.put('/providers/:name/status', logAction('update', 'provider'), adminController.updateProviderStatus);
+router.post('/providers/check-balance-alerts', logAction('update', 'provider'), adminController.checkApiBalanceAlerts);
 
 router.get('/logs', adminController.getAdminLogs);
 
 router.get('/check-provider/:providerId', vtuConsoleController.getProvider);
 
 router.post('/broadcast', adminAuth, adminController.broadcastNotification);
-router.get('/settings', adminController.getSystemSettings);
+
+/**
+ * @swagger
+ * /api/v1/admin/settings:
+ *   get:
+ *     summary: Get system settings
+ *     tags: [Admin - Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: System settings retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: success
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     settings:
+ *                       type: object
+ *                       properties:
+ *                         general:
+ *                           type: object
+ *                         fees:
+ *                           type: object
+ *                         limits:
+ *                           type: object
+ *                         security:
+ *                           type: object
+ *                         kyc:
+ *                           type: object
+ */
+router.get('/settings', adminAuth, adminController.getSystemSettings);
+
+/**
+ * @swagger
+ * /api/v1/admin/settings:
+ *   put:
+ *     summary: Update system settings
+ *     tags: [Admin - Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - settings
+ *             properties:
+ *               settings:
+ *                 type: object
+ *                 properties:
+ *                   general:
+ *                     type: object
+ *                     properties:
+ *                       platformName:
+ *                         type: string
+ *                       currency:
+ *                         type: string
+ *                       timezone:
+ *                         type: string
+ *                       maintenanceMode:
+ *                         type: boolean
+ *                   fees:
+ *                     type: object
+ *                     properties:
+ *                       walletTransferFee:
+ *                         type: number
+ *                       walletTransferMinFee:
+ *                         type: number
+ *                       withdrawalFee:
+ *                         type: number
+ *                       withdrawalMinFee:
+ *                         type: number
+ *                   limits:
+ *                     type: object
+ *                     properties:
+ *                       maxWalletBalance:
+ *                         type: number
+ *                       minTransactionAmount:
+ *                         type: number
+ *                       maxTransactionAmount:
+ *                         type: number
+ *                       dailyTransactionLimit:
+ *                         type: number
+ *                   security:
+ *                     type: object
+ *                     properties:
+ *                       loginAttempts:
+ *                         type: number
+ *                       lockDuration:
+ *                         type: number
+ *                       sessionTimeout:
+ *                         type: number
+ *                       requireTransactionPin:
+ *                         type: boolean
+ *                   kyc:
+ *                     type: object
+ *                     properties:
+ *                       basicLimit:
+ *                         type: number
+ *                       advancedLimit:
+ *                         type: number
+ *                       verifiedLimit:
+ *                         type: number
+ *     responses:
+ *       200:
+ *         description: System settings updated successfully
+ */
 router.put('/settings', adminAuth, adminController.updateSystemSettings);
+
 router.post('/export', adminAuth, adminController.exportData);
 
 module.exports = router;

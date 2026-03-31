@@ -3,6 +3,7 @@ const app = require('./src/app');
 const connectDB = require('./src/config/database');
 const VtuProviderService = require('./src/services/vtuProviderService');
 const vtuConfig = require('./src/config/vtuProviders');
+const { startApiBalanceAlertWorker } = require('./src/workers/apiBalanceAlertWorker');
 
 const PORT = process.env.PORT || 5000;
 
@@ -27,6 +28,8 @@ connectDB().then(async () => {
   const server = app.listen(PORT, () => {
     console.log(`API running on port ${PORT}`);
   });
+
+  startApiBalanceAlertWorker();
 
   process.on('unhandledRejection', (err) => {
     console.log(`Error: ${err.message}`);

@@ -972,7 +972,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"phoneNumber\": \"08012345678\",\n  \"planId\": \"{{plan_id}}\",\n  \"requestId\": \"DATA-001\"\n}"
+              "raw": "{\n  \"phoneNumber\": \"08012345678\",\n  \"planId\": \"{{plan_id}}\",\n  \"requestId\": \"DATA-001\",\n  \"dataType\": \"sme\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/agents/purchase/data",
@@ -1728,7 +1728,7 @@
               }
             ],
             "url": {
-              "raw": "{{base_url}}/api/v1/telecom/data/plans?network=mtn",
+              "raw": "{{base_url}}/api/v1/telecom/data/plans?network=mtn&dataType=sme",
               "host": [
                 "{{base_url}}"
               ],
@@ -1743,10 +1743,14 @@
                 {
                   "key": "network",
                   "value": "mtn"
+                },
+                {
+                  "key": "dataType",
+                  "value": "sme"
                 }
               ]
             },
-            "description": "Get available data plans for a network"
+            "description": "Get available data plans for a network Supports `dataType` filter (sme, direct, awoof, etc)."
           },
           "response": []
         },
@@ -1766,7 +1770,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"phoneNumber\": \"08012345678\",\n  \"network\": \"mtn\",\n  \"dataPlan\": \"1000\",\n  \"transactionPin\": \"1234\",\n  \"source\": \"nellobytes\"\n}"
+              "raw": "{\n  \"phoneNumber\": \"08012345678\",\n  \"network\": \"mtn\",\n  \"dataPlan\": \"1000\",\n  \"transactionPin\": \"1234\",\n  \"source\": \"nellobytes\",\n  \"dataType\": \"sme\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/telecom/data/purchase",
@@ -3761,6 +3765,337 @@
             "description": "Send notification to specific user"
           },
           "response": []
+        },
+        {
+          "name": "Get 2FA Settings",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/settings/2fa",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "settings",
+                "2fa"
+              ]
+            },
+            "description": "Get current admin 2FA settings"
+          },
+          "response": []
+        },
+        {
+          "name": "Setup 2FA",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/settings/2fa/setup",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "settings",
+                "2fa",
+                "setup"
+              ]
+            },
+            "description": "Initialize 2FA setup with method: email or authenticator",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"method\": \"authenticator\"\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Verify 2FA Setup",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/settings/2fa/verify",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "settings",
+                "2fa",
+                "verify"
+              ]
+            },
+            "description": "Verify code and enable 2FA",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"123456\"\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Send 2FA Disable Code",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/settings/2fa/send-code",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "settings",
+                "2fa",
+                "send-code"
+              ]
+            },
+            "description": "Send email OTP used for disabling 2FA",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Disable 2FA",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/settings/2fa/disable",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "settings",
+                "2fa",
+                "disable"
+              ]
+            },
+            "description": "Disable admin 2FA after verification",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"123456\"\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Export Transactions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/transactions/export?format=csv&startDate=2024-01-01&endDate=2024-12-31&status=successful",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "transactions",
+                "export"
+              ],
+              "query": [
+                {
+                  "key": "format",
+                  "value": "csv"
+                },
+                {
+                  "key": "startDate",
+                  "value": "2024-01-01"
+                },
+                {
+                  "key": "endDate",
+                  "value": "2024-12-31"
+                },
+                {
+                  "key": "status",
+                  "value": "successful"
+                }
+              ]
+            },
+            "description": "Export transactions in csv, pdf, or json format"
+          },
+          "response": []
+        },
+        {
+          "name": "Export Wallets",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/wallets/export?format=csv&minBalance=0&maxBalance=1000000&locked=false",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "wallets",
+                "export"
+              ],
+              "query": [
+                {
+                  "key": "format",
+                  "value": "csv"
+                },
+                {
+                  "key": "minBalance",
+                  "value": "0"
+                },
+                {
+                  "key": "maxBalance",
+                  "value": "1000000"
+                },
+                {
+                  "key": "locked",
+                  "value": "false"
+                }
+              ]
+            },
+            "description": "Export wallets in csv, pdf, or json format"
+          },
+          "response": []
+        },
+        {
+          "name": "Bulk Update Pricing",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/pricing/bulk-update",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "pricing",
+                "bulk-update"
+              ]
+            },
+            "description": "Bulk update pricing by percentage or fixed amount",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"network\": \"mtn\",\n  \"serviceType\": \"data_recharge\",\n  \"adjustmentType\": \"percentage\",\n  \"value\": 5,\n  \"applyTo\": \"sellingPrice\"\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Check API Balance Alerts",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/providers/check-balance-alerts",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "providers",
+                "check-balance-alerts"
+              ]
+            },
+            "description": "Trigger low API balance checks and alerts",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n}"
+            }
+          },
+          "response": []
         }
       ]
     },
@@ -4103,7 +4438,7 @@
               }
             ],
             "url": {
-              "raw": "{{base_url}}/api/v1/telecom/data/plans",
+              "raw": "{{base_url}}/api/v1/telecom/data/plans?dataType=sme",
               "host": [
                 "{{base_url}}"
               ],
@@ -4113,8 +4448,15 @@
                 "telecom",
                 "data",
                 "plans"
+              ],
+              "query": [
+                {
+                  "key": "dataType",
+                  "value": "sme"
+                }
               ]
-            }
+            },
+            "description": "Supports `dataType` filter (sme, direct, awoof, etc)."
           }
         },
         {
@@ -4128,7 +4470,7 @@
               }
             ],
             "url": {
-              "raw": "{{base_url}}/api/v1/telecom/data/plans?source=nellobytes&network=mtn",
+              "raw": "{{base_url}}/api/v1/telecom/data/plans?source=nellobytes&network=mtn&dataType=sme",
               "host": [
                 "{{base_url}}"
               ],
@@ -4147,9 +4489,14 @@
                 {
                   "key": "network",
                   "value": "mtn"
+                },
+                {
+                  "key": "dataType",
+                  "value": "sme"
                 }
               ]
-            }
+            },
+            "description": "Supports `dataType` filter (sme, direct, awoof, etc)."
           }
         },
         {
@@ -4168,7 +4515,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"phoneNumber\": \"08012345678\",\n  \"network\": \"mtn\",\n  \"dataPlan\": \"1000\",\n  \"transactionPin\": \"1234\",\n  \"source\": \"nellobytes\"\n}"
+              "raw": "{\n  \"phoneNumber\": \"08012345678\",\n  \"network\": \"mtn\",\n  \"dataPlan\": \"1000\",\n  \"transactionPin\": \"1234\",\n  \"source\": \"nellobytes\",\n  \"dataType\": \"sme\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/telecom/data/purchase",

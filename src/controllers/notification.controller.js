@@ -7,7 +7,7 @@ const logger = require("../utils/logger");
  */
 exports.broadcastNotification = async (req, res, next) => {
   try {
-    const { title, message, type = 'broadcast' } = req.body;
+    const { title, message, type = 'broadcast', targetUsers = 'all', userIds = [] } = req.body;
     
     if (!title || !message) {
       return res.status(400).json({
@@ -16,11 +16,18 @@ exports.broadcastNotification = async (req, res, next) => {
       });
     }
     
-    // Get all user IDs
-    const users = await User.find({ isActive: true }).select('_id');
-    const userIds = users.map(u => u._id);
+    const query = { isActive: true };
+    if (targetUsers === 'agents' || targetUsers === 'agents_only') {
+      query.role = 'agent';
+    }
+    if (targetUsers === 'individual') {
+      query._id = { $in: userIds };
+    }
+
+    const users = await User.find(query).select('_id');
+    const recipientIds = users.map(u => u._id);
     
-    if (userIds.length === 0) {
+    if (recipientIds.length === 0) {
       return res.status(400).json({
         status: 'error',
         message: 'No active users found'
@@ -28,7 +35,7 @@ exports.broadcastNotification = async (req, res, next) => {
     }
     
     // Create broadcast notifications for all users
-    const notifications = userIds.map(userId => ({
+    const notifications = recipientIds.map(userId => ({
       user: userId,
       title,
       message,
@@ -44,15 +51,16 @@ exports.broadcastNotification = async (req, res, next) => {
       await Notification.insertMany(batch);
     }
     
-    logger.info(`Broadcast notification sent to ${userIds.length} users by admin: ${req.user?.id}`);
+    logger.info(`Broadcast notification sent to ${recipientIds.length} users by admin: ${req.user?.id}`);
     
     res.status(200).json({
       status: 'success',
-      message: `Broadcast notification sent to ${userIds.length} users`,
+      message: `Broadcast notification sent to ${recipientIds.length} users`,
       data: {
-        recipients: userIds.length,
+        recipients: recipientIds.length,
         title,
         message,
+        targetUsers,
       }
     });
     

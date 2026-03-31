@@ -10,6 +10,7 @@ const NelloBytesService = require('../services/nelloBytesService');
 const VtuProviderService = require('../services/vtuProviderService');
 const AirtimeNigeriaService = require('../services/airtimeNigeriaService');
 const SmePlugService = require('../services/smePlugService');
+const ProviderPurchaseGuardService = require('../services/providerPurchaseGuardService');
 const vtuConfig = require('../config/vtuProviders');
 const crypto = require('crypto');
 
@@ -27,6 +28,19 @@ const SOURCE_TO_PROVIDER = {
 };
 
 const DATA_NETWORKS = ['mtn', 'glo', 'airtel', '9mobile'];
+const DATA_TYPE_ALIASES = {
+  sme: 'sme',
+  direct: 'direct',
+  awoof: 'awoof',
+  gift: 'gifting',
+  gifting: 'gifting',
+  corporate: 'corporate',
+  night: 'night',
+  daily: 'daily',
+  weekly: 'weekly',
+  monthly: 'monthly',
+  all: 'all',
+};
 
 function normalizeNetwork(network) {
   if (!network) {
@@ -81,7 +95,43 @@ function buildDataPlansResponse(plans) {
   }, {});
 }
 
-async function getConfiguredDataPlans(providerId, network = null, includeUnavailable = true) {
+function normalizeDataType(dataType) {
+  if (!dataType) return null;
+  const key = String(dataType).trim().toLowerCase();
+  return DATA_TYPE_ALIASES[key] || key;
+}
+
+function extractDataTypeFromPlanName(planName = '') {
+  const normalized = String(planName).toLowerCase();
+  if (!normalized) return 'other';
+  if (normalized.includes('awoof')) return 'awoof';
+  if (normalized.includes('direct')) return 'direct';
+  if (normalized.includes('sme')) return 'sme';
+  if (normalized.includes('corporate')) return 'corporate';
+  if (normalized.includes('gifting') || normalized.includes('gift')) return 'gifting';
+  if (normalized.includes('night')) return 'night';
+  if (normalized.includes('daily')) return 'daily';
+  if (normalized.includes('weekly')) return 'weekly';
+  if (normalized.includes('monthly')) return 'monthly';
+  return 'other';
+}
+
+function applyDataTypeOnUnifiedPlans(unifiedPlans = {}, dataType = null) {
+  const normalizedType = normalizeDataType(dataType);
+  if (!normalizedType || normalizedType === 'all') return unifiedPlans;
+
+  const filtered = {};
+  for (const [network, plans] of Object.entries(unifiedPlans)) {
+    filtered[network] = (plans || []).filter(plan => {
+      const planType = normalizeDataType(plan.providerPlanType || extractDataTypeFromPlanName(plan.planName || plan.size || ''));
+      return planType === normalizedType;
+    });
+  }
+
+  return filtered;
+}
+
+async function getConfiguredDataPlans(providerId, network = null, includeUnavailable = true, dataType = null) {
   const query = {
     serviceType: 'data_recharge',
     provider: providerId,
@@ -96,23 +146,37 @@ async function getConfiguredDataPlans(providerId, network = null, includeUnavail
     query.network = normalizeNetwork(network);
   }
 
+  const normalizedType = normalizeDataType(dataType);
+  if (normalizedType && normalizedType !== 'all') {
+    query.providerPlanType = normalizedType;
+  }
+
   return ServicePricing.find(query)
     .sort({ priority: 1, sellingPrice: 1, planName: 1 })
     .select('-createdBy -updatedBy')
     .lean();
 }
 
-async function resolveDataPricing({ providerId, network, planIdentifier, allowUnavailable = false, fallbackPlan = null }) {
+async function resolveDataPricing({ providerId, network, planIdentifier, allowUnavailable = false, fallbackPlan = null, dataType = null }) {
   const normalizedNetwork = normalizeNetwork(network);
+  const normalizedType = normalizeDataType(dataType);
   const availabilityFilter = allowUnavailable ? [true, false] : [true];
   const planValue = String(planIdentifier);
 
-  let pricing = await ServicePricing.findOne({
+  const baseQuery = {
     serviceType: 'data_recharge',
     provider: providerId,
     network: normalizedNetwork,
     isActive: true,
     isAvailable: { $in: availabilityFilter },
+  };
+
+  if (normalizedType && normalizedType !== 'all') {
+    baseQuery.providerPlanType = normalizedType;
+  }
+
+  let pricing = await ServicePricing.findOne({
+    ...baseQuery,
     $or: [
       { planCode: planValue },
       { providerPlanId: planValue },
@@ -123,11 +187,7 @@ async function resolveDataPricing({ providerId, network, planIdentifier, allowUn
 
   if (!pricing && fallbackPlan) {
     pricing = await ServicePricing.findOne({
-      serviceType: 'data_recharge',
-      provider: providerId,
-      network: normalizedNetwork,
-      isActive: true,
-      isAvailable: { $in: availabilityFilter },
+      ...baseQuery,
       $or: [
         { planName: fallbackPlan.planName },
         { size: fallbackPlan.size },
@@ -172,8 +232,9 @@ function normalizePhoneForSmePlug(phoneNumber) {
 
 exports.getDataPlans = async (req, res, next) => {
   try {
-    const { network, source } = req.query;
+    const { network, source, dataType } = req.query;
     const normalizedNetwork = normalizeNetwork(network);
+    const normalizedDataType = normalizeDataType(dataType);
 
     if (normalizedNetwork && !DATA_NETWORKS.includes(normalizedNetwork)) {
       return next(new AppError('Invalid network provider', 400));
@@ -185,13 +246,17 @@ exports.getDataPlans = async (req, res, next) => {
     const selectedSource = source || providerSource;
     const selectedProviderId = SOURCE_TO_PROVIDER[selectedSource] || activeProviderId;
 
-    const configuredPlans = await getConfiguredDataPlans(selectedProviderId, normalizedNetwork, true);
+    const configuredPlans = await getConfiguredDataPlans(selectedProviderId, normalizedNetwork, true, normalizedDataType);
     if (configuredPlans.length > 0) {
       const responseData = buildDataPlansResponse(configuredPlans);
       return res.status(200).json({
         status: 'success',
         results: configuredPlans.length,
         data: responseData,
+        filters: {
+          network: normalizedNetwork || null,
+          dataType: normalizedDataType || 'all',
+        },
         source: 'admin',
         provider: selectedProviderId,
       });
@@ -202,24 +267,33 @@ exports.getDataPlans = async (req, res, next) => {
     if (DataService && DataService.getDataPlans) {
       const rawPlans = await DataService.getDataPlans(normalizedNetwork);
       const unifiedPlans = vtuConfig.transformDataPlans(selectedSource, rawPlans);
-      let responseData = unifiedPlans;
+      let responseData = applyDataTypeOnUnifiedPlans(unifiedPlans, normalizedDataType);
       if (normalizedNetwork) {
-        responseData = { [normalizedNetwork]: unifiedPlans[normalizedNetwork] || [] };
+        responseData = { [normalizedNetwork]: responseData[normalizedNetwork] || [] };
       }
       
       return res.status(200).json({
         status: 'success',
         data: responseData,
+        filters: {
+          network: normalizedNetwork || null,
+          dataType: normalizedDataType || 'all',
+        },
         source: selectedSource,
         provider: selectedProviderId,
       });
     }
 
-    const fallbackPlans = await ServicePricing.find({
+    const fallbackQuery = {
       serviceType: 'data_recharge',
       isActive: true,
       ...(normalizedNetwork ? { network: normalizedNetwork } : {}),
-    })
+    };
+    if (normalizedDataType && normalizedDataType !== 'all') {
+      fallbackQuery.providerPlanType = normalizedDataType;
+    }
+
+    const fallbackPlans = await ServicePricing.find(fallbackQuery)
       .sort({ priority: 1, sellingPrice: 1 })
       .select('-createdBy -updatedBy')
       .lean();
@@ -228,6 +302,10 @@ exports.getDataPlans = async (req, res, next) => {
       status: 'success',
       results: fallbackPlans.length,
       data: buildDataPlansResponse(fallbackPlans),
+      filters: {
+        network: normalizedNetwork || null,
+        dataType: normalizedDataType || 'all',
+      },
       source: 'database',
       provider: selectedProviderId,
     });
@@ -239,9 +317,10 @@ exports.getDataPlans = async (req, res, next) => {
 
 exports.purchaseData = async (req, res, next) => {
   try {
-    const { phoneNumber, network, dataPlan, planId, transactionPin, amount, provider, source } = req.body;
+    const { phoneNumber, network, dataPlan, planId, transactionPin, amount, provider, source, dataType } = req.body;
     const planIdentifier = dataPlan || planId;
     const normalizedNetwork = normalizeNetwork(network);
+    const normalizedDataType = normalizeDataType(dataType);
     const defaultProvider = await vtuConfig.getProviderIdForService('data');
     const requestedProvider = source
       ? (SOURCE_TO_PROVIDER[source] || defaultProvider)
@@ -287,6 +366,7 @@ exports.purchaseData = async (req, res, next) => {
       network: normalizedNetwork,
       planIdentifier,
       allowUnavailable: true,
+      dataType: normalizedDataType,
     });
 
     if (requestedPricing && requestedPricing.isAvailable === false) {
@@ -352,6 +432,7 @@ exports.purchaseData = async (req, res, next) => {
               network: normalizedNetwork,
               planIdentifier,
               fallbackPlan: requestedPricing,
+              dataType: normalizedDataType,
             });
 
         if (!attemptPricing || attemptPricing.isAvailable === false) {
@@ -359,6 +440,12 @@ exports.purchaseData = async (req, res, next) => {
         }
 
         try {
+          await ProviderPurchaseGuardService.assertSufficientProviderBalance(
+            providerId,
+            Number(attemptPricing?.sellingPrice || sellingPrice),
+            { serviceType: 'data_recharge', network: normalizedNetwork, phoneNumber }
+          );
+
           if (providerConfig.source === 'airtimenigeria') {
             apiResponse = await AirtimeNigeriaService.purchaseData({
               phone: phoneNumber,
@@ -421,10 +508,11 @@ exports.purchaseData = async (req, res, next) => {
             orderId: apiResponse.reference || apiResponse.orderId,
             phoneNumber,
             network: normalizedNetwork,
-            dataPlan: activePricing?.planName || planIdentifier,
-            amount: sellingPrice,
-            status: 'pending',
-            provider: successfulProvider,
+          dataPlan: activePricing?.planName || planIdentifier,
+          dataType: normalizeDataType(activePricing?.providerPlanType || extractDataTypeFromPlanName(activePricing?.planName || '')) || 'other',
+          amount: sellingPrice,
+          status: 'pending',
+          provider: successfulProvider,
           },
         });
       } else {
@@ -506,6 +594,12 @@ exports.purchaseAirtime = async (req, res, next) => {
     if (wallet.balance < parsedAmount) {
       return next(new AppError("Insufficient wallet balance", 400));
     }
+
+    await ProviderPurchaseGuardService.assertSufficientProviderBalance(
+      activeProvider,
+      parsedAmount,
+      { serviceType: 'airtime_recharge', network: normalizedNetwork, phoneNumber }
+    );
 
     const networkCode = networkMap[normalizedNetwork.toUpperCase()];
     if (!networkCode) {
@@ -836,6 +930,12 @@ exports.purchaseRechargePin = async (req, res, next) => {
       return next(new AppError('Insufficient balance', 400));
     }
 
+    await ProviderPurchaseGuardService.assertSufficientProviderBalance(
+      'clubkonnect',
+      totalAmount,
+      { serviceType: 'recharge_pin', network: normalizedNetwork, quantity: parsedQuantity }
+    );
+
     await wallet.debit(totalAmount, 'Recharge PIN purchase');
 
     const reference = generateReference('PIN');
@@ -1152,7 +1252,8 @@ exports.getAirtimeNigeriaDataPlans = async (req, res, next) => {
  */
 exports.purchaseAirtimeNigeriaData = async (req, res, next) => {
   try {
-    const { phoneNumber, network, packageCode, planId, transactionPin } = req.body;
+    const { phoneNumber, network, packageCode, planId, transactionPin, dataType } = req.body;
+    const requestedDataType = normalizeDataType(dataType);
     
     if (!phoneNumber || !network) {
       return next(new AppError('Phone number and network are required', 400));
@@ -1195,12 +1296,25 @@ exports.purchaseAirtimeNigeriaData = async (req, res, next) => {
     if (!plan) {
       return next(new AppError('Data plan not found', 404));
     }
+
+    const planType = normalizeDataType(
+      plan.plan_type || plan.category || extractDataTypeFromPlanName(plan.planName || '')
+    ) || 'other';
+    if (requestedDataType && requestedDataType !== 'all' && requestedDataType !== planType) {
+      return next(new AppError(`Selected plan is '${planType}' type, but '${requestedDataType}' was requested`, 400));
+    }
     
     const sellingPrice = plan.price;
     
     if (wallet.balance < sellingPrice) {
       return next(new AppError('Insufficient wallet balance', 400));
     }
+
+    await ProviderPurchaseGuardService.assertSufficientProviderBalance(
+      'airtimenigeria',
+      sellingPrice,
+      { serviceType: 'data_recharge', network, phoneNumber }
+    );
 
     // Debit wallet
     await wallet.debit(sellingPrice, `AirtimeNigeria Data: ${network} ${plan.planName}`);
@@ -1256,6 +1370,7 @@ exports.purchaseAirtimeNigeriaData = async (req, res, next) => {
           phoneNumber,
           network,
           plan: plan.planName,
+          dataType: planType,
           amount: sellingPrice,
           status: 'pending',
           provider: 'airtimenigeria',
@@ -1311,6 +1426,12 @@ exports.purchaseAirtimeNigeriaAirtime = async (req, res, next) => {
     if (wallet.balance < amount) {
       return next(new AppError('Insufficient wallet balance', 400));
     }
+
+    await ProviderPurchaseGuardService.assertSufficientProviderBalance(
+      'airtimenigeria',
+      Number(amount),
+      { serviceType: 'airtime_recharge', network, phoneNumber }
+    );
 
     // Debit wallet
     await wallet.debit(amount, `AirtimeNigeria Airtime: ${network} ${amount}`);
@@ -1533,8 +1654,9 @@ exports.getSmePlugBalance = async (req, res, next) => {
  */
 exports.purchaseSmePlugData = async (req, res, next) => {
   try {
-    const { phoneNumber, network, planId, transactionPin } = req.body;
+    const { phoneNumber, network, planId, transactionPin, dataType } = req.body;
     const normalizedNetwork = normalizeNetwork(network);
+    const requestedDataType = normalizeDataType(dataType);
     
     if (!phoneNumber || !network || !planId) {
       return next(new AppError('Phone number, network, and plan ID are required', 400));
@@ -1569,11 +1691,24 @@ exports.purchaseSmePlugData = async (req, res, next) => {
       return next(new AppError('Data plan pricing is not configured for SMEPlug', 404));
     }
 
+    const pricingType = normalizeDataType(
+      pricing.providerPlanType || extractDataTypeFromPlanName(pricing.planName || pricing.size || '')
+    ) || 'other';
+    if (requestedDataType && requestedDataType !== 'all' && requestedDataType !== pricingType) {
+      return next(new AppError(`Selected plan is '${pricingType}' type, but '${requestedDataType}' was requested`, 400));
+    }
+
     const sellingPrice = pricing.sellingPrice;
     
     if (wallet.balance < sellingPrice) {
       return next(new AppError('Insufficient wallet balance', 400));
     }
+
+    await ProviderPurchaseGuardService.assertSufficientProviderBalance(
+      'smeplug',
+      sellingPrice,
+      { serviceType: 'data_recharge', network: normalizedNetwork, phoneNumber }
+    );
 
     // Debit wallet
     await wallet.debit(sellingPrice, `SMEPlug Data: ${network} ${planId}`);
@@ -1629,6 +1764,7 @@ exports.purchaseSmePlugData = async (req, res, next) => {
           phoneNumber,
           network,
           planId,
+          dataType: pricingType,
           amount: sellingPrice,
           status: 'pending',
           provider: 'smeplug',
@@ -1687,6 +1823,12 @@ exports.purchaseSmePlugAirtime = async (req, res, next) => {
     if (wallet.balance < sellingPrice) {
       return next(new AppError('Insufficient wallet balance', 400));
     }
+
+    await ProviderPurchaseGuardService.assertSufficientProviderBalance(
+      'smeplug',
+      sellingPrice,
+      { serviceType: 'airtime_recharge', network: normalizedNetwork, phoneNumber }
+    );
 
     // Debit wallet
     await wallet.debit(sellingPrice, `SMEPlug Airtime: ${network} ${amount}`);

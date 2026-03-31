@@ -63,6 +63,22 @@ const userSchema = new mongoose.Schema({
   otpResendAfter: Date,
   verificationToken: String,
   verificationTokenExpires: Date,
+  twoFactor: {
+    enabled: {
+      type: Boolean,
+      default: false,
+    },
+    method: {
+      type: String,
+      enum: ['email', 'authenticator'],
+      default: 'email',
+    },
+    emailOtpHash: String,
+    emailOtpExpires: Date,
+    authenticatorSecret: String,
+    pendingAuthenticatorSecret: String,
+    lastVerifiedAt: Date,
+  },
   resetPasswordToken: String,
   resetPasswordExpires: Date,
   

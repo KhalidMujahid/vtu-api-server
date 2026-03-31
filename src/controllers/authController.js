@@ -3,9 +3,11 @@ const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const WalletService = require('../services/walletService');
 const { sendOTPEmail, sendOTPSMS,sendWelcomeEmail,sendPasswordResetEmail } = require('../utils/emailService');
+const NotificationService = require('../services/NotificationService');
 const { AppError } = require('../middlewares/errorHandler');
 const logger = require('../utils/logger');
 const { normalizePhone } = require('../utils/normalizePhone');
+const { verifyTotp } = require('../utils/totp');
 
 const signToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, {
@@ -38,6 +40,40 @@ const createSendToken = (user, statusCode, res) => {
 
 const generateOTP = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
+};
+
+const isAdminRole = (role) => ['admin', 'superadmin', 'super_admin', 'staff', 'support'].includes(role);
+
+const sendTwoFactorEmailCode = async (user) => {
+  const otp = generateOTP();
+  const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
+
+  user.twoFactor = user.twoFactor || {};
+  user.twoFactor.emailOtpHash = otpHash;
+  user.twoFactor.emailOtpExpires = new Date(Date.now() + 5 * 60 * 1000);
+  await user.save();
+
+  await sendOTPEmail(user.email, otp);
+};
+
+const verifyTwoFactorCode = async (user, code) => {
+  const method = user?.twoFactor?.method;
+  if (!method) return false;
+
+  if (method === 'authenticator') {
+    const secret = user.twoFactor.authenticatorSecret;
+    return Boolean(secret && verifyTotp(secret, code, { window: 1 }));
+  }
+
+  if (method === 'email') {
+    const hashedCode = crypto.createHash('sha256').update(String(code || '').trim()).digest('hex');
+    const isValidCode = hashedCode === user?.twoFactor?.emailOtpHash;
+    const notExpired =
+      user?.twoFactor?.emailOtpExpires && new Date(user.twoFactor.emailOtpExpires).getTime() > Date.now();
+    return Boolean(isValidCode && notExpired);
+  }
+
+  return false;
 };
 
 exports.register = async (req, res, next) => {
@@ -95,7 +131,7 @@ exports.register = async (req, res, next) => {
 
 exports.login = async (req, res, next) => {
   try {
-    const { email, password, deviceInfo } = req.body;
+    const { email, password, deviceInfo, twoFactorCode } = req.body;
 
     if (!email || !password) {
       return next(new AppError('Please provide email and password', 400));
@@ -148,6 +184,36 @@ exports.login = async (req, res, next) => {
           401
         )
       );
+    }
+
+    const twoFactorEnabledForAdmin = Boolean(user?.twoFactor?.enabled && isAdminRole(user.role));
+    if (twoFactorEnabledForAdmin) {
+      const twoFactorMethod = user.twoFactor.method || 'email';
+
+      if (!twoFactorCode) {
+        if (twoFactorMethod === 'email') {
+          await sendTwoFactorEmailCode(user);
+        }
+
+        return res.status(202).json({
+          status: 'pending',
+          requiresTwoFactor: true,
+          method: twoFactorMethod,
+          message:
+            twoFactorMethod === 'email'
+              ? 'Two-factor code sent to your email'
+              : 'Please provide your authenticator app code',
+        });
+      }
+
+      const isValidCode = await verifyTwoFactorCode(user, twoFactorCode);
+      if (!isValidCode) {
+        return next(new AppError('Invalid or expired two-factor code', 401));
+      }
+
+      user.twoFactor.lastVerifiedAt = new Date();
+      user.twoFactor.emailOtpHash = undefined;
+      user.twoFactor.emailOtpExpires = undefined;
     }
 
     if (user.failedLoginAttempts > 0) {

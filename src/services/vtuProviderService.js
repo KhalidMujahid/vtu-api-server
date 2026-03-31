@@ -12,6 +12,7 @@ const SmePlugService = require('./smePlugService');
 const NelloBytesService = require('./nelloBytesService');
 
 class VtuProviderService {
+  static AUTO_FAILOVER_THRESHOLD = 40;
   
   /**
    * Get all configured providers
@@ -167,6 +168,53 @@ class VtuProviderService {
       .sort((a, b) => a.priority - b.priority);
   }
 
+  static async getHealthyProvidersForService(serviceType) {
+    const providers = this.getProvidersForService(serviceType);
+    if (!providers.length) return [];
+
+    const providerIds = providers.map(p => p.id);
+    const statuses = await ProviderStatus.find({
+      providerName: { $in: providerIds },
+      status: { $in: ['active', 'degraded'] },
+    }).lean();
+
+    const statusMap = new Map(statuses.map(s => [s.providerName, s]));
+
+    const healthy = providers.filter(provider => {
+      const db = statusMap.get(provider.id);
+      const rate = typeof db?.successRate === 'number' ? db.successRate : 100;
+      return rate >= this.AUTO_FAILOVER_THRESHOLD;
+    });
+
+    return healthy.length ? healthy : providers;
+  }
+
+  static async autoSwitchProviderIfNeeded(providerId) {
+    const affected = await ProviderStatus.findOne({ providerName: providerId });
+    if (!affected) return;
+
+    if (Number(affected.successRate || 0) >= this.AUTO_FAILOVER_THRESHOLD) return;
+
+    const candidate = await ProviderStatus.findOne({
+      providerName: { $ne: providerId },
+      status: 'active',
+      successRate: { $gte: this.AUTO_FAILOVER_THRESHOLD },
+    }).sort({ successRate: -1, priority: 1 });
+
+    if (!candidate) return;
+
+    const currentPrimary = await ProviderStatus.findOne({ isDefault: true });
+    if (currentPrimary?.providerName === candidate.providerName) return;
+
+    await ProviderStatus.updateMany({}, { isDefault: false });
+    candidate.isDefault = true;
+    await candidate.save();
+
+    logger.warn(
+      `Auto failover triggered: switched primary provider from ${providerId} to ${candidate.providerName} (threshold ${this.AUTO_FAILOVER_THRESHOLD}%)`
+    );
+  }
+
   /**
    * Health check for a single provider
    */
@@ -276,7 +324,7 @@ class VtuProviderService {
    * Process transaction with provider failover
    */
   static async processWithFailover(transaction, serviceType, network) {
-    const providers = this.getProvidersForService(serviceType);
+    const providers = await this.getHealthyProvidersForService(serviceType);
     
     if (!providers.length) {
       throw new Error(`No providers available for service: ${serviceType}`);
@@ -351,28 +399,41 @@ class VtuProviderService {
    * Mark provider success
    */
   static async markProviderSuccess(providerId) {
-    await ProviderStatus.findOneAndUpdate(
+    const provider = await ProviderStatus.findOneAndUpdate(
       { providerName: providerId },
-      { 
+      {
         $inc: { successfulRequests: 1, totalRequests: 1 },
-        $set: { lastChecked: new Date() }
+        $setOnInsert: { providerName: providerId, status: 'active' },
+        $set: { lastChecked: new Date() },
       },
-      { upsert: true }
+      { upsert: true, new: true }
     );
+
+    if (provider.totalRequests > 0) {
+      provider.successRate = (provider.successfulRequests / provider.totalRequests) * 100;
+      await provider.save();
+    }
   }
 
   /**
    * Mark provider failure
    */
   static async markProviderFailure(providerId) {
-    await ProviderStatus.findOneAndUpdate(
+    const provider = await ProviderStatus.findOneAndUpdate(
       { providerName: providerId },
-      { 
+      {
         $inc: { failedRequests: 1, totalRequests: 1 },
-        $set: { lastChecked: new Date() }
+        $setOnInsert: { providerName: providerId, status: 'active' },
+        $set: { lastChecked: new Date() },
       },
-      { upsert: true }
+      { upsert: true, new: true }
     );
+
+    if (provider.totalRequests > 0) {
+      provider.successRate = (provider.successfulRequests / provider.totalRequests) * 100;
+      await provider.save();
+      await this.autoSwitchProviderIfNeeded(providerId);
+    }
   }
 
   /**

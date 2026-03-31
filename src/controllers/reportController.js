@@ -4,6 +4,36 @@ const Wallet = require('../models/Wallet');
 const KYC = require('../models/KYC');
 const { AppError } = require('../middlewares/errorHandler');
 const logger = require('../utils/logger');
+const { buildDateRangeFilter } = require('../utils/dateRange');
+
+function resolveReportDateFilter({ type = 'daily', startDate, endDate }) {
+  if (startDate || endDate) {
+    return buildDateRangeFilter(startDate, endDate);
+  }
+
+  const now = new Date();
+  let from;
+  let to = new Date();
+
+  if (type === 'daily') {
+    from = new Date(now);
+    from.setHours(0, 0, 0, 0);
+    to = new Date(now);
+    to.setHours(23, 59, 59, 999);
+  } else if (type === 'weekly') {
+    from = new Date(now);
+    from.setDate(from.getDate() - 7);
+  } else if (type === 'monthly') {
+    from = new Date(now.getFullYear(), now.getMonth(), 1);
+  } else if (type === 'custom') {
+    return null;
+  } else {
+    from = new Date(now);
+    from.setHours(0, 0, 0, 0);
+  }
+
+  return { createdAt: { $gte: from, $lte: to } };
+}
 
 /**
  * Get User's Own Transaction Report
@@ -22,37 +52,9 @@ exports.getMyReport = async (req, res, next) => {
 
     const userId = req.user.id;
 
-    let dateFilter = {};
-    const now = new Date();
-
-    switch (type) {
-      case 'daily':
-        const startOfDay = new Date(now);
-        startOfDay.setHours(0, 0, 0, 0);
-        const endOfDay = new Date(now);
-        endOfDay.setHours(23, 59, 59, 999);
-        dateFilter = { createdAt: { $gte: startOfDay, $lte: endOfDay } };
-        break;
-      case 'weekly':
-        const startOfWeek = new Date(now);
-        startOfWeek.setDate(now.getDate() - 7);
-        dateFilter = { createdAt: { $gte: startOfWeek, $lte: new Date() } };
-        break;
-      case 'monthly':
-        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-        dateFilter = { createdAt: { $gte: startOfMonth, $lte: new Date() } };
-        break;
-      case 'custom':
-        if (!startDate || !endDate) {
-          return next(new AppError('Please provide startDate and endDate for custom range', 400));
-        }
-        dateFilter = { 
-          createdAt: { 
-            $gte: new Date(startDate), 
-            $lte: new Date(endDate) 
-          } 
-        };
-        break;
+    const dateFilter = resolveReportDateFilter({ type, startDate, endDate });
+    if (!dateFilter) {
+      return next(new AppError('Please provide startDate and endDate for custom range', 400));
     }
 
     // Build query for user
@@ -144,35 +146,9 @@ exports.getTransactionReport = async (req, res, next) => {
       limit = 50
     } = req.query;
 
-    let dateFilter = {};
-    const now = new Date();
-
-    switch (type) {
-      case 'daily':
-        const startOfDay = new Date(now.setHours(0, 0, 0, 0));
-        const endOfDay = new Date(now.setHours(23, 59, 59, 999));
-        dateFilter = { createdAt: { $gte: startOfDay, $lte: endOfDay } };
-        break;
-      case 'weekly':
-        const startOfWeek = new Date(now);
-        startOfWeek.setDate(now.getDate() - 7);
-        dateFilter = { createdAt: { $gte: startOfWeek, $lte: new Date() } };
-        break;
-      case 'monthly':
-        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-        dateFilter = { createdAt: { $gte: startOfMonth, $lte: new Date() } };
-        break;
-      case 'custom':
-        if (!startDate || !endDate) {
-          return next(new AppError('Please provide startDate and endDate for custom range', 400));
-        }
-        dateFilter = { 
-          createdAt: { 
-            $gte: new Date(startDate), 
-            $lte: new Date(endDate) 
-          } 
-        };
-        break;
+    const dateFilter = resolveReportDateFilter({ type, startDate, endDate });
+    if (!dateFilter) {
+      return next(new AppError('Please provide startDate and endDate for custom range', 400));
     }
 
     // Build query
@@ -256,32 +232,9 @@ exports.getFinancialReport = async (req, res, next) => {
   try {
     const { type = 'monthly', startDate, endDate } = req.query;
 
-    let dateFilter = {};
-    const now = new Date();
-
-    switch (type) {
-      case 'daily':
-        const startOfDay = new Date(now.setHours(0, 0, 0, 0));
-        const endOfDay = new Date(now.setHours(23, 59, 59, 999));
-        dateFilter = { createdAt: { $gte: startOfDay, $lte: endOfDay } };
-        break;
-      case 'weekly':
-        const startOfWeek = new Date(now);
-        startOfWeek.setDate(now.getDate() - 7);
-        dateFilter = { createdAt: { $gte: startOfWeek, $lte: new Date() } };
-        break;
-      case 'monthly':
-        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-        dateFilter = { createdAt: { $gte: startOfMonth, $lte: new Date() } };
-        break;
-      case 'custom':
-        if (!startDate || !endDate) {
-          return next(new AppError('Please provide startDate and endDate', 400));
-        }
-        dateFilter = { 
-          createdAt: { $gte: new Date(startDate), $lte: new Date(endDate) } 
-        };
-        break;
+    const dateFilter = resolveReportDateFilter({ type, startDate, endDate });
+    if (!dateFilter) {
+      return next(new AppError('Please provide startDate and endDate', 400));
     }
 
     // Revenue from successful transactions
@@ -380,32 +333,9 @@ exports.getUserReport = async (req, res, next) => {
   try {
     const { type = 'monthly', startDate, endDate } = req.query;
 
-    let dateFilter = {};
-    const now = new Date();
-
-    switch (type) {
-      case 'daily':
-        const startOfDay = new Date(now.setHours(0, 0, 0, 0));
-        const endOfDay = new Date(now.setHours(23, 59, 59, 999));
-        dateFilter = { createdAt: { $gte: startOfDay, $lte: endOfDay } };
-        break;
-      case 'weekly':
-        const startOfWeek = new Date(now);
-        startOfWeek.setDate(now.getDate() - 7);
-        dateFilter = { createdAt: { $gte: startOfWeek, $lte: new Date() } };
-        break;
-      case 'monthly':
-        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-        dateFilter = { createdAt: { $gte: startOfMonth, $lte: new Date() } };
-        break;
-      case 'custom':
-        if (!startDate || !endDate) {
-          return next(new AppError('Please provide startDate and endDate', 400));
-        }
-        dateFilter = { 
-          createdAt: { $gte: new Date(startDate), $lte: new Date(endDate) } 
-        };
-        break;
+    const dateFilter = resolveReportDateFilter({ type, startDate, endDate });
+    if (!dateFilter) {
+      return next(new AppError('Please provide startDate and endDate', 400));
     }
 
     // User registration stats
@@ -525,32 +455,9 @@ exports.getAgentReport = async (req, res, next) => {
   try {
     const { type = 'monthly', startDate, endDate } = req.query;
 
-    let dateFilter = {};
-    const now = new Date();
-
-    switch (type) {
-      case 'daily':
-        const startOfDay = new Date(now.setHours(0, 0, 0, 0));
-        const endOfDay = new Date(now.setHours(23, 59, 59, 999));
-        dateFilter = { createdAt: { $gte: startOfDay, $lte: endOfDay } };
-        break;
-      case 'weekly':
-        const startOfWeek = new Date(now);
-        startOfWeek.setDate(now.getDate() - 7);
-        dateFilter = { createdAt: { $gte: startOfWeek, $lte: new Date() } };
-        break;
-      case 'monthly':
-        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-        dateFilter = { createdAt: { $gte: startOfMonth, $lte: new Date() } };
-        break;
-      case 'custom':
-        if (!startDate || !endDate) {
-          return next(new AppError('Please provide startDate and endDate', 400));
-        }
-        dateFilter = { 
-          createdAt: { $gte: new Date(startDate), $lte: new Date(endDate) } 
-        };
-        break;
+    const dateFilter = resolveReportDateFilter({ type, startDate, endDate });
+    if (!dateFilter) {
+      return next(new AppError('Please provide startDate and endDate', 400));
     }
 
     // Get all agents
@@ -651,32 +558,9 @@ exports.getServiceReport = async (req, res, next) => {
   try {
     const { type = 'monthly', startDate, endDate } = req.query;
 
-    let dateFilter = {};
-    const now = new Date();
-
-    switch (type) {
-      case 'daily':
-        const startOfDay = new Date(now.setHours(0, 0, 0, 0));
-        const endOfDay = new Date(now.setHours(23, 59, 59, 999));
-        dateFilter = { createdAt: { $gte: startOfDay, $lte: endOfDay } };
-        break;
-      case 'weekly':
-        const startOfWeek = new Date(now);
-        startOfWeek.setDate(now.getDate() - 7);
-        dateFilter = { createdAt: { $gte: startOfWeek, $lte: new Date() } };
-        break;
-      case 'monthly':
-        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-        dateFilter = { createdAt: { $gte: startOfMonth, $lte: new Date() } };
-        break;
-      case 'custom':
-        if (!startDate || !endDate) {
-          return next(new AppError('Please provide startDate and endDate', 400));
-        }
-        dateFilter = { 
-          createdAt: { $gte: new Date(startDate), $lte: new Date(endDate) } 
-        };
-        break;
+    const dateFilter = resolveReportDateFilter({ type, startDate, endDate });
+    if (!dateFilter) {
+      return next(new AppError('Please provide startDate and endDate', 400));
     }
 
     // Transactions by category

@@ -364,11 +364,15 @@ module.exports = {
       const normalizedKey = networkMap[networkKey] || networkKey.toLowerCase();
       
       if (Array.isArray(networkData)) {
-        result[normalizedKey] = networkData.map(plan => this._normalizePlanItem(plan, 'nellobytes'));
-      } else if (networkData && networkData[0] && networkData[0].PRODUCT) {
-        // Handle nested PRODUCT array format
-        const products = networkData[0].PRODUCT || [];
-        result[normalizedKey] = products.map(plan => this._normalizeNelloBytesPlan(plan));
+        // Handle nested PRODUCT array format from ClubKonnect/NelloBytes
+        if (networkData[0] && Array.isArray(networkData[0].PRODUCT)) {
+          const products = networkData[0].PRODUCT || [];
+          result[normalizedKey] = products.map(plan => this._normalizeNelloBytesPlan(plan));
+        } else {
+          result[normalizedKey] = networkData.map(plan => this._normalizePlanItem(plan, 'nellobytes'));
+        }
+      } else if (networkData && Array.isArray(networkData.PRODUCT)) {
+        result[normalizedKey] = networkData.PRODUCT.map(plan => this._normalizeNelloBytesPlan(plan));
       }
     }
 
@@ -379,14 +383,16 @@ module.exports = {
    * Normalize ClubKonnect plan item
    */
   _normalizeNelloBytesPlan(plan) {
+    const planName = plan.PRODUCT_NAME || '';
     return {
       id: plan.PRODUCT_ID || plan.ID || '',
       planCode: plan.PRODUCT_CODE || '',
-      planName: plan.PRODUCT_NAME || '',
+      planName,
       network: '', // Will be set by parent
-      size: plan.PRODUCT_NAME || '',
+      size: planName || '',
       price: parseFloat(plan.PRODUCT_AMOUNT) || 0,
-      validity: this._extractValidity(plan.PRODUCT_NAME || ''),
+      validity: this._extractValidity(planName || ''),
+      providerPlanType: this._extractDataType(planName || ''),
     };
   },
 
@@ -419,14 +425,18 @@ module.exports = {
    * Normalize SMEPlug plan item
    */
   _normalizeSmePlugPlan(plan) {
+    const planName = plan.planName || '';
     return {
       id: plan.id || '',
       planCode: plan.planCode || '',
-      planName: plan.planName || '',
+      planName,
       network: plan.network || '',
-      size: plan.size || plan.planName || '',
+      size: plan.size || planName || '',
       price: parseFloat(plan.price) || 0,
-      validity: plan.validity || this._extractValidity(plan.planName || ''),
+      validity: plan.validity || this._extractValidity(planName || ''),
+      providerPlanType: this._extractDataType(
+        `${planName} ${plan.plan_type || ''} ${plan.category || ''}`.trim()
+      ),
     };
   },
 
@@ -459,14 +469,18 @@ module.exports = {
    * Normalize AirtimeNigeria plan item
    */
   _normalizeAirtimeNigeriaPlan(plan) {
+    const planName = plan.planName || plan.plan_summary || '';
     return {
       id: plan.planId || plan.plan_id || '',
       planCode: plan.planCode || plan.plan_code || '',
-      planName: plan.planName || plan.plan_summary || '',
+      planName,
       network: plan.network || '',
       size: plan.size || '',
       price: parseFloat(plan.price) || 0,
       validity: plan.validity || '',
+      providerPlanType: this._extractDataType(
+        `${planName} ${plan.plan_type || ''} ${plan.category || ''}`.trim()
+      ),
     };
   },
 
@@ -490,5 +504,24 @@ module.exports = {
   _extractValidity(planName) {
     const match = planName.match(/(\d+\s*(?:day|week|month|year|hour|hr)s?)/i);
     return match ? match[1] : '';
+  },
+
+  /**
+   * Extract normalized data type from plan metadata/name
+   */
+  _extractDataType(planName = '') {
+    const normalized = String(planName).toLowerCase();
+    if (!normalized) return 'other';
+
+    if (normalized.includes('awoof')) return 'awoof';
+    if (normalized.includes('direct')) return 'direct';
+    if (normalized.includes('sme')) return 'sme';
+    if (normalized.includes('corporate')) return 'corporate';
+    if (normalized.includes('gifting') || normalized.includes('gift')) return 'gifting';
+    if (normalized.includes('night')) return 'night';
+    if (normalized.includes('daily')) return 'daily';
+    if (normalized.includes('weekly')) return 'weekly';
+    if (normalized.includes('monthly')) return 'monthly';
+    return 'other';
   },
 };

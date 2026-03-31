@@ -1,5 +1,6 @@
 const { Resend } = require('resend');
 const logger = require('./logger');
+const axios = require('axios');
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -228,5 +229,53 @@ exports.sendStaffCredentials = async ({ email, firstName, lastName, tempPassword
   } catch (error) {
     logger.error('Error sending staff credentials email:', error);
     throw error;
+  }
+};
+
+exports.sendApiBalanceAlertEmail = async ({ email, providerName, balance, threshold, currency = 'NGN' }) => {
+  try {
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: `Low API Balance Alert - ${providerName}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #c0392b;">Low API Balance Alert</h2>
+          <p>The provider balance is below your configured threshold.</p>
+          <table style="border-collapse: collapse; width: 100%;">
+            <tr><td><strong>Provider</strong></td><td>${providerName}</td></tr>
+            <tr><td><strong>Current Balance</strong></td><td>${balance} ${currency}</td></tr>
+            <tr><td><strong>Threshold</strong></td><td>${threshold} ${currency}</td></tr>
+            <tr><td><strong>Time</strong></td><td>${new Date().toISOString()}</td></tr>
+          </table>
+        </div>
+      `,
+    };
+
+    await resend.emails.send(mailOptions);
+    logger.info(`API balance alert email sent to ${email} for provider ${providerName}`);
+  } catch (error) {
+    logger.error('Error sending API balance alert email:', error);
+  }
+};
+
+exports.sendWhatsAppAlert = async ({ phone, message, metadata = {} }) => {
+  try {
+    const webhookUrl = process.env.WHATSAPP_ALERT_WEBHOOK_URL;
+    if (!webhookUrl) {
+      logger.info(`WhatsApp alert (mock): ${phone} -> ${message}`);
+      return;
+    }
+
+    await axios.post(webhookUrl, {
+      phone,
+      message,
+      metadata,
+    }, {
+      timeout: 10000,
+    });
+    logger.info(`WhatsApp alert sent to ${phone}`);
+  } catch (error) {
+    logger.error('Error sending WhatsApp alert:', error.message);
   }
 };

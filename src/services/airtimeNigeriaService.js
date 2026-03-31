@@ -7,6 +7,31 @@ const axios = require('axios');
 const logger = require('../utils/logger');
 
 class AirtimeNigeriaService {
+  static normalizeNetwork(network = '') {
+    const value = String(network).trim().toLowerCase();
+    const aliases = {
+      mtn: 'mtn',
+      glo: 'glo',
+      airtel: 'airtel',
+      etisalat: '9mobile',
+      '9mobile': '9mobile',
+      m_9mobile: '9mobile',
+    };
+    return aliases[value] || value;
+  }
+
+  static inferDataType(label = '') {
+    const normalized = String(label).toLowerCase();
+    if (normalized.includes('awoof')) return 'awoof';
+    if (normalized.includes('direct')) return 'direct';
+    if (normalized.includes('sme')) return 'sme';
+    if (normalized.includes('corporate')) return 'corporate';
+    if (normalized.includes('night')) return 'night';
+    if (normalized.includes('daily')) return 'daily';
+    if (normalized.includes('weekly')) return 'weekly';
+    if (normalized.includes('monthly')) return 'monthly';
+    return 'other';
+  }
   static baseUrl = 'https://www.airtimenigeria.com/api/v1';
   
   static getConfig() {
@@ -214,14 +239,14 @@ class AirtimeNigeriaService {
         // Filter by network if specified
         if (network) {
           plans = plans.filter((plan) => {
-            const planNetwork = (plan.network_operator || plan.network || plan.provider || '').toLowerCase();
-            return planNetwork === network.toLowerCase();
+            const planNetwork = this.normalizeNetwork(plan.network_operator || plan.network || plan.provider || '');
+            return planNetwork === this.normalizeNetwork(network);
           });
         }
 
         // Group plans by network
         const groupedPlans = plans.reduce((acc, plan) => {
-          const normalizedNetwork = (plan.network_operator || plan.network || plan.provider || '').toLowerCase();
+          const normalizedNetwork = this.normalizeNetwork(plan.network_operator || plan.network || plan.provider || '');
           if (!normalizedNetwork) {
             return acc;
           }
@@ -232,6 +257,7 @@ class AirtimeNigeriaService {
 
           const planName = plan.plan_summary || plan.name || plan.package || plan.variation || '';
           const size = plan.size || plan.data_size || planName.split('|')[1] || plan.data_amount || '';
+          const planType = plan.plan_type || plan.category || this.inferDataType(planName);
 
           acc[normalizedNetwork].push({
             planCode: plan.package_code || plan.plan_code || plan.variation_code,
@@ -242,6 +268,8 @@ class AirtimeNigeriaService {
             price: plan.agent_price || plan.price || plan.amount || 0,
             validity: plan.validity || plan.valid_for || '',
             currency: plan.currency,
+            plan_type: planType,
+            category: planType,
           });
           return acc;
         }, {});
@@ -278,23 +306,27 @@ class AirtimeNigeriaService {
 
     let plans = response.data.data || [];
     if (network) {
-      plans = plans.filter(plan => plan.network_operator === network.toLowerCase());
+      plans = plans.filter(plan => this.normalizeNetwork(plan.network_operator) === this.normalizeNetwork(network));
     }
 
     const groupedPlans = plans.reduce((acc, plan) => {
-      const normalizedNetwork = plan.network_operator;
+      const normalizedNetwork = this.normalizeNetwork(plan.network_operator);
       if (!acc[normalizedNetwork]) {
         acc[normalizedNetwork] = [];
       }
+      const planName = plan.plan_summary || '';
+      const planType = plan.plan_type || plan.category || this.inferDataType(planName);
       acc[normalizedNetwork].push({
         planCode: plan.package_code,
         planId: plan.plan_id,
         variationCode: plan.variation_code || plan.package_code,
-        planName: plan.plan_summary,
-        size: plan.plan_summary.split('|')[1] || '',
+        planName,
+        size: planName.split('|')[1] || '',
         price: plan.agent_price,
         validity: plan.validity,
         currency: plan.currency,
+        plan_type: planType,
+        category: planType,
       });
       return acc;
     }, {});

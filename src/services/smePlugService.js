@@ -38,6 +38,32 @@ class SmePlugService {
     return this.networkMap[network.toLowerCase()] || network;
   }
 
+  static normalizeNetwork(network = '') {
+    const value = String(network).trim().toLowerCase();
+    const aliases = {
+      mtn: 'mtn',
+      airtel: 'airtel',
+      glo: 'glo',
+      etisalat: '9mobile',
+      '9mobile': '9mobile',
+      m_9mobile: '9mobile',
+    };
+    return aliases[value] || value;
+  }
+
+  static inferDataType(label = '') {
+    const normalized = String(label).toLowerCase();
+    if (normalized.includes('awoof')) return 'awoof';
+    if (normalized.includes('direct')) return 'direct';
+    if (normalized.includes('sme')) return 'sme';
+    if (normalized.includes('corporate')) return 'corporate';
+    if (normalized.includes('night')) return 'night';
+    if (normalized.includes('daily')) return 'daily';
+    if (normalized.includes('weekly')) return 'weekly';
+    if (normalized.includes('monthly')) return 'monthly';
+    return 'other';
+  }
+
   static shouldExcludeDataPlan(network, plan = {}) {
     if (network !== 'mtn') {
       return false;
@@ -119,7 +145,7 @@ class SmePlugService {
    */
   static async getDataPlans(network = null) {
     try {
-      const networks = network ? [network.toLowerCase()] : ['mtn', 'airtel', 'glo', '9mobile'];
+      const networks = network ? [this.normalizeNetwork(network)] : ['mtn', 'airtel', 'glo', '9mobile'];
       const allPlans = {};
 
       for (const net of networks) {
@@ -157,15 +183,21 @@ class SmePlugService {
             if (Array.isArray(plansData)) {
               allPlans[net] = plansData
                 .filter(plan => !this.shouldExcludeDataPlan(net, plan))
-                .map(plan => ({
+                .map(plan => {
+                  const planName = plan.name || plan.product_name || '';
+                  const planType = plan.plan_type || plan.category || this.inferDataType(planName);
+                  return {
                   id: plan.id || plan.plan_id || plan.product_id,
                   planCode: plan.plan_id || plan.product_code,
-                  planName: plan.name || plan.product_name,
+                  planName,
                   size: plan.size || plan.data_size,
                   price: plan.selling_price || plan.price || plan.amount,
                   validity: plan.validity,
-                  network: net,
-                }));
+                  network: this.normalizeNetwork(net),
+                  plan_type: planType,
+                  category: planType,
+                  };
+                });
             }
           }
         } catch (err) {

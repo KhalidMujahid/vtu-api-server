@@ -9,7 +9,42 @@ const logger = require('../utils/logger');
 const crypto = require('crypto');
 const jwt = require("jsonwebtoken");
 const NelloBytesService = require('../services/nelloBytesService');
+const ProviderPurchaseGuardService = require('../services/providerPurchaseGuardService');
 const vtuConfig = require('../config/vtuProviders');
+
+function normalizeDataType(dataType) {
+  if (!dataType) return null;
+  const key = String(dataType).trim().toLowerCase();
+  const aliases = {
+    sme: 'sme',
+    direct: 'direct',
+    awoof: 'awoof',
+    gift: 'gifting',
+    gifting: 'gifting',
+    corporate: 'corporate',
+    night: 'night',
+    daily: 'daily',
+    weekly: 'weekly',
+    monthly: 'monthly',
+    all: 'all',
+  };
+  return aliases[key] || key;
+}
+
+function inferDataTypeFromPlanName(planName = '') {
+  const normalized = String(planName).toLowerCase();
+  if (!normalized) return 'other';
+  if (normalized.includes('awoof')) return 'awoof';
+  if (normalized.includes('direct')) return 'direct';
+  if (normalized.includes('sme')) return 'sme';
+  if (normalized.includes('corporate')) return 'corporate';
+  if (normalized.includes('gifting') || normalized.includes('gift')) return 'gifting';
+  if (normalized.includes('night')) return 'night';
+  if (normalized.includes('daily')) return 'daily';
+  if (normalized.includes('weekly')) return 'weekly';
+  if (normalized.includes('monthly')) return 'monthly';
+  return 'other';
+}
 
 function normalizeElectricityDiscos(rawDiscos) {
   if (Array.isArray(rawDiscos)) {
@@ -287,14 +322,14 @@ class AgentController {
         isEmailVerified: true,
         isPhoneVerified: true,
         isActive: true,
-        isApproved: false, // Agents need admin approval
+        isApproved: false,
         kycStatus: 'verified',
         agentInfo: {
           commissionRate,
           assignedArea: assignedArea || {},
           bankDetails: bankDetails || {},
           activationDate: new Date(),
-          isVerified: false, // Will be verified after approval
+          isVerified: false,
         },
       };
       
@@ -397,7 +432,6 @@ class AgentController {
       
       await agent.save();
       
-      // Log the action
       await AdminLog.log({
         admin: req.admin._id,
         adminEmail: req.admin.email,
@@ -449,7 +483,6 @@ class AgentController {
     }
   }
 
-  // Verify agent documents (Admin only)
   static async verifyAgentDocuments(req, res, next) {
     try {
       const { id } = req.params;
@@ -465,7 +498,6 @@ class AgentController {
         return next(new AppError('No verification documents found for this agent', 400));
       }
       
-      // Find and update the specific document
       const documentIndex = agent.agentInfo.verificationDocuments.findIndex(
         doc => doc.documentType === documentType
       );
@@ -771,7 +803,6 @@ class AgentController {
     try {
       const agent = req.user;
       
-      // Get commission transactions
       const transactions = await Transaction.find({
         user: agent._id,
         'metadata.commissionWithdrawal': true,
@@ -808,15 +839,13 @@ class AgentController {
       
       const agent = req.user;
       
-      // Check if agent has bank details
       let bankDetails = agent.agentInfo?.bankDetails;
       
-      // If new bank details provided, use those
       if (bankCode && accountNumber) {
         bankDetails = {
           bankName: '',
           accountNumber: accountNumber,
-          accountName: '', // Would need verification in production
+          accountName: '',
           isVerified: false,
         };
       }
@@ -849,12 +878,10 @@ class AgentController {
         },
       });
       
-      // Update agent's commission
       agent.agentInfo.availableCommission -= amount;
       agent.agentInfo.lastCommissionWithdrawal = new Date();
       await agent.save();
       
-      // Simulate processing (in production, this would call a payment API)
       setTimeout(async () => {
         try {
           await Transaction.findByIdAndUpdate(transaction._id, {
@@ -940,12 +967,10 @@ class AgentController {
         },
       });
       
-      // Update agent's commission
       agent.agentInfo.availableCommission -= amount;
       agent.agentInfo.lastCommissionWithdrawal = new Date();
       await agent.save();
       
-      // Log the action
       await AdminLog.log({
         admin: req.admin._id,
         adminEmail: req.admin.email,
@@ -1074,32 +1099,12 @@ class AgentController {
           
           createSendToken(agent, 200, res);
           
-          // res.status(200).json({
-          //   status: 'success',
-          //   message: 'Login successful',
-          //   data: {
-          //     agent: {
-          //       id: agent._id,
-          //       firstName: agent.firstName,
-          //       lastName: agent.lastName,
-          //       email: agent.email,
-          //       phoneNumber: agent.phoneNumber,
-          //       agentId: agent.agentInfo.agentId,
-          //       referralCode: agent.agentInfo.referralCode,
-          //       commissionRate: agent.agentInfo.commissionRate,
-          //       isVerified: agent.agentInfo.isVerified,
-          //     },
-          //   },
-          // });
-          
-          
         } catch (error) {
           logger.error('Error during agent login:', error);
           next(error);
         }
       }
     
-      // Agent Registration
       static async register(req, res, next) {
         try {
           const {
@@ -1117,7 +1122,6 @@ class AgentController {
             idNumber,
           } = req.body;
           
-          // Check if user already exists
           const existingUser = await User.findOne({
             $or: [{ email }, { phoneNumber }],
           });
@@ -1126,7 +1130,6 @@ class AgentController {
             return next(new AppError('User with this email or phone already exists', 400));
           }
           
-          // Validate referral code if provided
           let referringAgent = null;
           if (referralCode) {
             referringAgent = await User.findOne({
@@ -1152,7 +1155,7 @@ class AgentController {
             isEmailVerified: false,
             isPhoneVerified: false,
             isActive: false,
-            isApproved: false, // Needs admin approval
+            isApproved: false,
             kycStatus: 'pending',
             referredBy: referringAgent?._id,
             agentInfo: {
@@ -1172,7 +1175,6 @@ class AgentController {
           
           const agent = await User.create(agentData);
           
-          // Create wallet for agent
           await Wallet.create({
             user: agent._id,
             balance: 0,
@@ -1186,9 +1188,7 @@ class AgentController {
           agent.emailVerificationExpires = Date.now() + 24 * 60 * 60 * 1000;
           await agent.save();
 
-          // await sendVerificationEmail(agent.email, verificationToken);
           
-          // Log registration
           await AdminLog.log({
             admin: agent._id,
             adminEmail: agent.email,
@@ -1232,7 +1232,6 @@ class AgentController {
         }
       }
     
-      // Purchase Airtime
       static async purchaseAirtime(req, res, next) {
         try {
           const { phoneNumber, amount, network, requestId, bypassOTP } = req.body;
@@ -1248,7 +1247,6 @@ class AgentController {
             return next(new AppError('Wallet not found', 404));
           }
           
-          // Get service pricing
           const service = await ServicePricing.findOne({
             serviceType: 'airtime_recharge',
             network: network.toLowerCase(),
@@ -1260,20 +1258,16 @@ class AgentController {
             return next(new AppError('Airtime service is currently unavailable for this network', 400));
           }
           
-          // Calculate total cost with commission
           const commission = (service.agentCommission || 0) * amount / 100;
           const costAfterCommission = amount - commission;
           const totalCost = costAfterCommission;
           
-          // Check wallet balance
           if (wallet.balance < totalCost) {
             return next(new AppError('Insufficient wallet balance', 400));
           }
           
-          // Generate transaction reference
           const reference = requestId || `AIRT-${Date.now()}`;
           
-          // Create transaction
           const transaction = await Transaction.create({
             reference,
             user: agent._id,
@@ -1296,11 +1290,9 @@ class AgentController {
             },
           });
           
-          // Deduct from wallet
           wallet.balance -= totalCost;
           await wallet.save();
           
-          // Get provider
           const provider = await ProviderStatus.findOne({
             supportedServices: 'airtime_recharge',
             status: 'active',
@@ -1309,8 +1301,13 @@ class AgentController {
           if (!provider) {
             throw new AppError('No provider available for airtime recharge', 500);
           }
+
+          await ProviderPurchaseGuardService.assertSufficientProviderBalance(
+            provider.providerName,
+            Number(amount),
+            { serviceType: 'airtime_recharge', network, phoneNumber, actor: 'agent' }
+          );
           
-          // TODO: Integrate with airtime API
           const apiResponse = {
             success: true,
             reference: transaction.reference,
@@ -1324,7 +1321,6 @@ class AgentController {
             },
           };
           
-          // Update transaction status
           if (apiResponse.success) {
             transaction.status = 'successful';
             transaction.metadata.apiResponse = apiResponse;
@@ -1336,16 +1332,13 @@ class AgentController {
               timestamp: new Date(),
             });
             
-            // Update agent commission
             agent.agentInfo.totalCommissionEarned += commission;
             agent.agentInfo.availableCommission += commission;
             agent.agentInfo.totalTransactions += 1;
             await agent.save();
             
-            // Update provider stats
             await provider.incrementRequest(true);
             
-            // Log successful transaction
             await AdminLog.log({
               admin: agent._id,
               adminEmail: agent.email,
@@ -1368,7 +1361,6 @@ class AgentController {
             
             logger.info(`Airtime purchase successful: ${agent.email}, Amount: ${amount}, Phone: ${phoneNumber}`);
           } else {
-            // Refund wallet if failed
             wallet.balance += totalCost;
             await wallet.save();
             
@@ -1381,7 +1373,6 @@ class AgentController {
               timestamp: new Date(),
             });
             
-            // Update provider stats
             await provider.incrementRequest(false);
             
             logger.error(`Airtime purchase failed: ${agent.email}, Amount: ${amount}, Phone: ${phoneNumber}`);
@@ -1416,10 +1407,10 @@ class AgentController {
         }
       }
     
-      // Purchase Data
       static async purchaseData(req, res, next) {
         try {
-          const { phoneNumber, planId, requestId } = req.body;
+          const { phoneNumber, planId, requestId, dataType } = req.body;
+          const requestedDataType = normalizeDataType(dataType);
           
           if (!phoneNumber || !planId) {
             return next(new AppError('Please provide phone number and plan ID', 400));
@@ -1432,27 +1423,29 @@ class AgentController {
             return next(new AppError('Wallet not found', 404));
           }
           
-          // Get service pricing
           const service = await ServicePricing.findById(planId);
           
           if (!service || !service.isActive || !service.isAvailable) {
             return next(new AppError('Data plan is currently unavailable', 400));
           }
+
+          const serviceDataType = normalizeDataType(
+            service.providerPlanType || inferDataTypeFromPlanName(service.planName || service.size || '')
+          ) || 'other';
+          if (requestedDataType && requestedDataType !== 'all' && requestedDataType !== serviceDataType) {
+            return next(new AppError(`Selected plan is '${serviceDataType}' type, but '${requestedDataType}' was requested`, 400));
+          }
           
-          // Calculate total cost with commission
           const commission = (service.agentCommission || 0) * service.sellingPrice / 100;
           const costAfterCommission = service.sellingPrice - commission;
           const totalCost = costAfterCommission;
           
-          // Check wallet balance
           if (wallet.balance < totalCost) {
             return next(new AppError('Insufficient wallet balance', 400));
           }
           
-          // Generate transaction reference
           const reference = requestId || `DATA-${Date.now()}`;
           
-          // Create transaction
           const transaction = await Transaction.create({
             reference,
             user: agent._id,
@@ -1478,11 +1471,9 @@ class AgentController {
             },
           });
           
-          // Deduct from wallet
           wallet.balance -= totalCost;
           await wallet.save();
           
-          // Get provider
           const provider = await ProviderStatus.findOne({
             supportedServices: 'data_recharge',
             status: 'active',
@@ -1491,9 +1482,13 @@ class AgentController {
           if (!provider) {
             throw new AppError('No provider available for data recharge', 500);
           }
+
+          await ProviderPurchaseGuardService.assertSufficientProviderBalance(
+            provider.providerName,
+            Number(service.sellingPrice),
+            { serviceType: 'data_recharge', network: service.network, phoneNumber, actor: 'agent' }
+          );
           
-          // TODO: Integrate with data API
-          // Simulate API call
           const apiResponse = {
             success: true,
             reference: transaction.reference,
@@ -1508,7 +1503,6 @@ class AgentController {
             },
           };
           
-          // Update transaction status
           if (apiResponse.success) {
             transaction.status = 'successful';
             transaction.metadata.apiResponse = apiResponse;
@@ -1520,16 +1514,13 @@ class AgentController {
               timestamp: new Date(),
             });
             
-            // Update agent commission
             agent.agentInfo.totalCommissionEarned += commission;
             agent.agentInfo.availableCommission += commission;
             agent.agentInfo.totalTransactions += 1;
             await agent.save();
             
-            // Update provider stats
             await provider.incrementRequest(true);
             
-            // Log successful transaction
             await AdminLog.log({
               admin: agent._id,
               adminEmail: agent.email,
@@ -1552,7 +1543,6 @@ class AgentController {
             
             logger.info(`Data purchase successful: ${agent.email}, Plan: ${service.planName}, Phone: ${phoneNumber}`);
           } else {
-            // Refund wallet if failed
             wallet.balance += totalCost;
             await wallet.save();
             
@@ -1565,7 +1555,6 @@ class AgentController {
               timestamp: new Date(),
             });
             
-            // Update provider stats
             await provider.incrementRequest(false);
             
             logger.error(`Data purchase failed: ${agent.email}, Plan: ${service.planName}, Phone: ${phoneNumber}`);
@@ -1590,6 +1579,7 @@ class AgentController {
                 dataAmount: service.dataAmount,
                 validity: service.validity,
                 network: service.network,
+                dataType: serviceDataType,
                 commission,
               },
               walletBalance: wallet.balance,
@@ -1602,7 +1592,6 @@ class AgentController {
         }
       }
     
-      // Pay Bill (Electricity, Cable TV, etc.)
       static async payBill(req, res, next) {
         try {
           const { serviceType, meterNumber, amount, provider, requestId, customerDetails } = req.body;
@@ -1650,6 +1639,12 @@ class AgentController {
             if (wallet.balance < billAmount) {
               return next(new AppError('Insufficient wallet balance', 400));
             }
+
+            await ProviderPurchaseGuardService.assertSufficientProviderBalance(
+              'clubkonnect',
+              billAmount,
+              { serviceType: 'electricity', provider, meterNumber, actor: 'agent' }
+            );
 
             const reference = requestId || `${serviceType.toUpperCase()}-${Date.now()}`;
             const previousBalance = wallet.balance;
@@ -1776,7 +1771,6 @@ class AgentController {
             return next(new AppError('Service is currently unavailable', 400));
           }
           
-          // For electricity, validate amount range if provided
           if (serviceType === 'electricity' && amount) {
             if (service.minAmount && amount < service.minAmount) {
               return next(new AppError(`Minimum amount is ${service.minAmount}`, 400));
@@ -1788,20 +1782,16 @@ class AgentController {
           
           const billAmount = amount || service.sellingPrice;
           
-          // Calculate total cost with commission
           const commission = (service.agentCommission || 0) * billAmount / 100;
           const costAfterCommission = billAmount - commission;
           const totalCost = costAfterCommission;
           
-          // Check wallet balance
           if (wallet.balance < totalCost) {
             return next(new AppError('Insufficient wallet balance', 400));
           }
-          
-          // Generate transaction reference
+
           const reference = requestId || `${serviceType.toUpperCase()}-${Date.now()}`;
           
-          // Create transaction
           const transaction = await Transaction.create({
             reference,
             user: agent._id,
@@ -1826,11 +1816,9 @@ class AgentController {
             },
           });
           
-          // Deduct from wallet
           wallet.balance -= totalCost;
           await wallet.save();
           
-          // Get provider status
           const billProvider = await ProviderStatus.findOne({
             supportedServices: serviceType,
             status: 'active',
@@ -1839,9 +1827,13 @@ class AgentController {
           if (!billProvider) {
             throw new AppError('No provider available for bill payment', 500);
           }
+
+          await ProviderPurchaseGuardService.assertSufficientProviderBalance(
+            billProvider.providerName,
+            Number(billAmount),
+            { serviceType, provider, meterNumber, actor: 'agent' }
+          );
           
-          // TODO: Integrate with bill payment API
-          // Simulate API call
           const apiResponse = {
             success: true,
             reference: transaction.reference,
@@ -1856,7 +1848,6 @@ class AgentController {
             },
           };
           
-          // Update transaction status
           if (apiResponse.success) {
             transaction.status = 'successful';
             transaction.metadata.apiResponse = apiResponse;
@@ -1868,16 +1859,13 @@ class AgentController {
               timestamp: new Date(),
             });
             
-            // Update agent commission
             agent.agentInfo.totalCommissionEarned += commission;
             agent.agentInfo.availableCommission += commission;
             agent.agentInfo.totalTransactions += 1;
             await agent.save();
             
-            // Update provider stats
             await billProvider.incrementRequest(true);
             
-            // Log successful transaction
             await AdminLog.log({
               admin: agent._id,
               adminEmail: agent.email,
@@ -1900,7 +1888,6 @@ class AgentController {
             
             logger.info(`Bill payment successful: ${agent.email}, Service: ${serviceType}, Amount: ${billAmount}`);
           } else {
-            // Refund wallet if failed
             wallet.balance += totalCost;
             await wallet.save();
             
@@ -1913,7 +1900,6 @@ class AgentController {
               timestamp: new Date(),
             });
             
-            // Update provider stats
             await billProvider.incrementRequest(false);
             
             logger.error(`Bill payment failed: ${agent.email}, Service: ${serviceType}, Amount: ${billAmount}`);
@@ -1949,7 +1935,6 @@ class AgentController {
         }
       }
     
-      // Get available services
       static async getServices(req, res, next) {
         try {
           const { serviceType, network, provider } = req.query;
@@ -1997,7 +1982,6 @@ class AgentController {
             .sort({ priority: 1, sellingPrice: 1 })
             .lean();
           
-          // Group services by type
           const groupedServices = services.reduce((acc, service) => {
             if (!acc[service.serviceType]) {
               acc[service.serviceType] = [];
@@ -2006,7 +1990,6 @@ class AgentController {
             return acc;
           }, {});
           
-          // Get provider statuses
           const providers = await ProviderStatus.find({
             status: { $in: ['active', 'degraded'] },
           }).lean();
@@ -2032,7 +2015,6 @@ class AgentController {
         }
       }
     
-      // Verify customer (for electricity, cable TV, etc.)
       static async verifyCustomer(req, res, next) {
         try {
           const { serviceType, customerId, provider, meterType = 'prepaid' } = req.body;
@@ -2071,7 +2053,6 @@ class AgentController {
             }
           }
           
-          // TODO: Integrate with verification API
           
           const verificationResponse = {
             success: true,
@@ -2098,13 +2079,11 @@ class AgentController {
         }
       }
     
-      // Get agent dashboard stats
       static async getDashboardStats(req, res, next) {
         try {
           const agent = req.user;
           const wallet = await Wallet.findOne({ user: agent._id }).lean();
           
-          // Calculate date ranges
           const today = new Date();
           today.setHours(0, 0, 0, 0);
           
@@ -2117,9 +2096,7 @@ class AgentController {
           const thirtyDaysAgo = new Date(today);
           thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
           
-          // Get transaction stats
           const [todayStats, weeklyStats, monthlyStats, totalStats] = await Promise.all([
-            // Today's transactions
             Transaction.aggregate([
               {
                 $match: {
@@ -2138,7 +2115,6 @@ class AgentController {
               },
             ]),
             
-            // Weekly transactions
             Transaction.aggregate([
               {
                 $match: {
@@ -2157,7 +2133,6 @@ class AgentController {
               },
             ]),
             
-            // Monthly transactions
             Transaction.aggregate([
               {
                 $match: {
@@ -2176,7 +2151,6 @@ class AgentController {
               },
             ]),
             
-            // Total transactions
             Transaction.aggregate([
               {
                 $match: {
@@ -2195,13 +2169,11 @@ class AgentController {
             ]),
           ]);
           
-          // Get recent transactions
           const recentTransactions = await Transaction.find({ user: agent._id })
             .sort({ createdAt: -1 })
             .limit(10)
             .lean();
           
-          // Get service type breakdown
           const serviceBreakdown = await Transaction.aggregate([
             {
               $match: {
@@ -2221,7 +2193,6 @@ class AgentController {
             { $sort: { amount: -1 } },
           ]);
           
-          // Get referrals count
           const referralsCount = await User.countDocuments({
             referredBy: agent._id,
             role: 'user',
