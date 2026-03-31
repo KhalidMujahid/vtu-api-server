@@ -10,6 +10,14 @@ class AirtimeNigeriaService {
   static normalizeNetwork(network = '') {
     const value = String(network).trim().toLowerCase();
     const aliases = {
+      '01': 'mtn',
+      '1': 'mtn',
+      '02': 'glo',
+      '2': 'glo',
+      '03': '9mobile',
+      '3': '9mobile',
+      '04': 'airtel',
+      '4': 'airtel',
       mtn: 'mtn',
       glo: 'glo',
       airtel: 'airtel',

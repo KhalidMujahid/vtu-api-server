@@ -16,7 +16,29 @@ class NelloBytesService {
     glo: '02',
     '9mobile': '03',
     airtel: '04',
+    '01': '01',
+    '1': '01',
+    '02': '02',
+    '2': '02',
+    '03': '03',
+    '3': '03',
+    '04': '04',
+    '4': '04',
+    etisalat: '03',
+    m_9mobile: '03',
   };
+
+  static normalizeNetwork(network = '') {
+    const key = String(network).trim().toLowerCase();
+    if (!key) return '';
+    if (['01', '1'].includes(key)) return 'mtn';
+    if (['02', '2'].includes(key)) return 'glo';
+    if (['03', '3'].includes(key)) return '9mobile';
+    if (['04', '4'].includes(key)) return 'airtel';
+    if (key === 'etisalat') return '9mobile';
+    if (key === 'm_9mobile') return '9mobile';
+    return key;
+  }
 
   static cableCodes = {
     dstv: 'dstv',
@@ -203,8 +225,9 @@ class NelloBytesService {
     const endpoint = '/APIDatabundlePlansV2.asp';
     const response = await this.request(endpoint);
     
-    if (network && this.networkCodes[network.toLowerCase()]) {
-      const networkCode = this.networkCodes[network.toLowerCase()];
+    const normalized = this.normalizeNetwork(network || '');
+    if (network && this.networkCodes[normalized]) {
+      const networkCode = this.networkCodes[normalized];
       return this.parseDataPlansResponse(response, networkCode);
     }
     
@@ -240,9 +263,10 @@ class NelloBytesService {
   static async purchaseData({ network, dataPlan, mobileNumber, callBackURL }) {
     const endpoint = '/APIDatabundleV1.asp';
     
-    const networkCode = this.networkCodes[network.toLowerCase()];
+    const normalizedNetwork = this.normalizeNetwork(network);
+    const networkCode = this.networkCodes[normalizedNetwork];
     if (!networkCode) {
-      throw new AppError('Invalid network. Use: mtn, glo, airtel, or 9mobile', 400);
+      throw new AppError('Invalid network. Use: mtn/glo/airtel/9mobile or 01/02/03/04', 400);
     }
 
     const requestId = uuidv4().substring(0, 8).toUpperCase();
@@ -277,10 +301,11 @@ class NelloBytesService {
    */
   static async purchaseAirtime({ network, amount, mobileNumber, requestId = null, callBackURL, bonusType = null }) {
     const endpoint = '/APIAirtimeV1.asp';
-    const networkCode = this.networkCodes[network.toLowerCase()];
+    const normalizedNetwork = this.normalizeNetwork(network);
+    const networkCode = this.networkCodes[normalizedNetwork];
 
     if (!networkCode) {
-      throw new AppError('Invalid network. Use: mtn, glo, airtel, or 9mobile', 400);
+      throw new AppError('Invalid network. Use: mtn/glo/airtel/9mobile or 01/02/03/04', 400);
     }
 
     const normalizedAmount = Number(amount);
@@ -608,9 +633,10 @@ class NelloBytesService {
   static async buyEPIN({ mobileNetwork, value, quantity, requestId = null, callBackURL = null }) {
     const endpoint = '/APIEPINV1.asp';
     
-    const networkCode = this.networkCodes[mobileNetwork.toLowerCase()];
+    const normalizedNetwork = this.normalizeNetwork(mobileNetwork);
+    const networkCode = this.networkCodes[normalizedNetwork];
     if (!networkCode) {
-      throw new AppError('Invalid network. Use: mtn, glo, airtel, or 9mobile', 400);
+      throw new AppError('Invalid network. Use: mtn/glo/airtel/9mobile or 01/02/03/04', 400);
     }
 
     // Validate value

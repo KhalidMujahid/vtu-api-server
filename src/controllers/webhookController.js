@@ -9,6 +9,45 @@ const logger = require('../utils/logger');
 
 const FUNDING_FEE = 50;
 
+async function refundTransactionToWallet(transaction, reason = 'Transaction refund', amountOverride = null) {
+  if (!transaction) return null;
+
+  const alreadyRefunded =
+    transaction?.metadata?.refundProcessed === true ||
+    (
+      typeof transaction.previousBalance === 'number' &&
+      typeof transaction.newBalance === 'number' &&
+      transaction.newBalance === transaction.previousBalance
+    );
+
+  if (alreadyRefunded) {
+    return Wallet.findOne({ user: transaction.user });
+  }
+
+  const wallet = await Wallet.findOne({ user: transaction.user });
+  if (!wallet) return null;
+
+  const refundAmount = Number(amountOverride ?? transaction.amount ?? 0);
+  if (refundAmount > 0) {
+    await wallet.credit(refundAmount, reason);
+  }
+
+  transaction.metadata = {
+    ...(transaction.metadata || {}),
+    refundProcessed: true,
+    refundProcessedAt: new Date().toISOString(),
+    refundReason: reason,
+  };
+
+  if (typeof transaction.previousBalance === 'number') {
+    transaction.newBalance = transaction.previousBalance;
+  } else {
+    transaction.newBalance = wallet.balance;
+  }
+
+  return wallet;
+}
+
 function calculateNetFundingAmount(grossAmount) {
   const parsedAmount = Number(grossAmount) || 0;
   return {
@@ -131,14 +170,8 @@ exports.smePlugWebhook = async (req, res) => {
       });
 
       await transaction.save();
-      const wallet = await Wallet.findOne({ user: transaction.user });
-
-      if (wallet) {
-        await wallet.credit(
-          transaction.amount,
-          'Purchase refund due to failure'
-        );
-      }
+      await refundTransactionToWallet(transaction, 'Purchase refund due to failure');
+      await transaction.save();
 
       await NotificationService.create({
         user: transaction.user,

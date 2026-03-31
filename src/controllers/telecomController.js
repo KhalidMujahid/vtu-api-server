@@ -55,7 +55,16 @@ function normalizeNetwork(network) {
     .replace(/[^a-z0-9]+$/g, '');
 
   const aliases = {
+    '01': 'mtn',
+    '1': 'mtn',
+    '02': 'glo',
+    '2': 'glo',
+    '03': '9mobile',
+    '3': '9mobile',
+    '04': 'airtel',
+    '4': 'airtel',
     etisalat: '9mobile',
+    m_9mobile: '9mobile',
     '9mobile': '9mobile',
     mtn: 'mtn',
     airtel: 'airtel',
@@ -228,6 +237,45 @@ function normalizePhoneForSmePlug(phoneNumber) {
     return `234${phoneNumber}`;
   }
   return phoneNumber;
+}
+
+async function refundTransactionToWallet(transaction, reason = 'Transaction refund', amountOverride = null) {
+  if (!transaction) return null;
+
+  const alreadyRefunded =
+    transaction?.metadata?.refundProcessed === true ||
+    (
+      typeof transaction.previousBalance === 'number' &&
+      typeof transaction.newBalance === 'number' &&
+      transaction.newBalance === transaction.previousBalance
+    );
+
+  if (alreadyRefunded) {
+    return Wallet.findOne({ user: transaction.user });
+  }
+
+  const wallet = await Wallet.findOne({ user: transaction.user });
+  if (!wallet) return null;
+
+  const refundAmount = Number(amountOverride ?? transaction.amount ?? 0);
+  if (refundAmount > 0) {
+    await wallet.credit(refundAmount, reason);
+  }
+
+  transaction.metadata = {
+    ...(transaction.metadata || {}),
+    refundProcessed: true,
+    refundProcessedAt: new Date().toISOString(),
+    refundReason: reason,
+  };
+
+  if (typeof transaction.previousBalance === 'number') {
+    transaction.newBalance = transaction.previousBalance;
+  } else {
+    transaction.newBalance = wallet.balance;
+  }
+
+  return wallet;
 }
 
 exports.getDataPlans = async (req, res, next) => {
@@ -520,7 +568,7 @@ exports.purchaseData = async (req, res, next) => {
       }
     } catch (err) {
       // Refund wallet on failure
-      await wallet.credit(sellingPrice, 'Data purchase refund');
+      await refundTransactionToWallet(transaction, 'Data purchase refund', sellingPrice);
 
       transaction.status = 'failed';
       transaction.failureReason = err.message;
@@ -712,7 +760,8 @@ exports.purchaseAirtime = async (req, res, next) => {
 
       await transaction.save();
 
-      await wallet.credit(parsedAmount, "Airtime refund");
+      await refundTransactionToWallet(transaction, 'Airtime refund', parsedAmount);
+      await transaction.save();
     }
 
     res.status(200).json({
@@ -782,7 +831,8 @@ exports.airtimeCallback = async (req, res) => {
       // Refund wallet and send notification
       const wallet = await Wallet.findOne({ user: transaction.user });
       if (wallet) {
-        await wallet.credit(transaction.amount, 'Airtime purchase refund');
+        await refundTransactionToWallet(transaction, 'Airtime purchase refund');
+        await transaction.save();
       }
       
       await NotificationService.create({
@@ -861,7 +911,7 @@ exports.airtimeWebhook = async (req, res) => {
       // Refund wallet on failure
       const wallet = await Wallet.findOne({ user: transaction.user });
       if (wallet) {
-        await wallet.credit(transaction.amount, 'Airtime purchase refund');
+        await refundTransactionToWallet(transaction, 'Airtime purchase refund');
       }
 
       // Send notification for failed airtime purchase
@@ -1008,7 +1058,7 @@ exports.purchaseRechargePin = async (req, res, next) => {
         },
       });
     } catch (err) {
-      await wallet.credit(totalAmount, 'Recharge PIN refund');
+      await refundTransactionToWallet(transaction, 'Recharge PIN refund', totalAmount);
 
       transaction.status = 'failed';
       transaction.failureReason = err.message;
@@ -1048,8 +1098,7 @@ exports.smedataWebhook = async (req, res, next) => {
       transaction.statusHistory.push({ status: 'successful', note: 'Transaction confirmed by SMEDATA', timestamp: new Date() });
       await transaction.save();
     } else {
-      user.walletBalance += transaction.amount;
-      await user.save();
+      await refundTransactionToWallet(transaction, 'Transaction failed via webhook - refund');
 
       transaction.status = 'failed';
       transaction.providerResponse = providerResponse || {};
@@ -1160,10 +1209,7 @@ exports.nelloBytesWebhook = async (req, res, next) => {
     } else {
       // Failed - refund wallet
       if (user) {
-        const wallet = await Wallet.findOne({ user: user._id });
-        if (wallet) {
-          await wallet.credit(transaction.amount, 'Transaction failed - refund');
-        }
+        await refundTransactionToWallet(transaction, 'Transaction failed - refund');
       }
 
       transaction.status = 'failed';
@@ -1378,7 +1424,7 @@ exports.purchaseAirtimeNigeriaData = async (req, res, next) => {
       });
     } catch (err) {
       // Refund wallet on failure
-      await wallet.credit(sellingPrice, 'Data purchase refund');
+      await refundTransactionToWallet(transaction, 'Data purchase refund', sellingPrice);
 
       transaction.status = 'failed';
       transaction.failureReason = err.message;
@@ -1493,7 +1539,7 @@ exports.purchaseAirtimeNigeriaAirtime = async (req, res, next) => {
       });
     } catch (err) {
       // Refund wallet on failure
-      await wallet.credit(amount, 'Airtime purchase refund');
+      await refundTransactionToWallet(transaction, 'Airtime purchase refund', amount);
 
       transaction.status = 'failed';
       transaction.failureReason = err.message;
@@ -1590,10 +1636,8 @@ exports.airtimeNigeriaWebhook = async (req, res) => {
       await transaction.save();
       
       // Refund wallet
-      const wallet = await Wallet.findOne({ user: transaction.user });
-      if (wallet) {
-        await wallet.credit(transaction.amount, 'Purchase refund due to failure');
-      }
+      await refundTransactionToWallet(transaction, 'Purchase refund due to failure');
+      await transaction.save();
       
       // Send notification
       await NotificationService.create({
@@ -1772,7 +1816,7 @@ exports.purchaseSmePlugData = async (req, res, next) => {
       });
     } catch (err) {
       // Refund wallet on failure
-      await wallet.credit(sellingPrice, 'Data purchase refund');
+      await refundTransactionToWallet(transaction, 'Data purchase refund', sellingPrice);
 
       transaction.status = 'failed';
       transaction.failureReason = err.message;
@@ -1889,7 +1933,7 @@ exports.purchaseSmePlugAirtime = async (req, res, next) => {
       });
     } catch (err) {
       // Refund wallet on failure
-      await wallet.credit(sellingPrice, 'Airtime purchase refund');
+      await refundTransactionToWallet(transaction, 'Airtime purchase refund', sellingPrice);
 
       transaction.status = 'failed';
       transaction.failureReason = err.message;

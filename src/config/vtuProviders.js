@@ -357,7 +357,15 @@ module.exports = {
       'Glo': 'glo',
       'Airtel': 'airtel',
       'm_9mobile': '9mobile',
-      '9mobile': '9mobile'
+      '9mobile': '9mobile',
+      '01': 'mtn',
+      '1': 'mtn',
+      '02': 'glo',
+      '2': 'glo',
+      '03': '9mobile',
+      '3': '9mobile',
+      '04': 'airtel',
+      '4': 'airtel',
     };
 
     for (const [networkKey, networkData] of Object.entries(mobileNetwork)) {
@@ -407,7 +415,15 @@ module.exports = {
       'MTN': 'mtn',
       'Glo': 'glo',
       'Airtel': 'airtel',
-      '9mobile': '9mobile'
+      '9mobile': '9mobile',
+      '01': 'mtn',
+      '1': 'mtn',
+      '02': 'glo',
+      '2': 'glo',
+      '03': '9mobile',
+      '3': '9mobile',
+      '04': 'airtel',
+      '4': 'airtel',
     };
 
     for (const [networkKey, networkPlans] of Object.entries(plans)) {
@@ -451,7 +467,15 @@ module.exports = {
       'MTN': 'mtn',
       'Glo': 'glo',
       'Airtel': 'airtel',
-      '9mobile': '9mobile'
+      '9mobile': '9mobile',
+      '01': 'mtn',
+      '1': 'mtn',
+      '02': 'glo',
+      '2': 'glo',
+      '03': '9mobile',
+      '3': '9mobile',
+      '04': 'airtel',
+      '4': 'airtel',
     };
 
     for (const [networkKey, networkPlans] of Object.entries(networkData)) {

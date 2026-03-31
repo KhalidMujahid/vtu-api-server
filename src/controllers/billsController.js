@@ -41,6 +41,45 @@ function normalizeElectricityDiscos(rawDiscos) {
   return [];
 }
 
+async function refundTransactionToWallet(transaction, reason = 'Transaction refund', amountOverride = null) {
+  if (!transaction) return null;
+
+  const alreadyRefunded =
+    transaction?.metadata?.refundProcessed === true ||
+    (
+      typeof transaction.previousBalance === 'number' &&
+      typeof transaction.newBalance === 'number' &&
+      transaction.newBalance === transaction.previousBalance
+    );
+
+  if (alreadyRefunded) {
+    return Wallet.findOne({ user: transaction.user });
+  }
+
+  const wallet = await Wallet.findOne({ user: transaction.user });
+  if (!wallet) return null;
+
+  const refundAmount = Number(amountOverride ?? transaction.amount ?? 0);
+  if (refundAmount > 0) {
+    await wallet.credit(refundAmount, reason);
+  }
+
+  transaction.metadata = {
+    ...(transaction.metadata || {}),
+    refundProcessed: true,
+    refundProcessedAt: new Date().toISOString(),
+    refundReason: reason,
+  };
+
+  if (typeof transaction.previousBalance === 'number') {
+    transaction.newBalance = transaction.previousBalance;
+  } else {
+    transaction.newBalance = wallet.balance;
+  }
+
+  return wallet;
+}
+
 exports.getElectricityDiscos = async (req, res, next) => {
   try {
     const { source } = req.query;
@@ -233,7 +272,7 @@ exports.purchaseElectricity = async (req, res, next) => {
       throw new Error(apiResponse.response?.status || 'Payment failed');
     } catch (apiErr) {
       // Refund wallet on failure
-      await wallet.credit(parsedAmount, 'Electricity payment refund');
+      await refundTransactionToWallet(transaction, 'Electricity payment refund', parsedAmount);
       
       transaction.status = 'failed';
       transaction.failureReason = apiErr.message;
@@ -326,6 +365,7 @@ exports.purchaseCableTV = async (req, res, next) => {
     
     // If using configured provider (default or specified)
     if (activeProvider === 'nellobytes' || activeProvider === 'clubkonnect') {
+      let transaction;
       try {
         // First verify smartcard
         const verifyResult = await NelloBytesService.verifyCableSmartCard({
@@ -363,7 +403,7 @@ exports.purchaseCableTV = async (req, res, next) => {
         const reference = `CABLE-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
         const callbackUrl = `${SERVER_URL}/api/v1/bills/webhook/nellobytes`;
         
-        const transaction = await Transaction.create({
+        transaction = await Transaction.create({
           reference,
           user: user._id,
           type: 'cable_tv',
@@ -426,8 +466,16 @@ exports.purchaseCableTV = async (req, res, next) => {
         
       } catch (error) {
         // Refund wallet on failure
-        if (wallet) {
-          await wallet.credit(totalAmount, 'Cable TV refund');
+        if (transaction) {
+          await refundTransactionToWallet(transaction, 'Cable TV refund', totalAmount);
+          transaction.status = 'failed';
+          transaction.failureReason = error.message;
+          transaction.statusHistory.push({
+            status: 'failed',
+            note: error.message || 'Cable TV purchase failed',
+            timestamp: new Date(),
+          });
+          await transaction.save();
         }
         
         logger.error(`Cable TV purchase failed: ${error.message}`);
@@ -637,7 +685,7 @@ exports.purchaseEducationPin = async (req, res, next) => {
         },
       });
     } catch (error) {
-      await wallet.credit(totalAmount, 'Education PIN refund');
+      await refundTransactionToWallet(transaction, 'Education PIN refund', totalAmount);
 
       transaction.status = 'failed';
       transaction.failureReason = error.message;
@@ -731,7 +779,7 @@ exports.nelloBytesWebhook = async (req, res, next) => {
       
     } else {
       if (wallet) {
-        await wallet.credit(transaction.amount, 'Payment failed - refund');
+        await refundTransactionToWallet(transaction, 'Payment failed - refund', transaction.amount);
       }
 
       transaction.status = 'failed';
