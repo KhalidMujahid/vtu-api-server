@@ -10,6 +10,7 @@ const logger = require('../utils/logger');
 const AirtimeNigeriaService = require('./airtimeNigeriaService');
 const SmePlugService = require('./smePlugService');
 const NelloBytesService = require('./nelloBytesService');
+const PluginngService = require('./pluginngService');
 
 class VtuProviderService {
   static AUTO_FAILOVER_THRESHOLD = 40;
@@ -493,6 +494,19 @@ class VtuProviderService {
             currency: result?.currency || 'NGN',
             accountId: result?.id || null,
             phoneNumber: result?.phoneNumber || null,
+            raw: result?.raw || result,
+            lastUpdated: new Date(),
+          };
+        }
+
+        case 'pluginng': {
+          const result = await PluginngService.getWalletBalance();
+          return {
+            providerId,
+            providerName: provider.name,
+            available: true,
+            balance: Number(result?.balance || 0),
+            currency: result?.currency || 'NGN',
             raw: result?.raw || result,
             lastUpdated: new Date(),
           };

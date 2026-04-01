@@ -31,6 +31,8 @@ router.post('/webhook/nellobytes', telecomController.nelloBytesWebhook);
 router.get('/webhook/nellobytes', telecomController.nelloBytesWebhook);
 router.post('/webhook/smeplug', webhookController.smePlugWebhook);
 router.get('/webhook/smeplug', webhookController.smePlugWebhook);
+router.post('/webhook/pluginng', telecomController.pluginngWebhook);
+router.get('/webhook/pluginng', telecomController.pluginngWebhook);
 
 /**
  * @swagger

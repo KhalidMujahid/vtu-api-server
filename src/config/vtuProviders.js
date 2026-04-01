@@ -92,13 +92,44 @@ module.exports = {
         requestsPerHour: 300,
       },
     },
+
+    pluginng: {
+      id: 'pluginng',
+      name: 'Pluginng',
+      displayName: 'Pluginng',
+      description: 'Data - airtime - cable - electricity - exam',
+      color: '#16a34a',
+      icon: 'puzzle',
+      baseUrl: process.env.PLUGINNG_BASE_URL || 'https://pluginng.com',
+      apiKey: process.env.PLUGINNG_TOKEN || '',
+      apiSecret: process.env.PLUGINNG_PASSWORD || '',
+      timeout: 45000,
+      retryCount: 2,
+      supportedServices: ['data_recharge', 'airtime_recharge', 'sme_data'],
+      supportedNetworks: ['mtn', 'glo', 'airtel', '9mobile'],
+      status: 'active',
+      priority: 4,
+      isDefault: false,
+      source: 'pluginng',
+      features: {
+        dataBundle: true,
+        airtime: true,
+        cableTv: false,
+        electricity: false,
+        smeData: true,
+      },
+      rateLimit: {
+        requestsPerMinute: 60,
+        requestsPerHour: 500,
+      },
+    },
   },
 
   networkProviders: {
-    mtn: ['clubkonnect', 'airtimenigeria', 'smeplug'],
-    glo: ['clubkonnect', 'airtimenigeria', 'smeplug'],
-    airtel: ['clubkonnect', 'airtimenigeria', 'smeplug'],
-    '9mobile': ['clubkonnect', 'airtimenigeria', 'smeplug'],
+    mtn: ['clubkonnect', 'airtimenigeria', 'smeplug', 'pluginng'],
+    glo: ['clubkonnect', 'airtimenigeria', 'smeplug', 'pluginng'],
+    airtel: ['clubkonnect', 'airtimenigeria', 'smeplug', 'pluginng'],
+    '9mobile': ['clubkonnect', 'airtimenigeria', 'smeplug', 'pluginng'],
   },
 
   defaults: {
@@ -225,6 +256,7 @@ module.exports = {
       'nellobytes': require('../services/nelloBytesService'),
       'airtimenigeria': require('../services/airtimeNigeriaService'),
       'smeplug': require('../services/smePlugService'),
+      'pluginng': require('../services/pluginngService'),
     };
     return serviceMap[source] || null;
   },
@@ -234,6 +266,7 @@ module.exports = {
       'nellobytes': require('../services/nelloBytesService'),
       'airtimenigeria': require('../services/airtimeNigeriaService'),
       'smeplug': require('../services/smePlugService'),
+      'pluginng': require('../services/pluginngService'),
     };
     return serviceMap[source] || null;
   },
@@ -331,6 +364,9 @@ module.exports = {
           break;
         case 'airtimenigeria':
           normalizedData = this._normalizeAirtimeNigeria(data);
+          break;
+        case 'pluginng':
+          normalizedData = this._normalizePluginng(data);
           break;
         default:
           return data;
@@ -520,6 +556,58 @@ module.exports = {
       return this._normalizeAirtimeNigeriaPlan(plan);
     }
     return plan;
+  },
+
+  /**
+   * Normalize Pluginng response
+   */
+  _normalizePluginng(data) {
+    const result = {};
+    const plans = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
+
+    for (const group of plans) {
+      if (String(group?.category || '').toLowerCase() !== 'data') continue;
+      if (String(group?.status ?? '1') !== '1') continue;
+      if (!Array.isArray(group?.plan)) continue;
+
+      const network = this._normalizePluginngNetwork(group?.title);
+      if (!network) continue;
+
+      if (!result[network]) {
+        result[network] = [];
+      }
+
+      for (const item of group.plan) {
+        const planName = item?.plan || '';
+        const typeHint = `${group.title || ''} ${planName}`.trim();
+        result[network].push({
+          id: `${group.subcategory_id}:${planName}`,
+          planCode: planName,
+          providerPlanId: planName,
+          planName,
+          network,
+          size: planName,
+          price: parseFloat(item?.amount) || 0,
+          validity: this._extractValidity(planName),
+          providerPlanType: this._extractDataType(typeHint),
+          providerMeta: {
+            subcategoryId: String(group.subcategory_id || ''),
+            title: group.title || '',
+          },
+        });
+      }
+    }
+
+    return result;
+  },
+
+  _normalizePluginngNetwork(title = '') {
+    const normalized = String(title).toLowerCase();
+    if (normalized.startsWith('mtn')) return 'mtn';
+    if (normalized.startsWith('airtel')) return 'airtel';
+    if (normalized.startsWith('glo')) return 'glo';
+    if (normalized.startsWith('9mobile')) return '9mobile';
+    return null;
   },
 
   /**

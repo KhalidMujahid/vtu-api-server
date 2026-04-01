@@ -6,20 +6,15 @@ const ServicePricing = require('../models/ServicePricing');
 const ProviderStatus = require('../models/ProviderStatus');
 const AdminLog = require('../models/AdminLog');
 const Settings = require('../models/Settings');
-const Notification = require('../models/Notification');
 const WalletService = require('../services/walletService');
 const TransactionService = require('../services/transactionService');
 const TelecomService = require('../services/telecomService');
 const BillsService = require('../services/billsService');
-const ApiBalanceAlertService = require('../services/apiBalanceAlertService');
 const { AppError } = require('../middlewares/errorHandler');
 const logger = require('../utils/logger');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const emailService = require('../utils/emailService');
-const { generateBase32Secret, verifyTotp } = require('../utils/totp');
-const { buildDateRangeFilter } = require('../utils/dateRange');
-const { toCsv, buildSimplePdf } = require('../utils/exportUtils');
 
 class AdminController {
   static async getDashboardStats(req, res, next) {
@@ -110,9 +105,6 @@ class AdminController {
       const total = successRate.reduce((sum, item) => sum + item.count, 0);
       const successful = successRate.find(item => item._id === 'successful')?.count || 0;
       const successRatePercent = total > 0 ? (successful / total) * 100 : 0;
-      const monitoringThreshold = 40;
-      const failureAnalysis = await AdminController.getFailureAnalysis({ createdAt: { $gte: startOfMonth } });
-      const netProfitAnalytics = await AdminController.calculateNetProfit({ createdAt: { $gte: startOfMonth } });
       
       res.status(200).json({
         status: 'success',
@@ -129,7 +121,6 @@ class AdminController {
             totalWallets,
             lockedWallets,
             successRate: successRatePercent.toFixed(2),
-            successIndicator: successRatePercent < monitoringThreshold ? 'red' : 'green',
           },
           transactionBreakdown,
           recentTransactions,
@@ -138,13 +129,9 @@ class AdminController {
             name: p.providerName,
             status: p.status,
             successRate: p.successRate,
-            indicatorColor: Number(p.successRate || 0) < monitoringThreshold ? 'red' : 'green',
-            isCritical: Number(p.successRate || 0) < monitoringThreshold,
             totalRequests: p.totalRequests,
             lastChecked: p.lastChecked,
           })),
-          failureAnalysis,
-          profitAnalytics: netProfitAnalytics,
           charts: {
             dailyTransactions: await AdminController.getDailyTransactionChart(),
             userGrowth: await AdminController.getUserGrowthChart(),
@@ -157,102 +144,6 @@ class AdminController {
       logger.error('Error getting dashboard stats:', error);
       next(error);
     }
-  }
-
-  static async calculateNetProfit(dateQuery = {}) {
-    const revenueAgg = await Transaction.aggregate([
-      { $match: { ...dateQuery, status: 'successful' } },
-      { $group: { _id: null, totalRevenue: { $sum: '$amount' } } },
-    ]);
-
-    const successfulTransactions = await Transaction.find({
-      ...dateQuery,
-      status: 'successful',
-    })
-      .select('type amount provider service metadata')
-      .lean();
-
-    const pricing = await ServicePricing.find({})
-      .select('serviceType provider planCode providerPlanId variationCode costPrice')
-      .lean();
-
-    const pricingMap = new Map();
-    for (const plan of pricing) {
-      const planKeys = [
-        plan.providerPlanId,
-        plan.variationCode,
-        plan.planCode,
-      ].filter(Boolean);
-      for (const planKey of planKeys) {
-        pricingMap.set(
-          `${plan.serviceType}|${plan.provider}|${String(planKey).toLowerCase()}`,
-          Number(plan.costPrice || 0)
-        );
-      }
-    }
-
-    let totalCost = 0;
-    let matchedCount = 0;
-    for (const transaction of successfulTransactions) {
-      const providerName =
-        transaction.provider?.name ||
-        transaction.service?.provider ||
-        transaction.metadata?.providerUsed;
-      const planIdentifier =
-        transaction.service?.plan ||
-        transaction.metadata?.planCode ||
-        transaction.metadata?.providerPlanId ||
-        transaction.metadata?.variationCode;
-
-      if (providerName && planIdentifier) {
-        const key = `${transaction.type}|${providerName}|${String(planIdentifier).toLowerCase()}`;
-        if (pricingMap.has(key)) {
-          totalCost += Number(pricingMap.get(key) || 0);
-          matchedCount += 1;
-          continue;
-        }
-      }
-
-      if (transaction.metadata?.costPrice !== undefined) {
-        totalCost += Number(transaction.metadata.costPrice || 0);
-        matchedCount += 1;
-      } else {
-        totalCost += Number(transaction.amount || 0);
-      }
-    }
-
-    const totalRevenue = Number(revenueAgg[0]?.totalRevenue || 0);
-    const netProfit = totalRevenue - totalCost;
-
-    return {
-      totalRevenue,
-      totalCost,
-      netProfit,
-      matchingCoverage: successfulTransactions.length
-        ? Number(((matchedCount / successfulTransactions.length) * 100).toFixed(2))
-        : 0,
-    };
-  }
-
-  static async getFailureAnalysis(dateQuery = {}) {
-    const topFailedTypes = await Transaction.aggregate([
-      { $match: { ...dateQuery, status: 'failed' } },
-      { $group: { _id: '$type', count: { $sum: 1 } } },
-      { $sort: { count: -1 } },
-      { $limit: 5 },
-    ]);
-
-    const topFailedProviders = await Transaction.aggregate([
-      { $match: { ...dateQuery, status: 'failed' } },
-      { $group: { _id: '$provider.name', count: { $sum: 1 } } },
-      { $sort: { count: -1 } },
-      { $limit: 5 },
-    ]);
-
-    return {
-      topFailedTypes,
-      topFailedProviders,
-    };
   }
 
   static async getStaff(req, res, next) {
@@ -600,7 +491,12 @@ class AdminController {
       if (isActive !== undefined) query.isActive = isActive === 'true';
       if (isVerified !== undefined) query.isEmailVerified = isVerified === 'true';
       
-      Object.assign(query, buildDateRangeFilter(startDate, endDate));
+      // Date range filter
+      if (startDate || endDate) {
+        query.createdAt = {};
+        if (startDate) query.createdAt.$gte = new Date(startDate);
+        if (endDate) query.createdAt.$lte = new Date(endDate);
+      }
       
       const sort = {};
       sort[sortBy] = sortOrder === 'asc' ? 1 : -1;
@@ -1357,14 +1253,10 @@ class AdminController {
   static async creditWallet(req, res, next) {
     try {
       const { userId } = req.params;
-      const { amount, reason, remark, reference } = req.body;
-      const adminRemark = remark || reason;
+      const { amount, reason, reference } = req.body;
       
       if (!amount || amount <= 0) {
         return next(new AppError('Please provide a valid amount', 400));
-      }
-      if (!adminRemark) {
-        return next(new AppError('Remark is required for manual credit', 400));
       }
       
       // Check if user exists
@@ -1389,14 +1281,7 @@ class AdminController {
         userId,
         amount,
         transactionReference,
-        `Manual credit by admin: ${adminRemark}`,
-        {
-          transactionType: 'fund_wallet',
-          category: 'funding',
-          adminAction: 'credit',
-          adminRemark,
-          adminId: req.admin._id,
-        }
+        `Manual credit by admin: ${reason || 'No reason provided'}`
       );
       
       // Log the action
@@ -1411,14 +1296,14 @@ class AdminController {
           old: { balance: result.wallet.balance - amount },
           new: { balance: result.wallet.balance },
         },
-        description: `Wallet credited: ${amount} NGN to user ${user.email} by ${req.admin.email}. Reason: ${adminRemark || 'N/A'}`,
+        description: `Wallet credited: ${amount} NGN to user ${user.email} by ${req.admin.email}. Reason: ${reason || 'N/A'}`,
         ipAddress: req.ip,
         userAgent: req.get('user-agent'),
         status: 'success',
         metadata: {
           transactionReference,
           amount,
-          reason: adminRemark,
+          reason,
         },
       });
       
@@ -1442,14 +1327,10 @@ class AdminController {
   static async debitWallet(req, res, next) {
     try {
       const { userId } = req.params;
-      const { amount, reason, remark, reference } = req.body;
-      const adminRemark = remark || reason;
+      const { amount, reason, reference } = req.body;
       
       if (!amount || amount <= 0) {
         return next(new AppError('Please provide a valid amount', 400));
-      }
-      if (!adminRemark) {
-        return next(new AppError('Remark is required for manual debit', 400));
       }
       
       // Check if user exists
@@ -1478,14 +1359,7 @@ class AdminController {
         userId,
         amount,
         transactionReference,
-        `Manual debit by admin: ${adminRemark}`,
-        {
-          transactionType: 'withdrawal',
-          category: 'transfer',
-          adminAction: 'debit',
-          adminRemark,
-          adminId: req.admin._id,
-        }
+        `Manual debit by admin: ${reason || 'No reason provided'}`
       );
       
       // Log the action
@@ -1500,14 +1374,14 @@ class AdminController {
           old: { balance: result.wallet.balance + amount },
           new: { balance: result.wallet.balance },
         },
-        description: `Wallet debited: ${amount} NGN from user ${user.email} by ${req.admin.email}. Reason: ${adminRemark || 'N/A'}`,
+        description: `Wallet debited: ${amount} NGN from user ${user.email} by ${req.admin.email}. Reason: ${reason || 'N/A'}`,
         ipAddress: req.ip,
         userAgent: req.get('user-agent'),
         status: 'success',
         metadata: {
           transactionReference,
           amount,
-          reason: adminRemark,
+          reason,
         },
       });
       
@@ -1724,17 +1598,6 @@ class AdminController {
             totalTransactions: 0,
             successfulTransactions: 0,
             failedTransactions: 0,
-          },
-          indicators: {
-            successRate:
-              (stats[0]?.totalTransactions || 0) > 0
-                ? Number((((stats[0]?.successfulTransactions || 0) / (stats[0]?.totalTransactions || 1)) * 100).toFixed(2))
-                : 0,
-            color:
-              (stats[0]?.totalTransactions || 0) > 0 &&
-              (((stats[0]?.successfulTransactions || 0) / (stats[0]?.totalTransactions || 1)) * 100) < 40
-                ? 'red'
-                : 'green',
           },
         },
       });
@@ -2143,111 +2006,6 @@ class AdminController {
     }
   }
 
-  static async bulkUpdatePricing(req, res, next) {
-    try {
-      const {
-        network,
-        provider,
-        serviceType,
-        adjustmentType,
-        value,
-        applyTo = 'sellingPrice',
-        roundTo = 2,
-      } = req.body;
-
-      if (!adjustmentType || !['percentage', 'fixed'].includes(adjustmentType)) {
-        return next(new AppError('adjustmentType must be percentage or fixed', 400));
-      }
-
-      if (value === undefined || Number.isNaN(Number(value))) {
-        return next(new AppError('A numeric value is required', 400));
-      }
-
-      const query = {};
-      if (network) query.network = network;
-      if (provider) query.provider = provider;
-      if (serviceType) query.serviceType = serviceType;
-
-      const pricingItems = await ServicePricing.find(query);
-      if (!pricingItems.length) {
-        return next(new AppError('No pricing plans matched your filter', 404));
-      }
-
-      const numericValue = Number(value);
-      const updates = [];
-
-      for (const item of pricingItems) {
-        const original = {
-          sellingPrice: item.sellingPrice,
-          costPrice: item.costPrice,
-        };
-
-        if (applyTo === 'sellingPrice' || applyTo === 'both') {
-          const base = Number(item.sellingPrice || 0);
-          item.sellingPrice = adjustmentType === 'percentage'
-            ? Number((base + (base * numericValue) / 100).toFixed(roundTo))
-            : Number((base + numericValue).toFixed(roundTo));
-        }
-
-        if (applyTo === 'costPrice' || applyTo === 'both') {
-          const base = Number(item.costPrice || 0);
-          item.costPrice = adjustmentType === 'percentage'
-            ? Number((base + (base * numericValue) / 100).toFixed(roundTo))
-            : Number((base + numericValue).toFixed(roundTo));
-        }
-
-        item.profitMargin = Number((item.sellingPrice - item.costPrice).toFixed(roundTo));
-        item.updatedBy = req.admin._id;
-        await item.save();
-
-        updates.push({
-          id: item._id,
-          planName: item.planName,
-          before: original,
-          after: {
-            sellingPrice: item.sellingPrice,
-            costPrice: item.costPrice,
-          },
-        });
-      }
-
-      await AdminLog.log({
-        admin: req.admin._id,
-        adminEmail: req.admin.email,
-        adminRole: req.admin.role,
-        action: 'update',
-        entity: 'pricing',
-        description: `Bulk pricing update on ${pricingItems.length} plans by ${req.admin.email}`,
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
-        status: 'success',
-        metadata: {
-          query,
-          adjustmentType,
-          value: numericValue,
-          applyTo,
-          affected: pricingItems.length,
-        },
-      });
-
-      res.status(200).json({
-        status: 'success',
-        message: `Updated ${pricingItems.length} pricing plans`,
-        data: {
-          affected: pricingItems.length,
-          query,
-          adjustmentType,
-          value: numericValue,
-          applyTo,
-          updates,
-        },
-      });
-    } catch (error) {
-      logger.error('Error bulk updating pricing:', error);
-      next(error);
-    }
-  }
-
   static async deletePricing(req, res, next) {
     try {
       const { id } = req.params;
@@ -2325,18 +2083,13 @@ class AdminController {
       res.status(200).json({
         status: 'success',
         data: {
-          providers: providers.map(provider => ({
-            ...provider,
-            indicatorColor: Number(provider.successRate || 0) < 40 ? 'red' : 'green',
-            isCritical: Number(provider.successRate || 0) < 40,
-          })),
+          providers,
           stats: {
             total: providers.length,
             active: providers.filter(p => p.status === 'active').length,
             inactive: providers.filter(p => p.status === 'inactive').length,
             maintenance: providers.filter(p => p.status === 'maintenance').length,
             degraded: providers.filter(p => p.status === 'degraded').length,
-            lowSuccessRate: providers.filter(p => Number(p.successRate || 0) < 40).length,
           },
         },
       });
@@ -2648,25 +2401,20 @@ class AdminController {
   // Additional Admin Functions
   static async broadcastNotification(req, res, next) {
     try {
-      const { title, message, type, targetUsers, userIds = [] } = req.body;
+      const { title, message, type, targetUsers, sendEmail, sendSMS } = req.body;
       
       if (!title || !message) {
         return next(new AppError('Title and message are required', 400));
       }
       
-      const target = targetUsers || 'all';
+      // Determine target users
       let users;
-      if (target === 'all') {
-        users = await User.find({ isActive: true }).select('email phoneNumber firstName role');
-      } else if (target === 'agents' || target === 'agents_only') {
-        users = await User.find({ role: 'agent', isActive: true }).select('email phoneNumber firstName role');
-      } else if (target === 'individual') {
-        if (!Array.isArray(userIds) || !userIds.length) {
-          return next(new AppError('userIds is required for individual target', 400));
-        }
-        users = await User.find({ _id: { $in: userIds } }).select('email phoneNumber firstName role');
+      if (targetUsers === 'all') {
+        users = await User.find({}).select('email phoneNumber firstName');
+      } else if (targetUsers === 'active') {
+        users = await User.find({ isActive: true }).select('email phoneNumber firstName');
       } else {
-        return next(new AppError('Invalid target users. Use all, agents, or individual', 400));
+        return next(new AppError('Invalid target users', 400));
       }
 
       const notification = {
@@ -2674,27 +2422,9 @@ class AdminController {
         message,
         type: type || 'info',
         targetCount: users.length,
-        targetUsers: target,
         sentAt: new Date(),
         sentBy: req.admin.email,
       };
-
-      const notifications = users.map(user => ({
-        user: user._id,
-        title,
-        message,
-        type: 'broadcast',
-        isBroadcast: true,
-        metadata: {
-          audience: target,
-          adminId: req.admin._id,
-          adminEmail: req.admin.email,
-          originalType: type || 'info',
-        },
-      }));
-      if (notifications.length) {
-        await Notification.insertMany(notifications);
-      }
       
       // Log the action
       await AdminLog.log({
@@ -2716,7 +2446,6 @@ class AdminController {
         data: {
           notification,
           usersCount: users.length,
-          audience: target,
         },
       });
       
@@ -2756,20 +2485,11 @@ class AdminController {
           lockDuration: 2,
           sessionTimeout: 24,
           requireTransactionPin: true,
-          twoFactorEnabled: false,
-          twoFactorMethod: 'email',
         },
         kyc: {
           basicLimit: 50000,
           advancedLimit: 500000,
           verifiedLimit: 10000000,
-        },
-        notification: {
-          apiBalanceThreshold: 1000,
-          apiBalanceAlertsEnabled: true,
-          apiBalanceAlertEmails: [],
-          apiBalanceAlertWhatsApp: [],
-          apiBalanceAlertCooldownMinutes: 30,
         },
       };
       
@@ -2805,7 +2525,6 @@ class AdminController {
         return next(new AppError('Settings data is required', 400));
       }
       
-      // Save each setting to the database
       const updatePromises = [];
       
       for (const [category, categorySettings] of Object.entries(settings)) {
@@ -2860,291 +2579,6 @@ class AdminController {
     }
   }
 
-  static async getTwoFactorSettings(req, res, next) {
-    try {
-      const admin = await User.findById(req.admin._id).lean();
-      if (!admin) return next(new AppError('Admin not found', 404));
-
-      res.status(200).json({
-        status: 'success',
-        data: {
-          twoFactor: {
-            enabled: Boolean(admin?.twoFactor?.enabled),
-            method: admin?.twoFactor?.method || 'email',
-            hasAuthenticator: Boolean(admin?.twoFactor?.authenticatorSecret),
-            lastVerifiedAt: admin?.twoFactor?.lastVerifiedAt || null,
-          },
-        },
-      });
-    } catch (error) {
-      logger.error('Error getting 2FA settings:', error);
-      next(error);
-    }
-  }
-
-  static async setupTwoFactor(req, res, next) {
-    try {
-      const { method = 'email' } = req.body;
-      if (!['email', 'authenticator'].includes(method)) {
-        return next(new AppError('method must be email or authenticator', 400));
-      }
-
-      const admin = await User.findById(req.admin._id);
-      if (!admin) return next(new AppError('Admin not found', 404));
-
-      admin.twoFactor = admin.twoFactor || {};
-      admin.twoFactor.method = method;
-
-      let setupData = { method };
-
-      if (method === 'email') {
-        const otp = String(Math.floor(100000 + Math.random() * 900000));
-        admin.twoFactor.emailOtpHash = crypto.createHash('sha256').update(otp).digest('hex');
-        admin.twoFactor.emailOtpExpires = new Date(Date.now() + 5 * 60 * 1000);
-        await emailService.sendOTPEmail(admin.email, otp);
-        setupData.message = 'Verification code sent to your email';
-      }
-
-      if (method === 'authenticator') {
-        const secret = generateBase32Secret();
-        const issuer = encodeURIComponent('Yareema Data Hub');
-        const label = encodeURIComponent(admin.email);
-        const otpauthUrl = `otpauth://totp/${issuer}:${label}?secret=${secret}&issuer=${issuer}&algorithm=SHA1&digits=6&period=30`;
-        admin.twoFactor.pendingAuthenticatorSecret = secret;
-        setupData = {
-          method,
-          secret,
-          otpauthUrl,
-        };
-      }
-
-      await admin.save();
-
-      res.status(200).json({
-        status: 'success',
-        message: '2FA setup initialized',
-        data: setupData,
-      });
-    } catch (error) {
-      logger.error('Error setting up 2FA:', error);
-      next(error);
-    }
-  }
-
-  static async verifyTwoFactorSetup(req, res, next) {
-    try {
-      const { code } = req.body;
-      if (!code) return next(new AppError('Verification code is required', 400));
-
-      const admin = await User.findById(req.admin._id);
-      if (!admin) return next(new AppError('Admin not found', 404));
-
-      const method = admin?.twoFactor?.method || 'email';
-      let valid = false;
-
-      if (method === 'email') {
-        const hash = crypto.createHash('sha256').update(String(code).trim()).digest('hex');
-        const notExpired =
-          admin.twoFactor?.emailOtpExpires &&
-          new Date(admin.twoFactor.emailOtpExpires).getTime() > Date.now();
-        valid = hash === admin.twoFactor?.emailOtpHash && notExpired;
-      } else {
-        const pendingSecret = admin.twoFactor?.pendingAuthenticatorSecret || admin.twoFactor?.authenticatorSecret;
-        valid = Boolean(pendingSecret && verifyTotp(pendingSecret, code, { window: 1 }));
-        if (valid && admin.twoFactor?.pendingAuthenticatorSecret) {
-          admin.twoFactor.authenticatorSecret = admin.twoFactor.pendingAuthenticatorSecret;
-          admin.twoFactor.pendingAuthenticatorSecret = undefined;
-        }
-      }
-
-      if (!valid) {
-        return next(new AppError('Invalid or expired 2FA code', 400));
-      }
-
-      admin.twoFactor.enabled = true;
-      admin.twoFactor.lastVerifiedAt = new Date();
-      admin.twoFactor.emailOtpHash = undefined;
-      admin.twoFactor.emailOtpExpires = undefined;
-      await admin.save();
-
-      res.status(200).json({
-        status: 'success',
-        message: '2FA enabled successfully',
-        data: {
-          enabled: true,
-          method: admin.twoFactor.method,
-        },
-      });
-    } catch (error) {
-      logger.error('Error verifying 2FA setup:', error);
-      next(error);
-    }
-  }
-
-  static async disableTwoFactor(req, res, next) {
-    try {
-      const { code } = req.body;
-      if (!code) return next(new AppError('Verification code is required', 400));
-
-      const admin = await User.findById(req.admin._id);
-      if (!admin) return next(new AppError('Admin not found', 404));
-      if (!admin?.twoFactor?.enabled) return next(new AppError('2FA is already disabled', 400));
-
-      const method = admin.twoFactor.method || 'email';
-      let valid = false;
-
-      if (method === 'authenticator') {
-        valid = verifyTotp(admin.twoFactor.authenticatorSecret, code, { window: 1 });
-      } else {
-        const hash = crypto.createHash('sha256').update(String(code).trim()).digest('hex');
-        valid = hash === admin.twoFactor?.emailOtpHash &&
-          admin.twoFactor?.emailOtpExpires &&
-          new Date(admin.twoFactor.emailOtpExpires).getTime() > Date.now();
-      }
-
-      if (!valid) {
-        return next(new AppError('Invalid 2FA code', 400));
-      }
-
-      admin.twoFactor.enabled = false;
-      admin.twoFactor.emailOtpHash = undefined;
-      admin.twoFactor.emailOtpExpires = undefined;
-      admin.twoFactor.pendingAuthenticatorSecret = undefined;
-      await admin.save();
-
-      res.status(200).json({
-        status: 'success',
-        message: '2FA disabled successfully',
-      });
-    } catch (error) {
-      logger.error('Error disabling 2FA:', error);
-      next(error);
-    }
-  }
-
-  static async sendDisableTwoFactorCode(req, res, next) {
-    try {
-      const admin = await User.findById(req.admin._id);
-      if (!admin) return next(new AppError('Admin not found', 404));
-
-      const otp = String(Math.floor(100000 + Math.random() * 900000));
-      admin.twoFactor = admin.twoFactor || {};
-      admin.twoFactor.emailOtpHash = crypto.createHash('sha256').update(otp).digest('hex');
-      admin.twoFactor.emailOtpExpires = new Date(Date.now() + 5 * 60 * 1000);
-      await admin.save();
-
-      await emailService.sendOTPEmail(admin.email, otp);
-
-      res.status(200).json({
-        status: 'success',
-        message: 'Verification code sent',
-      });
-    } catch (error) {
-      logger.error('Error sending 2FA email code:', error);
-      next(error);
-    }
-  }
-
-  static async checkApiBalanceAlerts(req, res, next) {
-    try {
-      const result = await ApiBalanceAlertService.checkAndSendAlerts(req.admin.email);
-      res.status(200).json({
-        status: 'success',
-        message: 'API balance check completed',
-        data: result,
-      });
-    } catch (error) {
-      logger.error('Error checking API balance alerts:', error);
-      next(error);
-    }
-  }
-
-  static async sendExportResponse(res, data, filename, format = 'json') {
-    if (format === 'csv') {
-      res.setHeader('Content-Type', 'text/csv');
-      res.setHeader('Content-Disposition', `attachment; filename=${filename}.csv`);
-      return res.send(toCsv(data));
-    }
-
-    if (format === 'pdf') {
-      const previewRows = data.slice(0, 120).map((row, index) => `${index + 1}. ${JSON.stringify(row)}`);
-      const pdfBuffer = buildSimplePdf([`${filename}`, `Generated: ${new Date().toISOString()}`, ...previewRows]);
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename=${filename}.pdf`);
-      return res.send(pdfBuffer);
-    }
-
-    return res.status(200).json({
-      status: 'success',
-      data: {
-        filename,
-        count: data.length,
-        data,
-      },
-    });
-  }
-
-  static async exportTransactions(req, res, next) {
-    try {
-      const {
-        format = 'csv',
-        startDate,
-        endDate,
-        status,
-        provider,
-      } = req.query;
-
-      const query = {
-        ...buildDateRangeFilter(startDate, endDate),
-      };
-      if (status) query.status = status;
-      if (provider) query['provider.name'] = provider;
-
-      const data = await Transaction.find(query)
-        .populate('user', 'firstName lastName email phoneNumber')
-        .sort({ createdAt: -1 })
-        .lean();
-
-      return AdminController.sendExportResponse(
-        res,
-        data,
-        `transactions_${new Date().toISOString().split('T')[0]}`,
-        format
-      );
-    } catch (error) {
-      logger.error('Error exporting transactions:', error);
-      next(error);
-    }
-  }
-
-  static async exportWallets(req, res, next) {
-    try {
-      const { format = 'csv', minBalance, maxBalance, locked } = req.query;
-      const query = {};
-      if (minBalance || maxBalance) {
-        query.balance = {};
-        if (minBalance) query.balance.$gte = Number(minBalance);
-        if (maxBalance) query.balance.$lte = Number(maxBalance);
-      }
-      if (locked !== undefined) query.locked = String(locked) === 'true';
-
-      const data = await Wallet.find(query)
-        .populate('user', 'firstName lastName email phoneNumber role')
-        .sort({ balance: -1 })
-        .lean();
-
-      return AdminController.sendExportResponse(
-        res,
-        data,
-        `wallets_${new Date().toISOString().split('T')[0]}`,
-        format
-      );
-    } catch (error) {
-      logger.error('Error exporting wallets:', error);
-      next(error);
-    }
-  }
-
   static async exportData(req, res, next) {
     try {
       const { type, format = 'json', startDate, endDate } = req.body;
@@ -3158,7 +2592,12 @@ class AdminController {
       
       switch (type) {
         case 'transactions':
-          const query = buildDateRangeFilter(startDate, endDate);
+          const query = {};
+          if (startDate || endDate) {
+            query.createdAt = {};
+            if (startDate) query.createdAt.$gte = new Date(startDate);
+            if (endDate) query.createdAt.$lte = new Date(endDate);
+          }
           
           data = await Transaction.find(query)
             .populate('user', 'firstName lastName email phoneNumber')
@@ -3206,7 +2645,37 @@ class AdminController {
         },
       });
       
-      return AdminController.sendExportResponse(res, data, filename, format);
+      if (format === 'csv') {
+        // Convert to CSV
+        // In a real implementation, you would use a CSV library
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', `attachment; filename=${filename}.csv`);
+        
+        // Simple CSV conversion (for demonstration)
+        if (data.length > 0) {
+          const headers = Object.keys(data[0]).join(',');
+          const rows = data.map(row => 
+            Object.values(row).map(value => 
+              typeof value === 'object' ? JSON.stringify(value) : value
+            ).join(',')
+          );
+          
+          return res.send([headers, ...rows].join('\n'));
+        }
+        
+        return res.send('');
+      } else {
+        // Return JSON
+        res.status(200).json({
+          status: 'success',
+          data: {
+            type,
+            format,
+            count: data.length,
+            data,
+          },
+        });
+      }
       
       logger.info(`Data exported: ${type}, Count: ${data.length}, Admin: ${req.admin.email}`);
       
@@ -3216,6 +2685,25 @@ class AdminController {
     }
   }
 }
+
+const createQuickExportHandler = (type) => async (req, res, next) => {
+  const originalBody = req.body || {};
+  req.body = {
+    ...originalBody,
+    type,
+    format: originalBody.format || req.query?.format || 'json',
+    startDate: originalBody.startDate || req.query?.startDate,
+    endDate: originalBody.endDate || req.query?.endDate,
+  };
+  return AdminController.exportData(req, res, next);
+};
+
+const notImplementedHandler = (featureName) => async (req, res) => {
+  return res.status(501).json({
+    status: 'error',
+    message: `${featureName} is not implemented in this build yet`,
+  });
+};
 
 // Export controller methods
 module.exports = {
@@ -3260,13 +2748,14 @@ module.exports = {
   // Service Pricing Management
   getPricing: AdminController.getPricing,
   createPricing: AdminController.createPricing,
+  bulkUpdatePricing: notImplementedHandler('Bulk pricing update'),
   updatePricing: AdminController.updatePricing,
-  bulkUpdatePricing: AdminController.bulkUpdatePricing,
   deletePricing: AdminController.deletePricing,
   
   // Provider Management
   getProviders: AdminController.getProviders,
   updateProviderStatus: AdminController.updateProviderStatus,
+  checkApiBalanceAlerts: notImplementedHandler('API balance alert check'),
   
   // Admin Logs
   getAdminLogs: AdminController.getAdminLogs,
@@ -3275,13 +2764,12 @@ module.exports = {
   broadcastNotification: AdminController.broadcastNotification,
   getSystemSettings: AdminController.getSystemSettings,
   updateSystemSettings: AdminController.updateSystemSettings,
-  getTwoFactorSettings: AdminController.getTwoFactorSettings,
-  setupTwoFactor: AdminController.setupTwoFactor,
-  verifyTwoFactorSetup: AdminController.verifyTwoFactorSetup,
-  disableTwoFactor: AdminController.disableTwoFactor,
-  sendDisableTwoFactorCode: AdminController.sendDisableTwoFactorCode,
-  checkApiBalanceAlerts: AdminController.checkApiBalanceAlerts,
-  exportTransactions: AdminController.exportTransactions,
-  exportWallets: AdminController.exportWallets,
   exportData: AdminController.exportData,
+  exportWallets: createQuickExportHandler('wallets'),
+  exportTransactions: createQuickExportHandler('transactions'),
+  getTwoFactorSettings: notImplementedHandler('Admin 2FA settings'),
+  setupTwoFactor: notImplementedHandler('Admin 2FA setup'),
+  verifyTwoFactorSetup: notImplementedHandler('Admin 2FA verification'),
+  sendDisableTwoFactorCode: notImplementedHandler('Admin 2FA disable code'),
+  disableTwoFactor: notImplementedHandler('Admin 2FA disable'),
 };

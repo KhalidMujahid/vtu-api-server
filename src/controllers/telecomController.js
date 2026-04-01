@@ -10,6 +10,7 @@ const NelloBytesService = require('../services/nelloBytesService');
 const VtuProviderService = require('../services/vtuProviderService');
 const AirtimeNigeriaService = require('../services/airtimeNigeriaService');
 const SmePlugService = require('../services/smePlugService');
+const PluginngService = require('../services/pluginngService');
 const ProviderPurchaseGuardService = require('../services/providerPurchaseGuardService');
 const vtuConfig = require('../config/vtuProviders');
 const crypto = require('crypto');
@@ -25,6 +26,7 @@ const SOURCE_TO_PROVIDER = {
   nellobytes: 'clubkonnect',
   airtimenigeria: 'airtimenigeria',
   smeplug: 'smeplug',
+  pluginng: 'pluginng',
 };
 
 const DATA_NETWORKS = ['mtn', 'glo', 'airtel', '9mobile'];
@@ -213,6 +215,15 @@ function isProviderBalanceError(error) {
   return message.includes('insufficient') && message.includes('balance');
 }
 
+function shouldBypassProviderBalanceCheck(providerConfig, error) {
+  if (providerConfig?.source !== 'pluginng') {
+    return false;
+  }
+
+  const message = String(error?.message || '').toLowerCase();
+  return message.includes('unable to verify') || message.includes('not exposed');
+}
+
 function getProviderAttemptOrder(network, preferredProvider) {
   const ordered = [];
 
@@ -237,6 +248,21 @@ function normalizePhoneForSmePlug(phoneNumber) {
     return `234${phoneNumber}`;
   }
   return phoneNumber;
+}
+
+async function resolvePluginngDataSubcategory({ attemptPricing = {}, network, planIdentifier }) {
+  const fromPricing = (
+    attemptPricing?.providerMeta?.subcategoryId ||
+    attemptPricing?.variationCode ||
+    attemptPricing?.providerMeta?.subcategory_id ||
+    null
+  );
+
+  if (fromPricing) {
+    return String(fromPricing);
+  }
+
+  return PluginngService.resolveDataSubcategoryId(network, attemptPricing?.providerPlanId || attemptPricing?.planCode || attemptPricing?.planName || planIdentifier);
 }
 
 async function refundTransactionToWallet(transaction, reason = 'Transaction refund', amountOverride = null) {
@@ -439,7 +465,9 @@ exports.purchaseData = async (req, res, next) => {
     await wallet.debit(sellingPrice, `Data purchase: ${network} ${planIdentifier}`);
 
     const reference = generateReference('DATA');
-    const callbackUrl = `${SERVER_URL}/api/v1/telecom/webhook/nellobytes`;
+    const nelloCallbackUrl = `${SERVER_URL}/api/v1/telecom/webhook/nellobytes`;
+    const airtimeNigeriaCallbackUrl = `${SERVER_URL}/api/v1/telecom/webhook/airtimenigeria`;
+    const smePlugCallbackUrl = `${SERVER_URL}/api/v1/telecom/webhook/smeplug`;
 
     const transaction = await Transaction.create({
       reference,
@@ -488,11 +516,18 @@ exports.purchaseData = async (req, res, next) => {
         }
 
         try {
-          await ProviderPurchaseGuardService.assertSufficientProviderBalance(
-            providerId,
-            Number(attemptPricing?.sellingPrice || sellingPrice),
-            { serviceType: 'data_recharge', network: normalizedNetwork, phoneNumber }
-          );
+          try {
+            await ProviderPurchaseGuardService.assertSufficientProviderBalance(
+              providerId,
+              Number(attemptPricing?.sellingPrice || sellingPrice),
+              { serviceType: 'data_recharge', network: normalizedNetwork, phoneNumber }
+            );
+          } catch (balanceCheckError) {
+            if (!shouldBypassProviderBalanceCheck(providerConfig, balanceCheckError)) {
+              throw balanceCheckError;
+            }
+            logger.warn(`Skipping provider balance guard for ${providerId}: ${balanceCheckError.message}`);
+          }
 
           if (providerConfig.source === 'airtimenigeria') {
             apiResponse = await AirtimeNigeriaService.purchaseData({
@@ -500,7 +535,7 @@ exports.purchaseData = async (req, res, next) => {
               variationCode: attemptPricing.variationCode,
               packageCode: attemptPricing.planCode || attemptPricing.providerPlanId || planIdentifier,
               planId: attemptPricing.providerPlanId,
-              callbackUrl,
+              callbackUrl: airtimeNigeriaCallbackUrl,
               customerReference: reference,
             });
           } else if (providerConfig.source === 'smeplug') {
@@ -509,14 +544,30 @@ exports.purchaseData = async (req, res, next) => {
               network: normalizedNetwork,
               planId: attemptPricing.providerPlanId || attemptPricing.planCode || planIdentifier,
               customerReference: reference,
-              callbackUrl: `${SERVER_URL}/api/v1/telecom/webhook/smeplug`,
+              callbackUrl: smePlugCallbackUrl,
+            });
+          } else if (providerConfig.source === 'pluginng') {
+            const subcategoryId = await resolvePluginngDataSubcategory({
+              attemptPricing,
+              network: normalizedNetwork,
+              planIdentifier,
+            });
+            if (!subcategoryId) {
+              throw new AppError('Pluginng data plan is missing subcategory configuration', 400);
+            }
+
+            apiResponse = await PluginngService.purchaseData({
+              planId: attemptPricing.providerPlanId || attemptPricing.planCode || attemptPricing.planName || planIdentifier,
+              phoneNumber,
+              subcategoryId,
+              customReference: reference,
             });
           } else {
             apiResponse = await NelloBytesService.purchaseData({
               network: normalizedNetwork,
               dataPlan: attemptPricing.providerPlanId || attemptPricing.planCode || planIdentifier,
               mobileNumber: phoneNumber,
-              callBackURL: callbackUrl,
+              callBackURL: nelloCallbackUrl,
             });
           }
 
@@ -535,7 +586,13 @@ exports.purchaseData = async (req, res, next) => {
         throw lastProviderError || new AppError('Service Temporarily Unavailable', 503);
       }
 
-      if (apiResponse.success || apiResponse.status === 'success' || apiResponse.statusCode === '100') {
+      if (
+        apiResponse.success
+        || apiResponse.status === 'success'
+        || apiResponse.status === 'pending'
+        || apiResponse.statusCode === '100'
+        || apiResponse.statusCode === '0'
+      ) {
         transaction.status = 'pending';
         transaction.service.provider = successfulProvider;
         transaction.service.plan = activePricing?.providerPlanId || activePricing?.variationCode || activePricing?.planCode || planIdentifier;
@@ -643,11 +700,18 @@ exports.purchaseAirtime = async (req, res, next) => {
       return next(new AppError("Insufficient wallet balance", 400));
     }
 
-    await ProviderPurchaseGuardService.assertSufficientProviderBalance(
-      activeProvider,
-      parsedAmount,
-      { serviceType: 'airtime_recharge', network: normalizedNetwork, phoneNumber }
-    );
+    try {
+      await ProviderPurchaseGuardService.assertSufficientProviderBalance(
+        activeProvider,
+        parsedAmount,
+        { serviceType: 'airtime_recharge', network: normalizedNetwork, phoneNumber }
+      );
+    } catch (balanceCheckError) {
+      if (!shouldBypassProviderBalanceCheck(providerConfig, balanceCheckError)) {
+        throw balanceCheckError;
+      }
+      logger.warn(`Skipping provider balance guard for ${activeProvider}: ${balanceCheckError.message}`);
+    }
 
     const networkCode = networkMap[normalizedNetwork.toUpperCase()];
     if (!networkCode) {
@@ -719,6 +783,25 @@ exports.purchaseAirtime = async (req, res, next) => {
       responseData = {
         status: apiResponse.success ? "ORDER_RECEIVED" : "FAILED",
         orderid: apiResponse.reference,
+        raw: apiResponse,
+      };
+    } else if (providerConfig?.source === 'pluginng') {
+      const subcategoryId = await PluginngService.getAirtimeSubcategoryId(normalizedNetwork);
+      if (!subcategoryId) {
+        throw new AppError(`Pluginng airtime subcategory was not found for ${normalizedNetwork}`, 400);
+      }
+
+      apiResponse = await PluginngService.purchaseAirtime({
+        amount: parsedAmount,
+        phoneNumber,
+        subcategoryId,
+        customReference: requestId,
+      });
+
+      const providerStatus = String(apiResponse.status || '').toLowerCase();
+      responseData = {
+        status: ['success', 'pending'].includes(providerStatus) ? "ORDER_RECEIVED" : "FAILED",
+        orderid: apiResponse.orderId || apiResponse.reference || requestId,
         raw: apiResponse,
       };
       
@@ -1653,6 +1736,90 @@ exports.airtimeNigeriaWebhook = async (req, res) => {
   } catch (error) {
     logger.error('AirtimeNigeria webhook error:', error);
     res.status(200).send('OK'); // Always return OK to prevent retries
+  }
+};
+
+/**
+ * Pluginng Webhook Handler
+ */
+exports.pluginngWebhook = async (req, res) => {
+  try {
+    const payload = Object.keys(req.body || {}).length ? req.body : req.query;
+    logger.info('Pluginng webhook received:', payload);
+
+    const result = PluginngService.verifyCallback(payload);
+    if (!result) {
+      return res.status(400).send('Invalid payload');
+    }
+
+    const lookupValues = [result.reference, result.orderId].filter(Boolean);
+    const transaction = await Transaction.findOne({
+      $or: [
+        { reference: { $in: lookupValues } },
+        { 'service.orderId': { $in: lookupValues } },
+      ],
+    });
+
+    if (!transaction) {
+      logger.warn(`Pluginng transaction not found for reference: ${lookupValues.join(', ')}`);
+      return res.status(200).send('OK');
+    }
+
+    if (transaction.status === 'successful' || transaction.status === 'failed') {
+      return res.status(200).send('Already processed');
+    }
+
+    transaction.providerResponse = payload;
+
+    if (PluginngService.isSuccessfulStatus(result.statusCode)) {
+      transaction.status = 'successful';
+      transaction.statusHistory.push({
+        status: 'successful',
+        note: result.message || 'Delivered successfully',
+        timestamp: new Date(),
+      });
+
+      await transaction.save();
+      await NotificationService.create({
+        user: transaction.user,
+        title: 'Purchase Successful',
+        message: `Your ${transaction.type} of NGN ${transaction.amount} was successful.`,
+        type: 'purchase_success',
+        reference: transaction.reference,
+      });
+    } else if (PluginngService.isPendingStatus(result.statusCode)) {
+      transaction.status = 'pending';
+      transaction.statusHistory.push({
+        status: 'pending',
+        note: result.message || 'Provider is still processing the transaction',
+        timestamp: new Date(),
+      });
+      await transaction.save();
+    } else {
+      transaction.status = 'failed';
+      transaction.statusHistory.push({
+        status: 'failed',
+        note: result.message || 'Provider reported failure',
+        timestamp: new Date(),
+      });
+      await transaction.save();
+
+      await refundTransactionToWallet(transaction, 'Purchase refund due to provider failure');
+      await transaction.save();
+
+      await NotificationService.create({
+        user: transaction.user,
+        title: 'Purchase Failed',
+        message: `Your ${transaction.type} of NGN ${transaction.amount} failed. Amount has been refunded.`,
+        type: 'purchase_failed',
+        reference: transaction.reference,
+      });
+    }
+
+    return res.status(200).send('OK');
+  } catch (error) {
+    logger.error('Pluginng webhook error:', error);
+    return res.status(200).send('OK');
   }
 };
 

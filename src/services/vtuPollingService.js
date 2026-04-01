@@ -2,6 +2,7 @@ const Transaction = require('../models/Transaction');
 const vtuConfig = require('../config/vtuProviders');
 const NelloBytesService = require('./nelloBytesService');
 const SmePlugService = require('./smePlugService');
+const PluginngService = require('./pluginngService');
 const VtuTransactionLifecycleService = require('./vtuTransactionLifecycleService');
 const logger = require('../utils/logger');
 
@@ -128,6 +129,8 @@ class VtuPollingService {
           note: 'Awaiting AirtimeNigeria callback confirmation',
           raw: null,
         };
+      case 'pluginng':
+        return this.fetchPluginngStatus(transaction);
       default:
         return {
           state: 'pending',
@@ -225,6 +228,39 @@ class VtuPollingService {
       providerReference: providerTransaction.reference || orderId,
       note: providerTransaction.response || providerTransaction.message || 'Provider is still processing the order',
       raw: providerTransaction,
+    };
+  }
+
+  static async fetchPluginngStatus(transaction) {
+    const reference = transaction.reference || transaction.service?.orderId;
+    const result = await PluginngService.queryTransaction(reference);
+
+    if (result.success) {
+      return {
+        state: 'successful',
+        provider: 'pluginng',
+        providerReference: result.orderId || reference,
+        note: result.note || 'Provider confirmed successful delivery',
+        raw: result.raw,
+      };
+    }
+
+    if (result.pending) {
+      return {
+        state: 'pending',
+        provider: 'pluginng',
+        providerReference: result.orderId || reference,
+        note: result.note || 'Provider is still processing the order',
+        raw: result.raw,
+      };
+    }
+
+    return {
+      state: 'failed',
+      provider: 'pluginng',
+      providerReference: result.orderId || reference,
+      note: result.note || 'Provider reported a failed transaction',
+      raw: result.raw,
     };
   }
 }
