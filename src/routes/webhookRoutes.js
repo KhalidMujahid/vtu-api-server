@@ -1,8 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const webhookController = require('../controllers/webhookController');
+const telecomController = require('../controllers/telecomController');
 
 router.post('/smeplug', webhookController.smePlugWebhook);
+router.get('/smeplug', webhookController.smePlugWebhook);
+router.post('/pluginng', telecomController.pluginngWebhook);
+router.get('/pluginng', telecomController.pluginngWebhook);
 
 /**
  * @swagger

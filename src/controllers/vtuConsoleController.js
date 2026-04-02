@@ -8,19 +8,43 @@ const ProviderStatus = require('../models/ProviderStatus');
 const logger = require('../utils/logger');
 const vtuConfig = require('../config/vtuProviders');
 
+const SERVICE_TYPE_TO_CONSOLE = {
+  data_recharge: 'data',
+  sme_data: 'data',
+  airtime_recharge: 'airtime',
+  airtime_swap: 'airtime2cash',
+  recharge_pin: 'airtimepin',
+  electricity: 'electricity',
+  cable_tv: 'cable',
+  education_pin: 'education',
+};
+
+function toConsoleServiceName(serviceType = '') {
+  return SERVICE_TYPE_TO_CONSOLE[String(serviceType).trim().toLowerCase()] || String(serviceType).trim().toLowerCase();
+}
+
+function toConsoleServiceList(serviceTypes = []) {
+  return [...new Set((serviceTypes || []).map(toConsoleServiceName).filter(Boolean))];
+}
+
 /**
  * Get all VTU providers with their status
  */
 exports.getAllProviders = async (req, res, next) => {
   try {
     const providers = await VtuProviderService.getAllProvidersWithStatus();
+    const providersWithConsoleServices = providers.map((provider) => ({
+      ...provider,
+      rawSupportedServices: provider.supportedServices || [],
+      supportedServices: toConsoleServiceList(provider.supportedServices),
+    }));
     
     res.status(200).json({
       status: 'success',
-      results: providers.length,
+      results: providersWithConsoleServices.length,
       data: {
-        providers,
-        primaryProvider: providers.find(p => p.isDefault)?.providerId || 'clubkonnect',
+        providers: providersWithConsoleServices,
+        primaryProvider: providersWithConsoleServices.find(p => p.isDefault)?.providerId || 'clubkonnect',
       }
     });
   } catch (error) {
@@ -45,7 +69,11 @@ exports.getProvider = async (req, res, next) => {
     
     res.status(200).json({
       status: 'success',
-      data: provider
+      data: {
+        ...provider,
+        rawSupportedServices: provider.supportedServices || [],
+        supportedServices: toConsoleServiceList(provider.supportedServices),
+      }
     });
   } catch (error) {
     next(error);
@@ -189,7 +217,8 @@ exports.getProviderConfig = async (req, res, next) => {
         description: p.description,
         color: p.color,
         icon: p.icon,
-        supportedServices: p.supportedServices,
+        rawSupportedServices: p.supportedServices,
+        supportedServices: toConsoleServiceList(p.supportedServices),
         supportedNetworks: p.supportedNetworks,
         features: p.features,
         rateLimit: p.rateLimit,
@@ -268,46 +297,78 @@ exports.saveServiceConfig = async (req, res, next) => {
  */
 exports.getServiceConfig = async (req, res, next) => {
   try {
+    const requestedProviderId = String(req.query?.providerId || '').trim().toLowerCase() || null;
+
     // Get current service routing (from memory, but syncs with DB)
     const serviceRouting = vtuConfig.getServiceRouting();
     
     // Get available providers for reference
-    const providers = VtuProviderService.getAllProviders().map(p => ({
+    let providers = VtuProviderService.getAllProviders().map(p => ({
       id: p.id,
       name: p.name,
       displayName: p.displayName,
-      supportedServices: p.supportedServices,
+      rawSupportedServices: p.supportedServices,
+      supportedServices: toConsoleServiceList(p.supportedServices),
     }));
+
+    if (requestedProviderId) {
+      providers = providers.filter((provider) => provider.id === requestedProviderId);
+
+      if (!providers.length) {
+        return res.status(404).json({
+          status: 'error',
+          message: `Provider '${requestedProviderId}' not found`,
+        });
+      }
+    }
     
     // Map service names to readable labels
     const serviceLabels = {
       data: 'Data Recharge',
       airtime: 'Airtime Recharge',
       airtimepin: 'Airtime PIN',
-      education: 'Education PIN',
+      education: 'Exam PIN',
       electricity: 'Electricity Bill Payment',
       cable: 'Cable TV Subscription',
       airtime2cash: 'Airtime to Cash',
     };
     
+    const requestedProviderServices = requestedProviderId
+      ? (providers[0]?.supportedServices || [])
+      : null;
+
+    const filteredServiceRouting = requestedProviderId
+      ? Object.fromEntries(
+          requestedProviderServices.map((serviceKey) => [serviceKey, serviceRouting[serviceKey] || null])
+        )
+      : serviceRouting;
+
+    const filteredServiceLabels = requestedProviderId
+      ? Object.fromEntries(
+          requestedProviderServices.map((serviceKey) => [serviceKey, serviceLabels[serviceKey] || serviceKey])
+        )
+      : serviceLabels;
+
     // Build detailed response
     const routingDetails = {};
-    for (const [service, providerId] of Object.entries(serviceRouting)) {
-      const provider = providers.find(p => p.id === providerId);
+    for (const [service, providerId] of Object.entries(filteredServiceRouting)) {
+      const provider = VtuProviderService.getAllProviders().find(p => p.id === providerId);
       routingDetails[service] = {
         providerId,
         providerName: provider?.displayName || providerId,
         label: serviceLabels[service] || service,
+        supportedBySelectedProvider: requestedProviderId ? requestedProviderServices.includes(service) : null,
       };
     }
     
     res.status(200).json({
       status: 'success',
       data: {
-        serviceRouting,
+        serviceRouting: filteredServiceRouting,
         routingDetails,
         availableProviders: providers,
-        serviceLabels,
+        serviceLabels: filteredServiceLabels,
+        providerServices: requestedProviderServices,
         defaults: {
           failoverEnabled: vtuConfig.defaults?.failoverEnabled || true,
           failoverDelay: vtuConfig.defaults?.failoverDelay || 5000,

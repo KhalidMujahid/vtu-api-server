@@ -12,7 +12,7 @@ module.exports = {
       apiSecret: process.env.NELLO_API_KEY || '',
       timeout: 45000,
       retryCount: 3,
-      supportedServices: ['data_recharge', 'airtime_recharge', 'sme_data', 'cable_tv'],
+      supportedServices: ['data_recharge', 'airtime_recharge', 'sme_data', 'cable_tv', 'electricity', 'recharge_pin', 'education_pin'],
       supportedNetworks: ['mtn', 'glo', 'airtel', '9mobile'],
       status: 'active',
       priority: 1,
@@ -22,7 +22,7 @@ module.exports = {
         dataBundle: true,
         airtime: true,
         cableTv: true,
-        electricity: false,
+        electricity: true,
         smeData: true,
       },
       rateLimit: {
@@ -105,7 +105,7 @@ module.exports = {
       apiSecret: process.env.PLUGINNG_PASSWORD || '',
       timeout: 45000,
       retryCount: 2,
-      supportedServices: ['data_recharge', 'airtime_recharge', 'sme_data'],
+      supportedServices: ['data_recharge', 'airtime_recharge', 'sme_data', 'electricity', 'cable_tv', 'education_pin'],
       supportedNetworks: ['mtn', 'glo', 'airtel', '9mobile'],
       status: 'active',
       priority: 4,
@@ -114,8 +114,8 @@ module.exports = {
       features: {
         dataBundle: true,
         airtime: true,
-        cableTv: false,
-        electricity: false,
+        cableTv: true,
+        electricity: true,
         smeData: true,
       },
       rateLimit: {
@@ -164,11 +164,11 @@ module.exports = {
 
   billPaymentServices: {
     electricity: {
-      providers: ['clubkonnect', 'airtimenigeria', 'smeplug'],
+      providers: ['clubkonnect', 'airtimenigeria', 'smeplug', 'pluginng'],
       defaultProvider: 'clubkonnect',
     },
     cable_tv: {
-      providers: ['clubkonnect', 'airtimenigeria', 'smeplug'],
+      providers: ['clubkonnect', 'airtimenigeria', 'smeplug', 'pluginng'],
       defaultProvider: 'clubkonnect',
     },
   },

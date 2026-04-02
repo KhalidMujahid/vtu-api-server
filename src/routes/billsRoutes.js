@@ -95,6 +95,8 @@ router.post('/electricity/verify', billsController.verifyElectricityCustomer);
  *         description: Electricity purchased
  */
 router.post('/electricity/purchase', requireTransactionPin, billsController.purchaseElectricity);
+router.post('/electricity/query', billsController.queryElectricityTransaction);
+router.post('/electricity/cancel', billsController.cancelElectricityTransaction);
 
 /**
  * @swagger
@@ -140,6 +142,8 @@ router.get('/cable/plans', billsController.getCablePlans);
  *         description: Cable TV purchased
  */
 router.post('/cable/purchase', requireTransactionPin, billsController.purchaseCableTV);
+router.post('/cable/query', billsController.queryCableTransaction);
+router.post('/cable/cancel', billsController.cancelCableTransaction);
 
 /**
  * @swagger
@@ -168,5 +172,8 @@ router.post('/cable/purchase', requireTransactionPin, billsController.purchaseCa
  *         description: Education PIN purchased
  */
 router.post('/education/purchase', requireTransactionPin, billsController.purchaseEducationPin);
+router.post('/education/verify', billsController.verifyEducationProfile);
+router.post('/education/query', billsController.queryEducationTransaction);
+router.post('/education/cancel', billsController.cancelEducationTransaction);
 
 module.exports = router;

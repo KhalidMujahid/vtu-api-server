@@ -382,30 +382,80 @@ class AirtimeNigeriaService {
   /**
    * Verify webhook/callback payload
    */
+  static extractCallbackItems(payload) {
+    if (Array.isArray(payload)) {
+      return payload;
+    }
+
+    if (!payload || typeof payload !== 'object') {
+      return [];
+    }
+
+    if (Array.isArray(payload.data)) return payload.data;
+    if (Array.isArray(payload.transactions)) return payload.transactions;
+    if (Array.isArray(payload.results)) return payload.results;
+    if (payload.data && typeof payload.data === 'object') return [payload.data];
+    if (payload.transaction && typeof payload.transaction === 'object') return [payload.transaction];
+
+    return [payload];
+  }
+
+  static normalizeDeliveryStatus(status) {
+    return String(status || '')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, '_');
+  }
+
+  static isSuccessfulDeliveryStatus(status) {
+    const normalized = this.normalizeDeliveryStatus(status);
+    return ['success', 'successful', 'delivered', 'completed', 'done', 'ok', 'sent'].includes(normalized);
+  }
+
+  static isFailedDeliveryStatus(status) {
+    const normalized = this.normalizeDeliveryStatus(status);
+    return ['failed', 'failure', 'rejected', 'cancelled', 'canceled', 'undelivered', 'error', 'expired'].includes(normalized);
+  }
+
+  static isPendingDeliveryStatus(status) {
+    const normalized = this.normalizeDeliveryStatus(status);
+    return ['pending', 'processing', 'queued', 'accepted', 'in_progress', 'order_received', 'received'].includes(normalized);
+  }
+
+  static verifyCallbackBatch(payload) {
+    const transactions = this.extractCallbackItems(payload);
+    if (!transactions.length) return [];
+
+    return transactions.map((transaction) => ({
+      reference:
+        transaction.reference ||
+        transaction.id ||
+        transaction.order_id ||
+        transaction.orderId ||
+        null,
+      customerReference:
+        transaction.customer_reference ||
+        transaction.customerReference ||
+        transaction.customer_ref ||
+        null,
+      recipient: transaction.recipient || transaction.phone || transaction.msisdn || null,
+      status:
+        transaction.delivery_status ||
+        transaction.deliveryStatus ||
+        transaction.status ||
+        null,
+      message:
+        transaction.gateway_response ||
+        transaction.gatewayResponse ||
+        transaction.message ||
+        transaction.response_message ||
+        null,
+    }));
+  }
+
   static verifyCallback(payload) {
-    if (Array.isArray(payload) && payload.length > 0) {
-      const transaction = payload[0];
-      return {
-        reference: transaction.reference,
-        customerReference: transaction.customer_reference,
-        recipient: transaction.recipient,
-        status: transaction.delivery_status,
-        message: transaction.gateway_response,
-      };
-    }
-
-    if (payload && typeof payload === 'object') {
-      const transaction = payload.data || payload.transaction || payload;
-      return {
-        reference: transaction.reference || transaction.id || transaction.order_id || null,
-        customerReference: transaction.customer_reference || transaction.customerReference || null,
-        recipient: transaction.recipient || transaction.phone || null,
-        status: transaction.delivery_status || transaction.status || null,
-        message: transaction.gateway_response || transaction.message || null,
-      };
-    }
-
-    return null;
+    const [firstResult] = this.verifyCallbackBatch(payload);
+    return firstResult || null;
   }
 }
 

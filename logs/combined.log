@@ -590,3 +590,11 @@
 {"level":"info","message":"API balance alert worker started (every 900s)","service":"yareema-data-hub","timestamp":"2026-04-02 03:13:27"}
 {"ip":"::1","level":"info","message":"GET /api/v1/telecom/data/plans?network=airtel","service":"yareema-data-hub","timestamp":"2026-04-02 03:13:34","userAgent":"PostmanRuntime/7.53.0"}
 {"ip":"::1","level":"info","message":"GET /api/v1/telecom/data/plans?network=mtn&dataType=sme","service":"yareema-data-hub","timestamp":"2026-04-02 03:14:20","userAgent":"PostmanRuntime/7.53.0"}
+{"level":"info","message":"VTU Providers initialized","service":"yareema-data-hub","timestamp":"2026-04-02 15:30:07"}
+{"level":"info","message":"API balance alert worker started (every 900s)","service":"yareema-data-hub","timestamp":"2026-04-02 15:30:07"}
+{"level":"info","message":"VTU Providers initialized","service":"yareema-data-hub","timestamp":"2026-04-02 17:09:56"}
+{"level":"info","message":"API balance alert worker started (every 900s)","service":"yareema-data-hub","timestamp":"2026-04-02 17:09:56"}
+{"level":"info","message":"VTU Providers initialized","service":"yareema-data-hub","timestamp":"2026-04-02 17:14:45"}
+{"level":"info","message":"API balance alert worker started (every 900s)","service":"yareema-data-hub","timestamp":"2026-04-02 17:14:46"}
+{"level":"info","message":"VTU Providers initialized","service":"yareema-data-hub","timestamp":"2026-04-02 17:23:45"}
+{"level":"info","message":"API balance alert worker started (every 900s)","service":"yareema-data-hub","timestamp":"2026-04-02 17:23:45"}

@@ -104,84 +104,98 @@ exports.smePlugWebhook = async (req, res) => {
     const payload = Object.keys(req.body || {}).length ? req.body : req.query;
     logger.info('SMEPlug webhook received:', payload);
 
-    const result = SmePlugService.verifyCallback(payload);
-
-    if (!result) {
+    const callbackResults = SmePlugService.verifyCallbackBatch(payload);
+    if (!callbackResults.length) {
       return res.status(400).send('Invalid payload');
     }
 
-    logger.info('Parsed webhook result:', result);
+    logger.info('Parsed webhook result:', callbackResults);
 
-    const lookupValues = [result.reference, result.customerReference]
-      .filter(Boolean);
+    for (const result of callbackResults) {
+      const lookupValues = [result.reference, result.customerReference]
+        .filter(Boolean)
+        .map((value) => String(value));
 
-    const transaction = await Transaction.findOne({
-      $or: [
-        { 'service.orderId': { $in: lookupValues } },
-        { reference: { $in: lookupValues } },
-      ],
-    });
-
-    if (!transaction) {
-      logger.warn(`Transaction not found for reference: ${result.reference}`);
-      return res.status(200).send('OK');
-    }
-
-    if (['successful', 'failed'].includes(transaction.status)) {
-      return res.status(200).send('Already processed');
-    }
-
-    const status = result.status?.toLowerCase();
-
-    const successStatuses = ['success', 'successful'];
-
-    if (successStatuses.includes(status)) {
-      transaction.status = 'successful';
-      transaction.providerResponse = payload;
-      transaction.statusHistory.push({
-        status: 'successful',
-        note: result.message || 'Delivered successfully',
-        timestamp: new Date(),
-      });
-
-      await transaction.save();
-
-      await NotificationService.create({
-        user: transaction.user,
-        title: 'Purchase Successful',
-        message: `Your ${transaction.type} of ₦${transaction.amount} was successful.`,
-        type: 'purchase_success',
-        reference: transaction.reference,
-      });
-
-      logger.info(`Transaction successful: ${transaction.reference}`);
-    } else {
-
-      if (transaction.status === 'failed') {
-        return res.status(200).send('Already refunded');
+      if (!lookupValues.length) {
+        logger.warn('SMEPlug webhook item skipped: missing reference and customer_reference');
+        continue;
       }
 
-      transaction.status = 'failed';
-      transaction.providerResponse = payload;
-      transaction.statusHistory.push({
-        status: 'failed',
-        note: result.message || 'Delivery failed',
-        timestamp: new Date(),
+      const transaction = await Transaction.findOne({
+        $or: [
+          { 'service.orderId': { $in: lookupValues } },
+          { reference: { $in: lookupValues } },
+        ],
       });
 
-      await transaction.save();
-      await refundTransactionToWallet(transaction, 'Purchase refund due to failure');
-      await transaction.save();
+      if (!transaction) {
+        logger.warn(`SMEPlug transaction not found for reference(s): ${lookupValues.join(', ')}`);
+        continue;
+      }
 
-      await NotificationService.create({
-        user: transaction.user,
-        title: 'Purchase Failed',
-        message: `Your ${transaction.type} of ₦${transaction.amount} failed. Amount has been refunded.`,
-        type: 'purchase_failed',
-        reference: transaction.reference,
-      });
+      if (['successful', 'failed'].includes(transaction.status)) {
+        continue;
+      }
 
-      logger.warn(`Transaction failed: ${transaction.reference}`);
+      transaction.provider = {
+        ...(transaction.provider || {}),
+        providerResponse: result,
+      };
+
+      const rawStatus = String(result.status || '').trim();
+      const noteMessage = result.message || (rawStatus ? `Provider status: ${rawStatus}` : 'Callback received');
+
+      if (SmePlugService.isSuccessfulDeliveryStatus(result.status)) {
+        transaction.status = 'successful';
+        transaction.completedAt = new Date();
+        transaction.statusHistory.push({
+          status: 'successful',
+          note: noteMessage,
+          timestamp: new Date(),
+        });
+
+        await transaction.save();
+
+        await NotificationService.create({
+          user: transaction.user,
+          title: 'Purchase Successful',
+          message: `Your ${transaction.type} of NGN ${transaction.amount} was successful.`,
+          type: 'purchase_success',
+          reference: transaction.reference,
+        });
+
+        logger.info(`SMEPlug transaction successful: ${transaction.reference}`);
+      } else if (SmePlugService.isFailedDeliveryStatus(result.status)) {
+        transaction.status = 'failed';
+        transaction.completedAt = new Date();
+        transaction.statusHistory.push({
+          status: 'failed',
+          note: noteMessage,
+          timestamp: new Date(),
+        });
+
+        await transaction.save();
+        await refundTransactionToWallet(transaction, 'Purchase refund due to SMEPlug callback failure');
+        await transaction.save();
+
+        await NotificationService.create({
+          user: transaction.user,
+          title: 'Purchase Failed',
+          message: `Your ${transaction.type} of NGN ${transaction.amount} failed. Amount has been refunded.`,
+          type: 'purchase_failed',
+          reference: transaction.reference,
+        });
+
+        logger.warn(`SMEPlug transaction failed: ${transaction.reference}`);
+      } else {
+        transaction.status = 'pending';
+        transaction.statusHistory.push({
+          status: 'pending',
+          note: noteMessage,
+          timestamp: new Date(),
+        });
+        await transaction.save();
+      }
     }
 
     return res.status(200).send('OK');
@@ -531,3 +545,4 @@ async function handleFailedTransfer(transferData) {
     throw error;
   }
 }
+

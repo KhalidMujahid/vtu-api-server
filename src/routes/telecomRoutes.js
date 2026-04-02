@@ -242,6 +242,8 @@ router.post('/data/purchase', protect, requireTransactionPin, telecomController.
  *         description: Airtime purchased
  */
 router.post('/airtime/purchase', protect, requireTransactionPin, telecomController.purchaseAirtime);
+router.post('/airtime/query', protect, telecomController.queryAirtimeTransaction);
+router.post('/airtime/cancel', protect, telecomController.cancelAirtimeTransaction);
 
 /**
  * @swagger

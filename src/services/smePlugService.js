@@ -507,34 +507,64 @@ class SmePlugService {
   //   return null;
   // }
 
+  static extractCallbackItems(payload) {
+    if (Array.isArray(payload)) {
+      return payload;
+    }
+
+    if (!payload || typeof payload !== 'object') {
+      return [];
+    }
+
+    if (Array.isArray(payload.data)) return payload.data;
+    if (Array.isArray(payload.transactions)) return payload.transactions;
+    if (payload.transaction && typeof payload.transaction === 'object') return [payload.transaction];
+    if (payload.data && typeof payload.data === 'object') return [payload.data];
+
+    return [payload];
+  }
+
+  static normalizeDeliveryStatus(status) {
+    return String(status || '')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, '_');
+  }
+
+  static isSuccessfulDeliveryStatus(status) {
+    const normalized = this.normalizeDeliveryStatus(status);
+    return ['success', 'successful', 'completed', 'delivered', 'ok', 'done'].includes(normalized);
+  }
+
+  static isFailedDeliveryStatus(status) {
+    const normalized = this.normalizeDeliveryStatus(status);
+    return ['failed', 'failure', 'rejected', 'cancelled', 'canceled', 'error', 'undelivered', 'expired'].includes(normalized);
+  }
+
+  static isPendingDeliveryStatus(status) {
+    const normalized = this.normalizeDeliveryStatus(status);
+    return ['pending', 'processing', 'queued', 'accepted', 'in_progress', 'order_received', 'received'].includes(normalized);
+  }
+
+  static verifyCallbackBatch(payload) {
+    const items = this.extractCallbackItems(payload);
+    if (!items.length) return [];
+
+    return items.map((tx) => ({
+      reference: tx.reference || tx.ref || tx.id || tx.order_id || tx.orderId || null,
+      customerReference: tx.customer_reference || tx.customerReference || tx.customer_ref || null,
+      status: tx.status || tx.delivery_status || tx.deliveryStatus || null,
+      type: tx.type || tx.transaction_type || null,
+      beneficiary: tx.beneficiary || tx.phone || tx.recipient || null,
+      amount: Number.parseFloat(tx.price ?? tx.amount ?? 0) || 0,
+      message: tx.response || tx.gateway_response || tx.message || null,
+    }));
+  }
+
   static verifyCallback(payload) {
-  if (payload?.transaction) {
-    const tx = payload.transaction;
-    return {
-      reference: tx.reference,
-      customerReference: tx.customer_reference,
-      status: tx.status,
-      type: tx.type,
-      beneficiary: tx.beneficiary,
-      amount: parseFloat(tx.price),
-      message: tx.response,
-    };
+    const [firstResult] = this.verifyCallbackBatch(payload);
+    return firstResult || null;
   }
-
-  if (payload?.ref) {
-    return {
-      reference: payload.ref,
-      customerReference: payload.customer_ref,
-      status: payload.status,
-      type: payload.type,
-      beneficiary: payload.beneficiary,
-      amount: parseFloat(payload.price),
-      message: payload.response,
-    };
-  }
-
-  return null;
-}
 }
 
 module.exports = SmePlugService;

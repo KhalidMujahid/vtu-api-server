@@ -325,8 +325,8 @@ class NelloBytesService {
     });
 
     return {
-      success: response.statuscode === '100' || response.status === 'ORDER_RECEIVED',
-      status: response.status,
+      success: response.statuscode === '100' || response.statuscode === '200' || response.status === 'ORDER_RECEIVED',
+      status: response.status || response.orderstatus,
       statusCode: response.statuscode,
       orderId: response.orderid,
       requestId: response.requestid || resolvedRequestId,
@@ -348,10 +348,11 @@ class NelloBytesService {
     
     return {
       orderId: response.orderid,
-      status: response.orderstatus,
+      requestId: response.requestid || requestId || null,
+      status: response.status || response.orderstatus,
       statusCode: response.statuscode,
-      remark: response.orderremark,
-      date: response.orderdate,
+      remark: response.remark || response.orderremark,
+      date: response.date || response.orderdate,
       response,
     };
   }
@@ -369,8 +370,8 @@ class NelloBytesService {
     const response = await this.request(endpoint, { OrderID: orderId });
     
     return {
-      success: response.status === 'ORDER_CANCELLED',
-      status: response.status,
+      success: (response.status || response.orderstatus) === 'ORDER_CANCELLED',
+      status: response.status || response.orderstatus,
       orderId: response.orderid,
       response,
     };
@@ -457,7 +458,7 @@ class NelloBytesService {
 
     return {
       success: response.statuscode === '100' || response.statuscode === '200',
-      status: response.status,
+      status: response.status || response.orderstatus,
       statusCode: response.statuscode,
       orderId: response.orderid,
       requestId: response.requestid || resolvedRequestId,
@@ -496,8 +497,8 @@ class NelloBytesService {
     const response = await this.request(endpoint, { OrderID: orderId });
     
     return {
-      success: response.status === 'ORDER_CANCELLED',
-      status: response.status,
+      success: (response.status || response.orderstatus) === 'ORDER_CANCELLED',
+      status: response.status || response.orderstatus,
       orderId: response.orderid,
       response,
     };
@@ -564,7 +565,7 @@ class NelloBytesService {
 
     return {
       success: response.statuscode === '100' || response.statuscode === '200',
-      status: response.status,
+      status: response.status || response.orderstatus,
       statusCode: response.statuscode,
       orderId: response.orderid,
       meterToken: response.metertoken,
@@ -607,8 +608,8 @@ class NelloBytesService {
     const response = await this.request(endpoint, { OrderID: orderId });
     
     return {
-      success: response.status === 'ORDER_CANCELLED',
-      status: response.status,
+      success: (response.status || response.orderstatus) === 'ORDER_CANCELLED',
+      status: response.status || response.orderstatus,
       orderId: response.orderid,
       response,
     };
@@ -727,8 +728,8 @@ class NelloBytesService {
     });
 
     return {
-      success: response.statuscode === '200',
-      status: response.status,
+      success: response.statuscode === '100' || response.statuscode === '200',
+      status: response.status || response.orderstatus,
       statusCode: response.statuscode,
       orderId: response.orderid,
       requestId: response.requestid || resolvedRequestId,
@@ -752,10 +753,11 @@ class NelloBytesService {
     
     return {
       orderId: response.orderid,
-      status: response.orderstatus,
+      requestId: response.requestid || requestId || null,
+      status: response.status || response.orderstatus,
       statusCode: response.statuscode,
-      remark: response.orderremark,
-      date: response.orderdate,
+      remark: response.remark || response.orderremark,
+      date: response.date || response.orderdate,
       cardDetails: response.carddetails,
       response,
     };
@@ -770,8 +772,8 @@ class NelloBytesService {
     const response = await this.request(endpoint, { OrderID: orderId });
     
     return {
-      success: response.status === 'ORDER_CANCELLED',
-      status: response.status,
+      success: (response.status || response.orderstatus) === 'ORDER_CANCELLED',
+      status: response.status || response.orderstatus,
       orderId: response.orderid,
       response,
     };
@@ -824,8 +826,8 @@ class NelloBytesService {
     });
 
     return {
-      success: response.statuscode === '200',
-      status: response.status,
+      success: response.statuscode === '100' || response.statuscode === '200',
+      status: response.status || response.orderstatus,
       statusCode: response.statuscode,
       orderId: response.orderid,
       requestId: response.requestid || resolvedRequestId,
@@ -849,10 +851,11 @@ class NelloBytesService {
     
     return {
       orderId: response.orderid,
-      status: response.orderstatus,
+      requestId: response.requestid || requestId || null,
+      status: response.status || response.orderstatus,
       statusCode: response.statuscode,
-      remark: response.orderremark,
-      date: response.orderdate,
+      remark: response.remark || response.orderremark,
+      date: response.date || response.orderdate,
       cardDetails: response.carddetails,
       response,
     };
@@ -867,8 +870,8 @@ class NelloBytesService {
     const response = await this.request(endpoint, { OrderID: orderId });
     
     return {
-      success: response.status === 'ORDER_CANCELLED',
-      status: response.status,
+      success: (response.status || response.orderstatus) === 'ORDER_CANCELLED',
+      status: response.status || response.orderstatus,
       orderId: response.orderid,
       response,
     };

@@ -2988,12 +2988,18 @@ class AdminController {
       }
       
       // Log the export
+      const exportEntityMap = {
+        transactions: 'transaction',
+        users: 'user',
+        wallets: 'wallet',
+      };
+
       await AdminLog.log({
         admin: req.admin._id,
         adminEmail: req.admin.email,
         adminRole: req.admin.role,
         action: 'export',
-        entity: type,
+        entity: exportEntityMap[type] || 'system',
         description: `${type} data exported by ${req.admin.email}`,
         ipAddress: req.ip,
         userAgent: req.get('user-agent'),

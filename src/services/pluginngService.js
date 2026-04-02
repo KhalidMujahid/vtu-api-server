@@ -314,6 +314,75 @@ class PluginngService {
     return match ? String(match.subcategory_id) : null;
   }
 
+  static async getActivePlansByCategory(category) {
+    const normalizedCategory = String(category || '').trim().toLowerCase();
+    if (!normalizedCategory) return [];
+
+    const plans = await this.getPlans();
+    return plans.filter((item) => (
+      String(item?.status ?? '1') === '1'
+      && String(item?.category || '').trim().toLowerCase() === normalizedCategory
+    ));
+  }
+
+  static async getCableProviders() {
+    return this.getActivePlansByCategory('cable');
+  }
+
+  static async getElectricityProviders() {
+    return this.getActivePlansByCategory('electricity');
+  }
+
+  static async getExamProviders() {
+    return this.getActivePlansByCategory('exam');
+  }
+
+  static async fetchBouquet(plan) {
+    if (!plan) {
+      throw new Error('plan is required to fetch bouquet');
+    }
+
+    return this.request('/api/fetch/bouquet', {
+      method: 'GET',
+      params: { plan },
+    });
+  }
+
+  static async verifyCard({ plan, cardno, type = null }) {
+    if (!plan || !cardno) {
+      throw new Error('plan and cardno are required for card verification.');
+    }
+
+    return this.request('/api/verify/card', {
+      method: 'POST',
+      useForm: true,
+      data: {
+        plan,
+        cardno,
+        ...(type ? { type } : {}),
+      },
+    });
+  }
+
+  static normalizePurchasePayload(payload = {}, fallbackReference = null) {
+    const statusCode = payload?.data?.status ?? payload?.status ?? payload?.transaction?.status;
+    const providerRef = payload?.data?.ref || payload?.ref || payload?.data?.id || payload?.id || null;
+    const reference = payload?.data?.custom_reference || payload?.custom_reference || fallbackReference || providerRef;
+
+    return {
+      success: this.isSuccessfulStatus(statusCode) || this.isPendingStatus(statusCode),
+      pending: this.isPendingStatus(statusCode),
+      failed: this.isFailedStatus(statusCode),
+      reversed: String(statusCode ?? '').trim() === '2',
+      status: this.getStatusLabel(statusCode),
+      statusCode: String(statusCode ?? ''),
+      reference,
+      orderId: providerRef || reference,
+      note: payload?.data?.response || payload?.response || payload?.message || '',
+      raw: payload,
+    };
+  }
+
   static async getWalletBalance() {
     const token = await this.getAuthToken();
 
@@ -378,20 +447,7 @@ class PluginngService {
       },
     });
 
-    const statusCode = payload?.data?.status ?? payload?.status ?? payload?.transaction?.status;
-    const providerRef = payload?.data?.ref || payload?.ref || payload?.data?.id || null;
-    const reference = payload?.data?.custom_reference || payload?.custom_reference || customReference || providerRef;
-
-    return {
-      success: this.isSuccessfulStatus(statusCode) || this.isPendingStatus(statusCode),
-      pending: this.isPendingStatus(statusCode),
-      failed: this.isFailedStatus(statusCode),
-      status: this.getStatusLabel(statusCode),
-      statusCode: String(statusCode ?? ''),
-      reference,
-      orderId: providerRef || reference,
-      raw: payload,
-    };
+    return this.normalizePurchasePayload(payload, customReference);
   }
 
   static async purchaseAirtime({
@@ -417,20 +473,91 @@ class PluginngService {
       },
     });
 
-    const statusCode = payload?.data?.status ?? payload?.status ?? payload?.transaction?.status;
-    const providerRef = payload?.data?.ref || payload?.ref || payload?.data?.id || null;
-    const reference = payload?.data?.custom_reference || payload?.custom_reference || customReference || providerRef;
+    return this.normalizePurchasePayload(payload, customReference);
+  }
 
-    return {
-      success: this.isSuccessfulStatus(statusCode) || this.isPendingStatus(statusCode),
-      pending: this.isPendingStatus(statusCode),
-      failed: this.isFailedStatus(statusCode),
-      status: this.getStatusLabel(statusCode),
-      statusCode: String(statusCode ?? ''),
-      reference,
-      orderId: providerRef || reference,
-      raw: payload,
-    };
+  static async purchaseCable({
+    plan,
+    phoneNumber,
+    amount,
+    cardno,
+    variationCode,
+    customReference,
+  }) {
+    if (!plan || !phoneNumber || !amount || !cardno || !variationCode) {
+      throw new Error('plan, phoneNumber, amount, cardno, and variationCode are required for Pluginng cable purchase.');
+    }
+
+    const payload = await this.request('/api/purchase/cable', {
+      method: 'POST',
+      useForm: true,
+      data: {
+        plan,
+        phonenumber: phoneNumber,
+        amount: Number(amount),
+        cardno,
+        variation_code: variationCode,
+        ...(customReference ? { custom_reference: customReference } : {}),
+      },
+    });
+
+    return this.normalizePurchasePayload(payload, customReference);
+  }
+
+  static async purchaseElectricity({
+    plan,
+    phoneNumber,
+    amount,
+    cardno,
+    variationCode,
+    serviceID,
+    customReference,
+  }) {
+    if (!plan || !phoneNumber || !amount || !cardno || !variationCode || !serviceID) {
+      throw new Error('plan, phoneNumber, amount, cardno, variationCode, and serviceID are required for Pluginng electricity purchase.');
+    }
+
+    const payload = await this.request('/api/purchase/electricity', {
+      method: 'POST',
+      useForm: true,
+      data: {
+        plan,
+        phonenumber: phoneNumber,
+        amount: Number(amount),
+        cardno,
+        variation_code: variationCode,
+        serviceID,
+        ...(customReference ? { custom_reference: customReference } : {}),
+      },
+    });
+
+    return this.normalizePurchasePayload(payload, customReference);
+  }
+
+  static async purchaseExam({
+    plan,
+    phoneNumber,
+    cardno,
+    variationCode,
+    customReference,
+  }) {
+    if (!plan || !phoneNumber || !cardno || !variationCode) {
+      throw new Error('plan, phoneNumber, cardno, and variationCode are required for Pluginng exam purchase.');
+    }
+
+    const payload = await this.request('/api/purchase/exam', {
+      method: 'POST',
+      useForm: true,
+      data: {
+        plan,
+        phonenumber: phoneNumber,
+        cardno,
+        variation_code: variationCode,
+        ...(customReference ? { custom_reference: customReference } : {}),
+      },
+    });
+
+    return this.normalizePurchasePayload(payload, customReference);
   }
 
   static async queryTransaction(customReference) {
@@ -454,19 +581,36 @@ class PluginngService {
     };
   }
 
-  static verifyCallback(payload) {
-    const data = Array.isArray(payload) ? payload[0] : payload;
-    if (!data || typeof data !== 'object') return null;
+  static extractCallbackItems(payload) {
+    if (Array.isArray(payload)) return payload;
+    if (!payload || typeof payload !== 'object') return [];
+    if (Array.isArray(payload.data)) return payload.data;
+    if (Array.isArray(payload.transactions)) return payload.transactions;
+    if (payload.data && typeof payload.data === 'object') return [payload.data];
+    if (payload.transaction && typeof payload.transaction === 'object') return [payload.transaction];
+    return [payload];
+  }
 
-    const statusCode = data.status ?? data?.data?.status;
-    return {
-      reference: data.custom_reference || data?.data?.custom_reference || null,
-      orderId: data.ref || data?.data?.ref || null,
-      statusCode: String(statusCode ?? ''),
-      status: this.getStatusLabel(statusCode),
-      message: data.response || data.description || data?.data?.response || data?.message || '',
-      raw: data,
-    };
+  static verifyCallbackBatch(payload) {
+    const items = this.extractCallbackItems(payload);
+    if (!items.length) return [];
+
+    return items.map((data) => {
+      const statusCode = data.status ?? data?.data?.status;
+      return {
+        reference: data.custom_reference || data?.data?.custom_reference || null,
+        orderId: data.ref || data?.data?.ref || null,
+        statusCode: String(statusCode ?? ''),
+        status: this.getStatusLabel(statusCode),
+        message: data.response || data.description || data?.data?.response || data?.message || '',
+        raw: data,
+      };
+    });
+  }
+
+  static verifyCallback(payload) {
+    const [firstResult] = this.verifyCallbackBatch(payload);
+    return firstResult || null;
   }
 }
 

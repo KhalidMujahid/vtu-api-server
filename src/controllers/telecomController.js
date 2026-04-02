@@ -1,7 +1,6 @@
-const axios = require('axios');
+﻿const axios = require('axios');
 const User = require('../models/User');
 const Transaction = require('../models/Transaction');
-const ServicePricing = require('../models/ServicePricing');
 const Wallet = require("../models/Wallet");
 const { AppError } = require('../middlewares/errorHandler');
 const logger = require('../utils/logger');
@@ -88,19 +87,20 @@ function buildDataPlansResponse(plans) {
     }
 
     acc[network].push({
-      id: plan._id,
-      planCode: plan.planCode,
-      providerPlanId: plan.providerPlanId || plan.planCode,
+      id: plan._id || plan.id || plan.planId || plan.plan_id || '',
+      planCode: plan.planCode || plan.plan_code || '',
+      providerPlanId: plan.providerPlanId || plan.planId || plan.plan_id || plan.planCode || plan.plan_code || '',
       variationCode: plan.variationCode || null,
-      provider: plan.provider,
-      planName: plan.planName,
+      provider: plan.provider || null,
+      planName: plan.planName || plan.name || plan.size || '',
       size: plan.size || plan.dataAmount,
-      price: plan.sellingPrice,
-      costPrice: plan.costPrice,
+      price: Number(plan.sellingPrice ?? plan.price ?? 0),
+      costPrice: Number(plan.costPrice ?? 0),
       validity: plan.validity,
-      isAvailable: plan.isAvailable,
+      isAvailable: plan.isAvailable !== false,
       availabilityMessage: plan.availabilityMessage || null,
       providerPlanType: plan.providerPlanType || null,
+      providerMeta: plan.providerMeta || null,
     });
     return acc;
   }, {});
@@ -210,71 +210,84 @@ function formatAvailableDataTypes(availableTypes = {}, network = null) {
 }
 
 async function getConfiguredDataPlans(providerId, network = null, includeUnavailable = true, dataType = null) {
-  const query = {
-    serviceType: 'data_recharge',
-    provider: providerId,
-    isActive: true,
-  };
+  const providerConfig = vtuConfig.providers[providerId];
+  if (!providerConfig) return [];
 
-  if (!includeUnavailable) {
-    query.isAvailable = true;
-  }
+  const source = providerConfig.source || providerId;
+  const DataService = vtuConfig.getDataPlansService(source);
+  if (!DataService || !DataService.getDataPlans) return [];
 
-  if (network) {
-    query.network = normalizeNetwork(network);
+  const rawPlans = await DataService.getDataPlans(normalizeNetwork(network));
+  const groupedPlans = vtuConfig.transformDataPlans(source, rawPlans) || {};
+  const flatPlans = [];
+
+  for (const [networkKey, plans] of Object.entries(groupedPlans)) {
+    const normalizedNetwork = normalizeNetwork(networkKey);
+    for (const plan of plans || []) {
+      flatPlans.push({
+        ...plan,
+        network: normalizeNetwork(plan.network || normalizedNetwork),
+        provider: providerId,
+        providerMeta: plan.providerMeta || null,
+        sellingPrice: Number(plan.sellingPrice ?? plan.price ?? 0),
+        isAvailable: plan.isAvailable !== false,
+      });
+    }
   }
 
   const normalizedType = normalizeDataType(dataType);
-  if (normalizedType && normalizedType !== 'all') {
-    query.providerPlanType = normalizedType;
-  }
-
-  return ServicePricing.find(query)
-    .sort({ priority: 1, sellingPrice: 1, planName: 1 })
-    .select('-createdBy -updatedBy')
-    .lean();
+  return flatPlans.filter((plan) => {
+    if (!includeUnavailable && plan.isAvailable === false) return false;
+    if (network && normalizeNetwork(plan.network) !== normalizeNetwork(network)) return false;
+    if (normalizedType && normalizedType !== 'all') {
+      const planType = normalizeDataType(plan.providerPlanType || extractDataTypeFromPlanName(plan.planName || plan.size || ''));
+      return planType === normalizedType;
+    }
+    return true;
+  });
 }
 
 async function resolveDataPricing({ providerId, network, planIdentifier, allowUnavailable = false, fallbackPlan = null, dataType = null }) {
-  const normalizedNetwork = normalizeNetwork(network);
+  const planValue = String(planIdentifier || '').trim().toLowerCase();
   const normalizedType = normalizeDataType(dataType);
-  const availabilityFilter = allowUnavailable ? [true, false] : [true];
-  const planValue = String(planIdentifier);
+  const plans = await getConfiguredDataPlans(
+    providerId,
+    normalizeNetwork(network),
+    allowUnavailable,
+    normalizedType
+  );
 
-  const baseQuery = {
-    serviceType: 'data_recharge',
-    provider: providerId,
-    network: normalizedNetwork,
-    isActive: true,
-    isAvailable: { $in: availabilityFilter },
+  const matchesPlan = (plan = {}) => {
+    const candidates = [
+      plan.planCode,
+      plan.providerPlanId,
+      plan.variationCode,
+      plan.planName,
+      plan.id,
+      plan.planId,
+      plan.plan_id,
+    ]
+      .filter(Boolean)
+      .map((value) => String(value).trim().toLowerCase());
+
+    return candidates.includes(planValue);
   };
 
-  if (normalizedType && normalizedType !== 'all') {
-    baseQuery.providerPlanType = normalizedType;
-  }
-
-  let pricing = await ServicePricing.findOne({
-    ...baseQuery,
-    $or: [
-      { planCode: planValue },
-      { providerPlanId: planValue },
-      { variationCode: planValue },
-      { planName: planValue },
-    ],
-  });
+  let pricing = plans.find(matchesPlan) || null;
 
   if (!pricing && fallbackPlan) {
-    pricing = await ServicePricing.findOne({
-      ...baseQuery,
-      $or: [
-        { planName: fallbackPlan.planName },
-        { size: fallbackPlan.size },
-        { dataAmount: fallbackPlan.dataAmount },
-      ].filter((entry) => Object.values(entry)[0]),
-    });
+    const fallbackName = String(fallbackPlan.planName || fallbackPlan.size || fallbackPlan.dataAmount || '').trim().toLowerCase();
+    pricing = plans.find((plan) => String(plan.planName || plan.size || plan.dataAmount || '').trim().toLowerCase() === fallbackName) || null;
   }
 
-  return pricing;
+  if (!pricing) return null;
+
+  return {
+    ...pricing,
+    sellingPrice: Number(pricing.sellingPrice ?? pricing.price ?? 0),
+    providerPlanId: pricing.providerPlanId || pricing.planId || pricing.plan_id || pricing.planCode || planIdentifier,
+    planCode: pricing.planCode || pricing.providerPlanId || planIdentifier,
+  };
 }
 
 function isProviderBalanceError(error) {
@@ -387,43 +400,6 @@ exports.getDataPlans = async (req, res, next) => {
     const selectedSource = source || providerSource;
     const selectedProviderId = SOURCE_TO_PROVIDER[selectedSource] || activeProviderId;
 
-    const configuredPlans = await getConfiguredDataPlans(selectedProviderId, normalizedNetwork, true, normalizedDataType);
-    if (configuredPlans.length > 0) {
-      const configuredPlansForTypes =
-        normalizedDataType && normalizedDataType !== 'all'
-          ? await getConfiguredDataPlans(selectedProviderId, normalizedNetwork, true, null)
-          : configuredPlans;
-      const availableTypes = buildAvailableDataTypesFromGroupedPlans(
-        buildDataPlansResponse(configuredPlansForTypes)
-      );
-      const responseData = buildDataPlansResponse(configuredPlans);
-      if (normalizedNetwork && !normalizedDataType) {
-        return res.status(200).json({
-          status: 'success',
-          availableDataTypes: formatAvailableDataTypes(availableTypes, normalizedNetwork),
-          filters: {
-            network: normalizedNetwork,
-            dataType: null,
-          },
-          source: 'admin',
-          provider: selectedProviderId,
-        });
-      }
-
-      return res.status(200).json({
-        status: 'success',
-        results: configuredPlans.length,
-        data: responseData,
-        availableDataTypes: formatAvailableDataTypes(availableTypes, normalizedNetwork),
-        filters: {
-          network: normalizedNetwork || null,
-          dataType: normalizedDataType || 'all',
-        },
-        source: 'admin',
-        provider: selectedProviderId,
-      });
-    }
-
     const DataService = vtuConfig.getDataPlansService(selectedSource);
     
     if (DataService && DataService.getDataPlans) {
@@ -461,60 +437,7 @@ exports.getDataPlans = async (req, res, next) => {
       });
     }
 
-    const fallbackQuery = {
-      serviceType: 'data_recharge',
-      isActive: true,
-      ...(normalizedNetwork ? { network: normalizedNetwork } : {}),
-    };
-    if (normalizedDataType && normalizedDataType !== 'all') {
-      fallbackQuery.providerPlanType = normalizedDataType;
-    }
-
-    const fallbackPlans = await ServicePricing.find(fallbackQuery)
-      .sort({ priority: 1, sellingPrice: 1 })
-      .select('-createdBy -updatedBy')
-      .lean();
-
-    const fallbackPlansForTypes =
-      normalizedDataType && normalizedDataType !== 'all'
-        ? await ServicePricing.find({
-            serviceType: 'data_recharge',
-            isActive: true,
-            ...(normalizedNetwork ? { network: normalizedNetwork } : {}),
-          })
-            .sort({ priority: 1, sellingPrice: 1 })
-            .select('-createdBy -updatedBy')
-            .lean()
-        : fallbackPlans;
-    const availableTypes = buildAvailableDataTypesFromGroupedPlans(
-      buildDataPlansResponse(fallbackPlansForTypes)
-    );
-
-    if (normalizedNetwork && !normalizedDataType) {
-      return res.status(200).json({
-        status: 'success',
-        availableDataTypes: formatAvailableDataTypes(availableTypes, normalizedNetwork),
-        filters: {
-          network: normalizedNetwork,
-          dataType: null,
-        },
-        source: 'database',
-        provider: selectedProviderId,
-      });
-    }
-
-    res.status(200).json({
-      status: 'success',
-      results: fallbackPlans.length,
-      data: buildDataPlansResponse(fallbackPlans),
-      availableDataTypes: formatAvailableDataTypes(availableTypes, normalizedNetwork),
-      filters: {
-        network: normalizedNetwork || null,
-        dataType: normalizedDataType || 'all',
-      },
-      source: 'database',
-      provider: selectedProviderId,
-    });
+    return next(new AppError(`Data plans endpoint is not implemented for provider source '${selectedSource}'`, 400));
   } catch (error) {
     console.error('getDataPlans error:', error);
     next(error);
@@ -523,14 +446,12 @@ exports.getDataPlans = async (req, res, next) => {
 
 exports.purchaseData = async (req, res, next) => {
   try {
-    const { phoneNumber, network, dataPlan, planId, transactionPin, amount, provider, source, dataType } = req.body;
+    const { phoneNumber, network, dataPlan, planId, transactionPin, amount, dataType } = req.body;
     const planIdentifier = dataPlan || planId;
     const normalizedNetwork = normalizeNetwork(network);
     const normalizedDataType = normalizeDataType(dataType);
     const defaultProvider = await vtuConfig.getProviderIdForService('data');
-    const requestedProvider = source
-      ? (SOURCE_TO_PROVIDER[source] || defaultProvider)
-      : (provider || defaultProvider);
+    const requestedProvider = defaultProvider;
     
     if (!phoneNumber) {
       return next(new AppError('Phone number is required', 400));
@@ -788,7 +709,7 @@ const profitConfig = {
 
 exports.purchaseAirtime = async (req, res, next) => {
   try {
-    const { phoneNumber, network, amount, transactionPin, provider, source, bonusType } = req.body;
+    const { phoneNumber, network, amount, transactionPin, bonusType } = req.body;
     const normalizedNetwork = normalizeNetwork(network);
     const parsedAmount = Number(amount);
 
@@ -805,9 +726,7 @@ exports.purchaseAirtime = async (req, res, next) => {
     }
 
     const defaultProvider = await vtuConfig.getProviderIdForService('airtime');
-    const activeProvider = source
-      ? (SOURCE_TO_PROVIDER[source] || defaultProvider)
-      : (provider || defaultProvider);
+    const activeProvider = defaultProvider;
     const providerConfig = vtuConfig.providers[activeProvider];
 
     const user = await User.findById(req.user.id).select("+transactionPin");
@@ -948,27 +867,47 @@ exports.purchaseAirtime = async (req, res, next) => {
       responseData = apiResponse.response;
     }
 
-    if (responseData.status === "ORDER_RECEIVED") {
-      transaction.status = "pending";
+    const providerStatus = String(responseData?.status || responseData?.orderstatus || '').toUpperCase();
+    const providerStatusCode = String(responseData?.statuscode || '');
+    const isOrderReceived = providerStatusCode === '100' || providerStatus === 'ORDER_RECEIVED' || providerStatus === 'ORDER_ONHOLD';
+    const isOrderCompleted = providerStatusCode === '200' || providerStatus === 'ORDER_COMPLETED';
+
+    if (isOrderReceived || isOrderCompleted) {
+      transaction.status = isOrderCompleted ? "successful" : "pending";
 
       transaction.service = {
         ...transaction.service,
-        orderId: apiResponse?.reference || responseData?.orderid || requestId
+        orderId: apiResponse?.orderId || apiResponse?.reference || responseData?.orderid || requestId,
+        requestId: apiResponse?.requestId || responseData?.requestid || requestId,
+        callbackUrl: providerConfig?.source === 'airtimenigeria'
+          ? airtimeCallbackUrl
+          : (providerConfig?.source === 'smeplug'
+            ? `${SERVER_URL}/api/v1/telecom/webhook/smeplug`
+            : AIRTIME_CALLBACK_URL),
       };
 
       transaction.statusHistory.push({
-        status: "pending",
-        note: "Order received by provider",
+        status: transaction.status,
+        note: isOrderCompleted ? "Order completed by provider" : "Order received by provider",
         timestamp: new Date(),
       });
 
       await transaction.save();
+
+      if (isOrderCompleted) {
+        await NotificationService.airtimePurchase(
+          transaction.user,
+          transaction.service?.network,
+          transaction.amount,
+          transaction.service?.phoneNumber
+        );
+      }
     } else {
       transaction.status = "failed";
 
       transaction.statusHistory.push({
         status: "failed",
-        note: responseData.status || "Provider rejected request",
+        note: responseData.orderremark || responseData.status || responseData.orderstatus || "Provider rejected request",
         timestamp: new Date(),
       });
 
@@ -980,10 +919,12 @@ exports.purchaseAirtime = async (req, res, next) => {
 
     res.status(200).json({
       status: "success",
-      message: "Airtime purchase processing",
+      message: transaction.status === 'successful' ? "Airtime purchase successful" : "Airtime purchase processing",
       data: {
         reference: requestId,
         provider: activeProvider,
+        status: transaction.status,
+        orderId: transaction.service?.orderId || null,
         providerResponse: responseData,
       },
     });
@@ -996,10 +937,13 @@ exports.purchaseAirtime = async (req, res, next) => {
 exports.airtimeCallback = async (req, res) => {
   try {
 
-    const { orderid, orderstatus, statuscode, orderremark } = req.query;
+    const { orderid, requestid, orderstatus, statuscode, orderremark } = req.query;
 
     const transaction = await Transaction.findOne({
-      "service.orderId": orderid
+      $or: [
+        ...(orderid ? [{ "service.orderId": orderid }, { reference: orderid }] : []),
+        ...(requestid ? [{ "service.requestId": requestid }, { reference: requestid }] : []),
+      ],
     });
 
     if (!transaction) {
@@ -1030,6 +974,14 @@ exports.airtimeCallback = async (req, res) => {
         transaction.service?.phoneNumber
       );
 
+    } else if (orderstatus === "ORDER_RECEIVED" || orderstatus === "ORDER_ONHOLD" || statuscode === "100") {
+      transaction.status = "pending";
+      transaction.statusHistory.push({
+        status: "pending",
+        note: orderremark || "Order received, processing",
+        timestamp: new Date()
+      });
+      await transaction.save();
     } else {
 
       transaction.status = "failed";
@@ -1071,15 +1023,77 @@ exports.queryAirtimeStatus = async (requestId) => {
   return NelloBytesService.queryAirtimeTransaction({ requestId });
 };
 
+exports.queryAirtimeTransaction = async (req, res, next) => {
+  try {
+    const { orderId, requestId } = req.body;
+    const activeProvider = await vtuConfig.getProviderIdForService('airtime');
+    const providerSource = vtuConfig.providers[activeProvider]?.source || activeProvider;
+
+    if (!orderId && !requestId) {
+      return next(new AppError('Please provide orderId or requestId', 400));
+    }
+
+    if (!(activeProvider === 'clubkonnect' || providerSource === 'nellobytes')) {
+      return next(new AppError(`Airtime transaction query is not implemented for ${activeProvider}`, 400));
+    }
+
+    const result = await NelloBytesService.queryAirtimeTransaction({ orderId, requestId });
+    return res.status(200).json({
+      status: 'success',
+      data: {
+        provider: activeProvider,
+        orderId: result.orderId,
+        requestId: result.requestId || requestId || null,
+        providerStatusCode: result.statusCode,
+        providerStatus: result.status,
+        providerRemark: result.remark,
+        providerDate: result.date,
+        raw: result.response,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.cancelAirtimeTransaction = async (req, res, next) => {
+  try {
+    const { orderId } = req.body;
+    const activeProvider = await vtuConfig.getProviderIdForService('airtime');
+    const providerSource = vtuConfig.providers[activeProvider]?.source || activeProvider;
+
+    if (!orderId) {
+      return next(new AppError('Please provide orderId', 400));
+    }
+
+    if (!(activeProvider === 'clubkonnect' || providerSource === 'nellobytes')) {
+      return next(new AppError(`Airtime transaction cancel is not implemented for ${activeProvider}`, 400));
+    }
+
+    const result = await NelloBytesService.cancelAirtimeTransaction(orderId);
+    return res.status(200).json({
+      status: result.success ? 'success' : 'error',
+      data: {
+        provider: activeProvider,
+        orderId: result.orderId || orderId,
+        providerStatus: result.status,
+        raw: result.response,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 exports.airtimeWebhook = async (req, res) => {
   try {
     const data = { ...(req.body || {}), ...(req.query || {}) };
-    const { orderid, statuscode, status, orderstatus, orderremark } = data;
+    const { orderid, requestid, statuscode, status, orderstatus, orderremark } = data;
 
     const transaction = await Transaction.findOne({
       $or: [
-        { 'service.orderId': orderid },
-        { reference: orderid },
+        ...(orderid ? [{ 'service.orderId': orderid }, { reference: orderid }] : []),
+        ...(requestid ? [{ 'service.requestId': requestid }, { reference: requestid }] : []),
       ],
     });
     if (!transaction) return res.status(404).send('Transaction not found');
@@ -1090,7 +1104,7 @@ exports.airtimeWebhook = async (req, res) => {
 
     transaction.providerResponse = data;
 
-    if (statuscode === "100" || orderstatus === 'ORDER_RECEIVED') {
+    if (statuscode === "100" || orderstatus === 'ORDER_RECEIVED' || orderstatus === 'ORDER_ONHOLD') {
       transaction.status = 'pending';
       transaction.statusHistory.push({
         status: 'pending',
@@ -1792,81 +1806,100 @@ exports.airtimeNigeriaWebhook = async (req, res) => {
   try {
     const payload = Object.keys(req.body || {}).length ? req.body : req.query;
     logger.info('AirtimeNigeria webhook received:', payload);
-    
-    // Parse the callback payload
-    const result = AirtimeNigeriaService.verifyCallback(payload);
-    
-    if (!result) {
+
+    const callbackResults = AirtimeNigeriaService.verifyCallbackBatch(payload);
+    if (!callbackResults.length) {
       return res.status(400).send('Invalid payload');
     }
-    
-    // Find transaction by reference
-    const lookupValues = [result.reference, result.customerReference].filter(Boolean);
-    const transaction = await Transaction.findOne({
-      $or: [
-        { 'service.orderId': { $in: lookupValues } },
-        { reference: { $in: lookupValues } },
-      ],
-    });
-    
-    if (!transaction) {
-      logger.warn(`Transaction not found for reference: ${result.reference}`);
-      return res.status(200).send('OK');
+
+    for (const result of callbackResults) {
+      const lookupValues = [result.reference, result.customerReference]
+        .filter(Boolean)
+        .map((value) => String(value));
+
+      if (!lookupValues.length) {
+        logger.warn('AirtimeNigeria webhook item skipped: missing reference and customer_reference');
+        continue;
+      }
+
+      const transaction = await Transaction.findOne({
+        $or: [
+          { 'service.orderId': { $in: lookupValues } },
+          { reference: { $in: lookupValues } },
+        ],
+      });
+
+      if (!transaction) {
+        logger.warn(`AirtimeNigeria transaction not found for reference(s): ${lookupValues.join(', ')}`);
+        continue;
+      }
+
+      if (transaction.status === 'successful' || transaction.status === 'failed') {
+        continue;
+      }
+
+      transaction.provider = {
+        ...(transaction.provider || {}),
+        providerResponse: result,
+      };
+
+      const rawStatus = String(result.status || '').trim();
+      const noteMessage = result.message || (rawStatus ? `Provider status: ${rawStatus}` : 'Callback received');
+
+      if (AirtimeNigeriaService.isSuccessfulDeliveryStatus(result.status)) {
+        transaction.status = 'successful';
+        transaction.completedAt = new Date();
+        transaction.statusHistory.push({
+          status: 'successful',
+          note: noteMessage,
+          timestamp: new Date(),
+        });
+
+        await transaction.save();
+
+        await NotificationService.create({
+          user: transaction.user,
+          title: 'Purchase Successful',
+          message: `Your ${transaction.type} of NGN ${transaction.amount} was successful.`,
+          type: 'purchase_success',
+          reference: transaction.reference,
+        });
+      } else if (AirtimeNigeriaService.isFailedDeliveryStatus(result.status)) {
+        transaction.status = 'failed';
+        transaction.completedAt = new Date();
+        transaction.statusHistory.push({
+          status: 'failed',
+          note: noteMessage,
+          timestamp: new Date(),
+        });
+
+        await transaction.save();
+
+        await refundTransactionToWallet(transaction, 'Purchase refund due to AirtimeNigeria callback failure');
+        await transaction.save();
+
+        await NotificationService.create({
+          user: transaction.user,
+          title: 'Purchase Failed',
+          message: `Your ${transaction.type} of NGN ${transaction.amount} failed. Amount has been refunded.`,
+          type: 'purchase_failed',
+          reference: transaction.reference,
+        });
+      } else {
+        transaction.status = 'pending';
+        transaction.statusHistory.push({
+          status: 'pending',
+          note: noteMessage,
+          timestamp: new Date(),
+        });
+        await transaction.save();
+      }
     }
-    
-    if (transaction.status === 'successful' || transaction.status === 'failed') {
-      return res.status(200).send('Already processed');
-    }
-    
-    // Update transaction based on delivery status
-    if (result.status === 'success') {
-      transaction.status = 'successful';
-      transaction.providerResponse = payload;
-      transaction.statusHistory.push({
-        status: 'successful',
-        note: result.message || 'Delivered successfully',
-        timestamp: new Date(),
-      });
-      
-      await transaction.save();
-      
-      // Send notification
-      await NotificationService.create({
-        user: transaction.user,
-        title: 'Purchase Successful',
-        message: `Your ${transaction.type} of ₦${transaction.amount} was successful.`,
-        type: 'purchase_success',
-        reference: transaction.reference,
-      });
-    } else {
-      transaction.status = 'failed';
-      transaction.providerResponse = payload;
-      transaction.statusHistory.push({
-        status: 'failed',
-        note: result.message || 'Delivery failed',
-        timestamp: new Date(),
-      });
-      
-      await transaction.save();
-      
-      // Refund wallet
-      await refundTransactionToWallet(transaction, 'Purchase refund due to failure');
-      await transaction.save();
-      
-      // Send notification
-      await NotificationService.create({
-        user: transaction.user,
-        title: 'Purchase Failed',
-        message: `Your ${transaction.type} of ₦${transaction.amount} failed. Amount has been refunded.`,
-        type: 'purchase_failed',
-        reference: transaction.reference,
-      });
-    }
-    
-    res.status(200).send('OK');
+
+    return res.status(200).send('OK');
   } catch (error) {
     logger.error('AirtimeNigeria webhook error:', error);
-    res.status(200).send('OK'); // Always return OK to prevent retries
+    return res.status(200).send('OK'); // Always return OK to prevent retries
   }
 };
 
@@ -1878,73 +1911,88 @@ exports.pluginngWebhook = async (req, res) => {
     const payload = Object.keys(req.body || {}).length ? req.body : req.query;
     logger.info('Pluginng webhook received:', payload);
 
-    const result = PluginngService.verifyCallback(payload);
-    if (!result) {
+    const callbackResults = PluginngService.verifyCallbackBatch(payload);
+    if (!callbackResults.length) {
       return res.status(400).send('Invalid payload');
     }
 
-    const lookupValues = [result.reference, result.orderId].filter(Boolean);
-    const transaction = await Transaction.findOne({
-      $or: [
-        { reference: { $in: lookupValues } },
-        { 'service.orderId': { $in: lookupValues } },
-      ],
-    });
+    for (const result of callbackResults) {
+      const lookupValues = [result.reference, result.orderId]
+        .filter(Boolean)
+        .map((value) => String(value));
 
-    if (!transaction) {
-      logger.warn(`Pluginng transaction not found for reference: ${lookupValues.join(', ')}`);
-      return res.status(200).send('OK');
-    }
+      if (!lookupValues.length) {
+        logger.warn('Pluginng webhook item skipped: missing custom_reference and ref');
+        continue;
+      }
 
-    if (transaction.status === 'successful' || transaction.status === 'failed') {
-      return res.status(200).send('Already processed');
-    }
-
-    transaction.providerResponse = payload;
-
-    if (PluginngService.isSuccessfulStatus(result.statusCode)) {
-      transaction.status = 'successful';
-      transaction.statusHistory.push({
-        status: 'successful',
-        note: result.message || 'Delivered successfully',
-        timestamp: new Date(),
+      const transaction = await Transaction.findOne({
+        $or: [
+          { reference: { $in: lookupValues } },
+          { 'service.orderId': { $in: lookupValues } },
+        ],
       });
 
-      await transaction.save();
-      await NotificationService.create({
-        user: transaction.user,
-        title: 'Purchase Successful',
-        message: `Your ${transaction.type} of NGN ${transaction.amount} was successful.`,
-        type: 'purchase_success',
-        reference: transaction.reference,
-      });
-    } else if (PluginngService.isPendingStatus(result.statusCode)) {
-      transaction.status = 'pending';
-      transaction.statusHistory.push({
-        status: 'pending',
-        note: result.message || 'Provider is still processing the transaction',
-        timestamp: new Date(),
-      });
-      await transaction.save();
-    } else {
-      transaction.status = 'failed';
-      transaction.statusHistory.push({
-        status: 'failed',
-        note: result.message || 'Provider reported failure',
-        timestamp: new Date(),
-      });
-      await transaction.save();
+      if (!transaction) {
+        logger.warn(`Pluginng transaction not found for reference: ${lookupValues.join(', ')}`);
+        continue;
+      }
 
-      await refundTransactionToWallet(transaction, 'Purchase refund due to provider failure');
-      await transaction.save();
+      if (transaction.status === 'successful' || transaction.status === 'failed') {
+        continue;
+      }
 
-      await NotificationService.create({
-        user: transaction.user,
-        title: 'Purchase Failed',
-        message: `Your ${transaction.type} of NGN ${transaction.amount} failed. Amount has been refunded.`,
-        type: 'purchase_failed',
-        reference: transaction.reference,
-      });
+      transaction.provider = {
+        ...(transaction.provider || {}),
+        providerResponse: result,
+      };
+
+      if (PluginngService.isSuccessfulStatus(result.statusCode)) {
+        transaction.status = 'successful';
+        transaction.completedAt = new Date();
+        transaction.statusHistory.push({
+          status: 'successful',
+          note: result.message || 'Delivered successfully',
+          timestamp: new Date(),
+        });
+
+        await transaction.save();
+        await NotificationService.create({
+          user: transaction.user,
+          title: 'Purchase Successful',
+          message: `Your ${transaction.type} of NGN ${transaction.amount} was successful.`,
+          type: 'purchase_success',
+          reference: transaction.reference,
+        });
+      } else if (PluginngService.isPendingStatus(result.statusCode)) {
+        transaction.status = 'pending';
+        transaction.statusHistory.push({
+          status: 'pending',
+          note: result.message || 'Provider is still processing the transaction',
+          timestamp: new Date(),
+        });
+        await transaction.save();
+      } else {
+        transaction.status = 'failed';
+        transaction.completedAt = new Date();
+        transaction.statusHistory.push({
+          status: 'failed',
+          note: result.message || 'Provider reported failure',
+          timestamp: new Date(),
+        });
+        await transaction.save();
+
+        await refundTransactionToWallet(transaction, 'Purchase refund due to provider failure');
+        await transaction.save();
+
+        await NotificationService.create({
+          user: transaction.user,
+          title: 'Purchase Failed',
+          message: `Your ${transaction.type} of NGN ${transaction.amount} failed. Amount has been refunded.`,
+          type: 'purchase_failed',
+          reference: transaction.reference,
+        });
+      }
     }
 
     return res.status(200).send('OK');
