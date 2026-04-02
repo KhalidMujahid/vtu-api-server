@@ -112,7 +112,8 @@ function normalizeEducationPackageItems(raw) {
   const pushCandidate = (item, fallbackCode = '') => {
     if (item === null || item === undefined) return;
     if (typeof item === 'string') {
-      items.push({ code: fallbackCode || item, title: item, amount: extractAmountValue(item), raw: item });
+      const combined = `${fallbackCode || ''} ${item}`.trim();
+      items.push({ code: fallbackCode || item, title: item, amount: extractAmountValue(combined), raw: item });
       return;
     }
     if (typeof item !== 'object') return;
@@ -142,7 +143,8 @@ function normalizeEducationPackageItems(raw) {
       || item.cost
       || item.sellingPrice
       || item.amountcharged
-      || title
+      || `${title} ${code}`
+      || JSON.stringify(item)
     );
     items.push({ code, title, amount, raw: item });
   };
@@ -200,17 +202,24 @@ async function resolveEducationAmountByProvider({ activeProvider, activeSource, 
       : await NelloBytesService.getWAECPackages();
     const packageItems = normalizeEducationPackageItems(packagesRaw);
 
-    const targetKeys = new Set([
+    const targetKeys = [
       normalizeExamTypeKey(examTypeInput),
       normalizeExamTypeKey(resolvedExamType),
       normalizeExamTypeKey(String(examTypeInput || '').replace(/\s+/g, '')),
       normalizeExamTypeKey(String(resolvedExamType || '').replace(/\s+/g, '')),
-    ]);
+    ].filter(Boolean);
 
     const matched = packageItems.find((item) => {
       const codeKey = normalizeExamTypeKey(item.code || '');
       const titleKey = normalizeExamTypeKey(item.title || '');
-      return targetKeys.has(codeKey) || targetKeys.has(titleKey);
+      return targetKeys.some((target) => (
+        codeKey === target
+        || titleKey === target
+        || codeKey.includes(target)
+        || titleKey.includes(target)
+        || target.includes(codeKey)
+        || target.includes(titleKey)
+      ));
     });
 
     if (!matched || !matched.amount) {
