@@ -580,3 +580,5 @@
 {"level":"info","message":"API balance alert check completed: 1 low, 0 sent","service":"yareema-data-hub","timestamp":"2026-04-02 02:25:56"}
 {"ip":"::1","level":"info","message":"POST /api/v1/auth/login","service":"yareema-data-hub","timestamp":"2026-04-02 02:27:07","userAgent":"PostmanRuntime/7.53.0"}
 {"level":"info","message":"OTP email sent to binkhalid267@gmail.com","service":"yareema-data-hub","timestamp":"2026-04-02 02:27:10"}
+{"level":"info","message":"VTU Providers initialized","service":"yareema-data-hub","timestamp":"2026-04-02 03:01:41"}
+{"level":"info","message":"API balance alert worker started (every 900s)","service":"yareema-data-hub","timestamp":"2026-04-02 03:01:41"}

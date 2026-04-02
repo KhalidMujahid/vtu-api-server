@@ -541,6 +541,7 @@ exports.setTransactionPin = async (req, res, next) => {
   }
 };
 
+
 exports.updateProfile = async (req, res, next) => {
   try {
     const { firstName, lastName, dateOfBirth, gender, address } = req.body;

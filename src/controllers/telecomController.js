@@ -142,6 +142,73 @@ function applyDataTypeOnUnifiedPlans(unifiedPlans = {}, dataType = null) {
   return filtered;
 }
 
+const DATA_TYPE_SORT_ORDER = [
+  'sme',
+  'direct',
+  'gifting',
+  'corporate',
+  'awoof',
+  'daily',
+  'weekly',
+  'monthly',
+  'night',
+  'other',
+];
+
+function sortDataTypes(dataTypes = []) {
+  return [...new Set(dataTypes)].sort((a, b) => {
+    const indexA = DATA_TYPE_SORT_ORDER.indexOf(a);
+    const indexB = DATA_TYPE_SORT_ORDER.indexOf(b);
+    const orderA = indexA === -1 ? Number.MAX_SAFE_INTEGER : indexA;
+    const orderB = indexB === -1 ? Number.MAX_SAFE_INTEGER : indexB;
+
+    if (orderA !== orderB) return orderA - orderB;
+    return String(a).localeCompare(String(b));
+  });
+}
+
+function resolvePlanDataType(plan = {}) {
+  const planType =
+    normalizeDataType(plan.providerPlanType) ||
+    normalizeDataType(extractDataTypeFromPlanName(plan.planName || plan.size || plan.dataAmount || '')) ||
+    'other';
+
+  return planType === 'all' ? null : planType;
+}
+
+function buildAvailableDataTypesFromGroupedPlans(groupedPlans = {}) {
+  const byNetwork = {};
+  const allTypesSet = new Set();
+
+  for (const [networkKey, plans] of Object.entries(groupedPlans)) {
+    const network = normalizeNetwork(networkKey);
+    if (!network) continue;
+
+    const typeSet = new Set();
+
+    for (const plan of plans || []) {
+      const planType = resolvePlanDataType(plan);
+      if (!planType) continue;
+      typeSet.add(planType);
+      allTypesSet.add(planType);
+    }
+
+    byNetwork[network] = sortDataTypes(Array.from(typeSet));
+  }
+
+  return {
+    byNetwork,
+    all: sortDataTypes(Array.from(allTypesSet)),
+  };
+}
+
+function formatAvailableDataTypes(availableTypes = {}, network = null) {
+  if (network) {
+    return availableTypes?.byNetwork?.[network] || [];
+  }
+  return availableTypes?.byNetwork || {};
+}
+
 async function getConfiguredDataPlans(providerId, network = null, includeUnavailable = true, dataType = null) {
   const query = {
     serviceType: 'data_recharge',
@@ -322,11 +389,19 @@ exports.getDataPlans = async (req, res, next) => {
 
     const configuredPlans = await getConfiguredDataPlans(selectedProviderId, normalizedNetwork, true, normalizedDataType);
     if (configuredPlans.length > 0) {
+      const configuredPlansForTypes =
+        normalizedDataType && normalizedDataType !== 'all'
+          ? await getConfiguredDataPlans(selectedProviderId, normalizedNetwork, true, null)
+          : configuredPlans;
+      const availableTypes = buildAvailableDataTypesFromGroupedPlans(
+        buildDataPlansResponse(configuredPlansForTypes)
+      );
       const responseData = buildDataPlansResponse(configuredPlans);
       return res.status(200).json({
         status: 'success',
         results: configuredPlans.length,
         data: responseData,
+        availableDataTypes: formatAvailableDataTypes(availableTypes, normalizedNetwork),
         filters: {
           network: normalizedNetwork || null,
           dataType: normalizedDataType || 'all',
@@ -341,6 +416,7 @@ exports.getDataPlans = async (req, res, next) => {
     if (DataService && DataService.getDataPlans) {
       const rawPlans = await DataService.getDataPlans(normalizedNetwork);
       const unifiedPlans = vtuConfig.transformDataPlans(selectedSource, rawPlans);
+      const availableTypes = buildAvailableDataTypesFromGroupedPlans(unifiedPlans);
       let responseData = applyDataTypeOnUnifiedPlans(unifiedPlans, normalizedDataType);
       if (normalizedNetwork) {
         responseData = { [normalizedNetwork]: responseData[normalizedNetwork] || [] };
@@ -349,6 +425,7 @@ exports.getDataPlans = async (req, res, next) => {
       return res.status(200).json({
         status: 'success',
         data: responseData,
+        availableDataTypes: formatAvailableDataTypes(availableTypes, normalizedNetwork),
         filters: {
           network: normalizedNetwork || null,
           dataType: normalizedDataType || 'all',
@@ -372,10 +449,26 @@ exports.getDataPlans = async (req, res, next) => {
       .select('-createdBy -updatedBy')
       .lean();
 
+    const fallbackPlansForTypes =
+      normalizedDataType && normalizedDataType !== 'all'
+        ? await ServicePricing.find({
+            serviceType: 'data_recharge',
+            isActive: true,
+            ...(normalizedNetwork ? { network: normalizedNetwork } : {}),
+          })
+            .sort({ priority: 1, sellingPrice: 1 })
+            .select('-createdBy -updatedBy')
+            .lean()
+        : fallbackPlans;
+    const availableTypes = buildAvailableDataTypesFromGroupedPlans(
+      buildDataPlansResponse(fallbackPlansForTypes)
+    );
+
     res.status(200).json({
       status: 'success',
       results: fallbackPlans.length,
       data: buildDataPlansResponse(fallbackPlans),
+      availableDataTypes: formatAvailableDataTypes(availableTypes, normalizedNetwork),
       filters: {
         network: normalizedNetwork || null,
         dataType: normalizedDataType || 'all',
@@ -461,7 +554,6 @@ exports.purchaseData = async (req, res, next) => {
       return next(new AppError('Insufficient wallet balance', 400));
     }
 
-    // Debit wallet
     await wallet.debit(sellingPrice, `Data purchase: ${network} ${planIdentifier}`);
 
     const reference = generateReference('DATA');
