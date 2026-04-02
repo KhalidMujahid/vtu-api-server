@@ -81,6 +81,7 @@ function resolveEducationExamType(value = '') {
   const normalized = normalizeExamTypeKey(value);
   const aliases = {
     'waec-result-checker': 'waecdirect',
+    'waec-result-checker-pin': 'waecdirect',
     'waec-direct': 'waecdirect',
     'waecdirect': 'waecdirect',
     'waec-registration': 'waec-registration',
@@ -120,6 +121,8 @@ function normalizeEducationPackageItems(raw) {
 
     const code = String(
       item.code
+      || item.product_code
+      || item.PRODUCT_CODE
       || item.examtype
       || item.examType
       || item.id
@@ -131,6 +134,8 @@ function normalizeEducationPackageItems(raw) {
     ).trim();
     const title = String(
       item.title
+      || item.product_description
+      || item.PRODUCT_DESCRIPTION
       || item.name
       || item.description
       || item.plan
@@ -139,6 +144,8 @@ function normalizeEducationPackageItems(raw) {
     ).trim();
     const amount = extractAmountValue(
       item.amount
+      || item.product_amount
+      || item.PRODUCT_AMOUNT
       || item.price
       || item.cost
       || item.sellingPrice
@@ -196,11 +203,34 @@ async function resolveEducationAmountByProvider({ activeProvider, activeSource, 
   }
 
   if (activeProvider === 'clubkonnect' || activeSource === 'nellobytes') {
+    const defaultAmountMap = {
+      waecdirect: 3900,
+      'waec-registration': 2000,
+      de: 2000,
+      'utme-mock': 2000,
+      'utme-no-mock': 2000,
+    };
+    const fallbackAmount = Number(
+      process.env.CLUBKONNECT_EDUPIN_DEFAULT_AMOUNT || defaultAmountMap[resolvedExamType] || 2000
+    );
+
     const isJamb = ['de', 'utme-mock', 'utme-no-mock'].includes(resolvedExamType) || resolvedExamType.includes('jamb');
-    const packagesRaw = isJamb
-      ? await NelloBytesService.getJAMBPackages()
-      : await NelloBytesService.getWAECPackages();
-    const packageItems = normalizeEducationPackageItems(packagesRaw);
+    let packageItems = [];
+    try {
+      const packagesRaw = isJamb
+        ? await NelloBytesService.getJAMBPackages()
+        : await NelloBytesService.getWAECPackages();
+      packageItems = normalizeEducationPackageItems(packagesRaw);
+    } catch (error) {
+      logger.warn(
+        `ClubKonnect package list lookup failed for '${resolvedExamType}'. Falling back to ${fallbackAmount}. Reason: ${error.message}`
+      );
+      return {
+        unitAmount: fallbackAmount,
+        displayName: examTypeInput || resolvedExamType,
+        pluginngExam: null,
+      };
+    }
 
     const targetKeys = [
       normalizeExamTypeKey(examTypeInput),
@@ -223,7 +253,14 @@ async function resolveEducationAmountByProvider({ activeProvider, activeSource, 
     });
 
     if (!matched || !matched.amount) {
-      throw new AppError('Unable to determine exam amount from ClubKonnect package list', 400);
+      logger.warn(
+        `Unable to determine education amount from ClubKonnect package list for '${resolvedExamType}'. Falling back to ${fallbackAmount}.`
+      );
+      return {
+        unitAmount: fallbackAmount,
+        displayName: examTypeInput || resolvedExamType,
+        pluginngExam: null,
+      };
     }
 
     return {
