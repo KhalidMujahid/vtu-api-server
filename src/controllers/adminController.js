@@ -2595,6 +2595,100 @@ class AdminController {
     }
   }
 
+  static async getMyProfile(req, res, next) {
+    try {
+      const admin = await User.findById(req.admin._id)
+        .select('-password -transactionPin -resetPasswordToken -verificationToken')
+        .lean();
+
+      if (!admin) {
+        return next(new AppError('Admin user not found', 404));
+      }
+
+      res.status(200).json({
+        status: 'success',
+        data: { admin },
+      });
+    } catch (error) {
+      logger.error('Error getting admin profile:', error);
+      next(error);
+    }
+  }
+
+  static async updateMyProfile(req, res, next) {
+    try {
+      const { firstName, lastName } = req.body || {};
+
+      if (!firstName && !lastName) {
+        return next(new AppError('Provide at least firstName or lastName to update', 400));
+      }
+
+      const admin = await User.findById(req.admin._id);
+      if (!admin) {
+        return next(new AppError('Admin user not found', 404));
+      }
+
+      if (firstName) admin.firstName = String(firstName).trim();
+      if (lastName) admin.lastName = String(lastName).trim();
+
+      await admin.save();
+
+      const adminResponse = admin.toObject();
+      delete adminResponse.password;
+      delete adminResponse.transactionPin;
+      delete adminResponse.resetPasswordToken;
+      delete adminResponse.verificationToken;
+
+      res.status(200).json({
+        status: 'success',
+        message: 'Profile updated successfully',
+        data: { admin: adminResponse },
+      });
+    } catch (error) {
+      logger.error('Error updating admin profile:', error);
+      next(error);
+    }
+  }
+
+  static async changeMyPassword(req, res, next) {
+    try {
+      const { currentPassword, newPassword, confirmNewPassword } = req.body || {};
+
+      if (!currentPassword || !newPassword) {
+        return next(new AppError('Current password and new password are required', 400));
+      }
+
+      if (confirmNewPassword !== undefined && newPassword !== confirmNewPassword) {
+        return next(new AppError('New password and confirm password do not match', 400));
+      }
+
+      if (String(currentPassword) === String(newPassword)) {
+        return next(new AppError('New password must be different from current password', 400));
+      }
+
+      const admin = await User.findById(req.admin._id).select('+password');
+      if (!admin) {
+        return next(new AppError('Admin user not found', 404));
+      }
+
+      const isCurrentPasswordValid = await admin.comparePassword(currentPassword);
+      if (!isCurrentPasswordValid) {
+        return next(new AppError('Current password is incorrect', 401));
+      }
+
+      admin.password = newPassword;
+      await admin.save();
+
+      res.status(200).json({
+        status: 'success',
+        message: 'Password changed successfully',
+      });
+    } catch (error) {
+      logger.error('Error changing admin password:', error);
+      next(error);
+    }
+  }
+
   static async getTwoFactorSettings(req, res, next) {
     try {
       const admin = await User.findById(req.admin._id).select('twoFactor email');
@@ -3025,6 +3119,9 @@ module.exports = {
   getAdminLogs: AdminController.getAdminLogs,
   
   // Additional Functions
+  getMyProfile: AdminController.getMyProfile,
+  updateMyProfile: AdminController.updateMyProfile,
+  changeMyPassword: AdminController.changeMyPassword,
   broadcastNotification: AdminController.broadcastNotification,
   getSystemSettings: AdminController.getSystemSettings,
   updateSystemSettings: AdminController.updateSystemSettings,

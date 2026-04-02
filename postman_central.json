@@ -1728,6 +1728,39 @@
               }
             ],
             "url": {
+              "raw": "{{base_url}}/api/v1/telecom/data/plans?network=mtn",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "telecom",
+                "data",
+                "plans"
+              ],
+              "query": [
+                {
+                  "key": "network",
+                  "value": "mtn"
+                }
+              ]
+            },
+            "description": "Step 1: Get only availableDataTypes for a selected network."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Data Plans by Data Type",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
               "raw": "{{base_url}}/api/v1/telecom/data/plans?network=mtn&dataType=sme",
               "host": [
                 "{{base_url}}"
@@ -1750,7 +1783,7 @@
                 }
               ]
             },
-            "description": "Get available data plans for a network Supports `dataType` filter (sme, direct, awoof, etc)."
+            "description": "Step 2: Fetch plans after user selects a dataType."
           },
           "response": []
         },
@@ -2131,6 +2164,100 @@
               ]
             },
             "description": "Admin login (uses same endpoint). If 2FA is enabled, first call without twoFactorCode to get pending response, then call again with twoFactorCode."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Admin Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/profile",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "profile"
+              ]
+            },
+            "description": "Get current admin profile details"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Admin Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Admin\",\n  \"lastName\": \"User\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/profile",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "profile"
+              ]
+            },
+            "description": "Update admin profile information"
+          },
+          "response": []
+        },
+        {
+          "name": "Change Admin Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"Admin@1234\",\n  \"newPassword\": \"Admin@12345\",\n  \"confirmNewPassword\": \"Admin@12345\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/change-password",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "change-password"
+              ]
+            },
+            "description": "Change admin password from settings page"
           },
           "response": []
         },
@@ -4489,6 +4616,42 @@
                 {
                   "key": "network",
                   "value": "mtn"
+                }
+              ]
+            },
+            "description": "Step 1: Get availableDataTypes for this provider + network."
+          }
+        },
+        {
+          "name": "Get Data Plans by Data Type (NelloBytes)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/telecom/data/plans?source=nellobytes&network=mtn&dataType=sme",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "telecom",
+                "data",
+                "plans"
+              ],
+              "query": [
+                {
+                  "key": "source",
+                  "value": "nellobytes"
+                },
+                {
+                  "key": "network",
+                  "value": "mtn"
                 },
                 {
                   "key": "dataType",
@@ -4496,7 +4659,7 @@
                 }
               ]
             },
-            "description": "Supports `dataType` filter (sme, direct, awoof, etc)."
+            "description": "Step 2: Fetch plans after selecting dataType."
           }
         },
         {
