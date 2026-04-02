@@ -330,6 +330,26 @@ function normalizePhoneForSmePlug(phoneNumber) {
   return phoneNumber;
 }
 
+function normalizeNigerianPhoneNumber(phoneNumber = '') {
+  const digits = String(phoneNumber || '').replace(/\D/g, '');
+
+  if (!digits) return '';
+
+  if (digits.length === 13 && digits.startsWith('234')) {
+    return `0${digits.substring(3)}`;
+  }
+
+  if (digits.length === 11 && digits.startsWith('0')) {
+    return digits;
+  }
+
+  if (digits.length === 10 && /^[789][01]\d{8}$/.test(digits)) {
+    return `0${digits}`;
+  }
+
+  return '';
+}
+
 async function resolvePluginngDataSubcategory({ attemptPricing = {}, network, planIdentifier }) {
   const fromPricing = (
     attemptPricing?.providerMeta?.subcategoryId ||
@@ -711,6 +731,7 @@ exports.purchaseAirtime = async (req, res, next) => {
   try {
     const { phoneNumber, network, amount, transactionPin, bonusType } = req.body;
     const normalizedNetwork = normalizeNetwork(network);
+    const normalizedPhoneNumber = normalizeNigerianPhoneNumber(phoneNumber);
     const parsedAmount = Number(amount);
 
     if (!phoneNumber || !network || !amount || !transactionPin) {
@@ -719,6 +740,10 @@ exports.purchaseAirtime = async (req, res, next) => {
 
     if (!normalizedNetwork || !DATA_NETWORKS.includes(normalizedNetwork)) {
       return next(new AppError("Invalid network selected", 400));
+    }
+
+    if (!normalizedPhoneNumber || !/^0[789][01]\d{8}$/.test(normalizedPhoneNumber)) {
+      return next(new AppError("Invalid phone number", 400));
     }
 
     if (Number.isNaN(parsedAmount) || parsedAmount < 50 || parsedAmount > 200000) {
@@ -754,7 +779,7 @@ exports.purchaseAirtime = async (req, res, next) => {
       await ProviderPurchaseGuardService.assertSufficientProviderBalance(
         activeProvider,
         parsedAmount,
-        { serviceType: 'airtime_recharge', network: normalizedNetwork, phoneNumber }
+        { serviceType: 'airtime_recharge', network: normalizedNetwork, phoneNumber: normalizedPhoneNumber }
       );
     } catch (balanceCheckError) {
       if (!shouldBypassProviderBalanceCheck(providerConfig, balanceCheckError)) {
@@ -786,11 +811,11 @@ exports.purchaseAirtime = async (req, res, next) => {
       profit,
       totalAmount: parsedAmount,
       status: "pending",
-      description: `${normalizedNetwork} airtime for ${phoneNumber}`,
+      description: `${normalizedNetwork} airtime for ${normalizedPhoneNumber}`,
       service: {
         provider: activeProvider,
         network: normalizedNetwork,
-        phoneNumber,
+        phoneNumber: normalizedPhoneNumber,
       },
       statusHistory: [
         {
@@ -809,7 +834,7 @@ exports.purchaseAirtime = async (req, res, next) => {
     if (providerConfig?.source === 'airtimenigeria') {
       apiResponse = await AirtimeNigeriaService.purchaseAirtime({
         network: normalizedNetwork,
-        phone: phoneNumber,
+        phone: normalizedPhoneNumber,
         amount: parsedAmount,
         maxAmount: parsedAmount,
         callbackUrl: airtimeCallbackUrl,
@@ -824,7 +849,7 @@ exports.purchaseAirtime = async (req, res, next) => {
     } else if (providerConfig?.source === 'smeplug') {
       const smeCallbackUrl = `${SERVER_URL}/api/v1/telecom/webhook/smeplug`;
       apiResponse = await SmePlugService.purchaseAirtime({
-        phone: normalizePhoneForSmePlug(phoneNumber),
+        phone: normalizePhoneForSmePlug(normalizedPhoneNumber),
         network: normalizedNetwork,
         amount: parsedAmount,
         customerReference: requestId,
@@ -843,7 +868,7 @@ exports.purchaseAirtime = async (req, res, next) => {
 
       apiResponse = await PluginngService.purchaseAirtime({
         amount: parsedAmount,
-        phoneNumber,
+        phoneNumber: normalizedPhoneNumber,
         subcategoryId,
         customReference: requestId,
       });
@@ -859,7 +884,7 @@ exports.purchaseAirtime = async (req, res, next) => {
       apiResponse = await NelloBytesService.purchaseAirtime({
         network: normalizedNetwork,
         amount: parsedAmount,
-        mobileNumber: phoneNumber,
+        mobileNumber: normalizedPhoneNumber,
         requestId,
         callBackURL: AIRTIME_CALLBACK_URL,
         bonusType,
@@ -1202,6 +1227,17 @@ exports.purchaseRechargePin = async (req, res, next) => {
       return next(new AppError('Recharge PIN value must be 100, 200, or 500', 400));
     }
 
+    const activeProvider = await vtuConfig.getProviderIdForService('airtimepin');
+    const providerConfig = vtuConfig.providers[activeProvider];
+
+    if (!providerConfig) {
+      return next(new AppError(`Configured recharge PIN provider '${activeProvider}' is invalid`, 400));
+    }
+
+    if (!(providerConfig.supportedServices || []).includes('recharge_pin')) {
+      return next(new AppError(`Recharge PIN is not supported for configured provider '${activeProvider}'`, 400));
+    }
+
     const pinValue = parsedValue;
     const totalAmount = pinValue * parsedQuantity;
     if (wallet.balance < totalAmount) {
@@ -1209,7 +1245,7 @@ exports.purchaseRechargePin = async (req, res, next) => {
     }
 
     await ProviderPurchaseGuardService.assertSufficientProviderBalance(
-      'clubkonnect',
+      activeProvider,
       totalAmount,
       { serviceType: 'recharge_pin', network: normalizedNetwork, quantity: parsedQuantity }
     );
@@ -1231,15 +1267,19 @@ exports.purchaseRechargePin = async (req, res, next) => {
       status: 'pending',
       description: `${normalizedNetwork.toUpperCase()} ${pinValue} x${parsedQuantity}`,
       service: {
-        provider: 'clubkonnect',
+        provider: activeProvider,
         network: normalizedNetwork,
         plan: String(pinValue),
         quantity: parsedQuantity,
       },
-      statusHistory: [{ status: 'pending', note: 'Recharge PIN purchase initiated', timestamp: new Date() }],
+      statusHistory: [{ status: 'pending', note: `Recharge PIN purchase initiated via ${activeProvider}`, timestamp: new Date() }],
     });
 
     try {
+      if (!(activeProvider === 'clubkonnect' || providerConfig.source === 'nellobytes')) {
+        throw new AppError(`Recharge PIN purchase is not implemented for provider '${activeProvider}'`, 400);
+      }
+
       const providerResponse = await NelloBytesService.buyEPIN({
         mobileNetwork: normalizedNetwork,
         value: pinValue,
@@ -1281,7 +1321,7 @@ exports.purchaseRechargePin = async (req, res, next) => {
           pinType: String(pinValue),
           quantity: parsedQuantity,
           pins: providerResponse.epins || [],
-          provider: 'clubkonnect',
+          provider: activeProvider,
           providerStatus: providerResponse.status,
         },
       });
