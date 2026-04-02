@@ -582,3 +582,11 @@
 {"level":"info","message":"OTP email sent to binkhalid267@gmail.com","service":"yareema-data-hub","timestamp":"2026-04-02 02:27:10"}
 {"level":"info","message":"VTU Providers initialized","service":"yareema-data-hub","timestamp":"2026-04-02 03:01:41"}
 {"level":"info","message":"API balance alert worker started (every 900s)","service":"yareema-data-hub","timestamp":"2026-04-02 03:01:41"}
+{"level":"info","message":"VTU Providers initialized","service":"yareema-data-hub","timestamp":"2026-04-02 03:09:41"}
+{"level":"info","message":"API balance alert worker started (every 900s)","service":"yareema-data-hub","timestamp":"2026-04-02 03:09:42"}
+{"ip":"::1","level":"info","message":"GET /api/v1/telecom/data/plans?network=mtn","service":"yareema-data-hub","timestamp":"2026-04-02 03:10:04","userAgent":"PostmanRuntime/7.53.0"}
+{"ip":"::1","level":"info","message":"GET /api/v1/telecom/data/plans?network=airtel","service":"yareema-data-hub","timestamp":"2026-04-02 03:10:49","userAgent":"PostmanRuntime/7.53.0"}
+{"level":"info","message":"VTU Providers initialized","service":"yareema-data-hub","timestamp":"2026-04-02 03:13:26"}
+{"level":"info","message":"API balance alert worker started (every 900s)","service":"yareema-data-hub","timestamp":"2026-04-02 03:13:27"}
+{"ip":"::1","level":"info","message":"GET /api/v1/telecom/data/plans?network=airtel","service":"yareema-data-hub","timestamp":"2026-04-02 03:13:34","userAgent":"PostmanRuntime/7.53.0"}
+{"ip":"::1","level":"info","message":"GET /api/v1/telecom/data/plans?network=mtn&dataType=sme","service":"yareema-data-hub","timestamp":"2026-04-02 03:14:20","userAgent":"PostmanRuntime/7.53.0"}

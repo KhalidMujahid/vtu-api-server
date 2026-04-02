@@ -397,6 +397,19 @@ exports.getDataPlans = async (req, res, next) => {
         buildDataPlansResponse(configuredPlansForTypes)
       );
       const responseData = buildDataPlansResponse(configuredPlans);
+      if (normalizedNetwork && !normalizedDataType) {
+        return res.status(200).json({
+          status: 'success',
+          availableDataTypes: formatAvailableDataTypes(availableTypes, normalizedNetwork),
+          filters: {
+            network: normalizedNetwork,
+            dataType: null,
+          },
+          source: 'admin',
+          provider: selectedProviderId,
+        });
+      }
+
       return res.status(200).json({
         status: 'success',
         results: configuredPlans.length,
@@ -420,6 +433,19 @@ exports.getDataPlans = async (req, res, next) => {
       let responseData = applyDataTypeOnUnifiedPlans(unifiedPlans, normalizedDataType);
       if (normalizedNetwork) {
         responseData = { [normalizedNetwork]: responseData[normalizedNetwork] || [] };
+      }
+
+      if (normalizedNetwork && !normalizedDataType) {
+        return res.status(200).json({
+          status: 'success',
+          availableDataTypes: formatAvailableDataTypes(availableTypes, normalizedNetwork),
+          filters: {
+            network: normalizedNetwork,
+            dataType: null,
+          },
+          source: selectedSource,
+          provider: selectedProviderId,
+        });
       }
       
       return res.status(200).json({
@@ -463,6 +489,19 @@ exports.getDataPlans = async (req, res, next) => {
     const availableTypes = buildAvailableDataTypesFromGroupedPlans(
       buildDataPlansResponse(fallbackPlansForTypes)
     );
+
+    if (normalizedNetwork && !normalizedDataType) {
+      return res.status(200).json({
+        status: 'success',
+        availableDataTypes: formatAvailableDataTypes(availableTypes, normalizedNetwork),
+        filters: {
+          network: normalizedNetwork,
+          dataType: null,
+        },
+        source: 'database',
+        provider: selectedProviderId,
+      });
+    }
 
     res.status(200).json({
       status: 'success',
