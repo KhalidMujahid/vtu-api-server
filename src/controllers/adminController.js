@@ -15,6 +15,28 @@ const logger = require('../utils/logger');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const emailService = require('../utils/emailService');
+const { generateBase32Secret, verifyTotp } = require('../utils/totp');
+
+const TWO_FACTOR_EMAIL_EXPIRY_MS = 5 * 60 * 1000;
+
+const generateTwoFactorCode = () => Math.floor(100000 + Math.random() * 900000).toString();
+
+const hashTwoFactorCode = (code) =>
+  crypto.createHash('sha256').update(String(code || '').trim()).digest('hex');
+
+const buildOtpAuthUrl = ({ issuer, accountName, secret }) =>
+  `otpauth://totp/${encodeURIComponent(issuer)}:${encodeURIComponent(accountName)}?secret=${secret}&issuer=${encodeURIComponent(issuer)}&algorithm=SHA1&digits=6&period=30`;
+
+const sendTwoFactorEmailCode = async (adminUser) => {
+  const otp = generateTwoFactorCode();
+
+  adminUser.twoFactor = adminUser.twoFactor || {};
+  adminUser.twoFactor.emailOtpHash = hashTwoFactorCode(otp);
+  adminUser.twoFactor.emailOtpExpires = new Date(Date.now() + TWO_FACTOR_EMAIL_EXPIRY_MS);
+  await adminUser.save();
+
+  await emailService.sendOTPEmail(adminUser.email, otp);
+};
 
 class AdminController {
   static async getDashboardStats(req, res, next) {
@@ -1653,7 +1675,6 @@ class AdminController {
         return next(new AppError('Only failed transactions can be refunded', 400));
       }
       
-      // Check if already refunded
       const existingRefund = await Transaction.findOne({
         'metadata.refundFor': transaction.reference,
       });
@@ -1705,10 +1726,9 @@ class AdminController {
     try {
       const { type, provider, limit = 10 } = req.body;
       
-      // Find failed transactions that haven't exceeded max retries
       const query = {
         status: 'failed',
-        retryCount: { $lt: 3 }, // Max 3 retries
+        retryCount: { $lt: 3 },
       };
       
       if (type) query.type = type;
@@ -1733,12 +1753,10 @@ class AdminController {
         details: [],
       };
       
-      // Retry each transaction
       for (const transaction of failedTransactions) {
         try {
           let result;
           
-          // Determine which service to use based on transaction type
           if (['data_recharge', 'airtime_recharge', 'airtime_swap', 'recharge_pin', 'sme_data'].includes(transaction.type)) {
             result = await TelecomService.retryFailedTransaction(transaction._id, transaction.retryCount);
           } else if (['electricity', 'cable_tv', 'education_pin', 'rrr_payment'].includes(transaction.type)) {
@@ -2357,7 +2375,6 @@ class AdminController {
         { $limit: 10 },
       ]);
       
-      // Map service types to readable names
       const serviceNames = {
         'data_recharge': 'Data Recharge',
         'airtime_recharge': 'Airtime',
@@ -2407,7 +2424,6 @@ class AdminController {
         return next(new AppError('Title and message are required', 400));
       }
       
-      // Determine target users
       let users;
       if (targetUsers === 'all') {
         users = await User.find({}).select('email phoneNumber firstName');
@@ -2579,6 +2595,257 @@ class AdminController {
     }
   }
 
+  static async getTwoFactorSettings(req, res, next) {
+    try {
+      const admin = await User.findById(req.admin._id).select('twoFactor email');
+
+      if (!admin) {
+        return next(new AppError('Admin user not found', 404));
+      }
+
+      res.status(200).json({
+        status: 'success',
+        data: {
+          twoFactor: {
+            enabled: Boolean(admin?.twoFactor?.enabled),
+            method: admin?.twoFactor?.method || 'email',
+            lastVerifiedAt: admin?.twoFactor?.lastVerifiedAt || null,
+            hasAuthenticatorSecret: Boolean(admin?.twoFactor?.authenticatorSecret),
+            hasPendingAuthenticatorSetup: Boolean(admin?.twoFactor?.pendingAuthenticatorSecret),
+          },
+        },
+      });
+    } catch (error) {
+      logger.error('Error getting admin 2FA settings:', error);
+      next(error);
+    }
+  }
+
+  static async setupTwoFactor(req, res, next) {
+    try {
+      const requestedMethod = String(req.body?.method || '').trim().toLowerCase();
+      const method = requestedMethod || 'email';
+
+      if (!['email', 'authenticator'].includes(method)) {
+        return next(new AppError('2FA method must be either email or authenticator', 400));
+      }
+
+      const admin = await User.findById(req.admin._id).select('email twoFactor');
+
+      if (!admin) {
+        return next(new AppError('Admin user not found', 404));
+      }
+
+      admin.twoFactor = admin.twoFactor || {};
+
+      if (method === 'email') {
+        admin.twoFactor.pendingAuthenticatorSecret = undefined;
+        await admin.save();
+        await sendTwoFactorEmailCode(admin);
+
+        return res.status(200).json({
+          status: 'success',
+          message: 'Verification code sent to your email',
+          data: {
+            method: 'email',
+            requiresVerification: true,
+          },
+        });
+      }
+
+      const secret = generateBase32Secret();
+      const issuer = process.env.TOTP_ISSUER || process.env.APP_NAME || 'VTU API';
+      const otpauthUrl = buildOtpAuthUrl({
+        issuer,
+        accountName: admin.email,
+        secret,
+      });
+
+      admin.twoFactor.pendingAuthenticatorSecret = secret;
+      admin.twoFactor.emailOtpHash = undefined;
+      admin.twoFactor.emailOtpExpires = undefined;
+      await admin.save();
+
+      res.status(200).json({
+        status: 'success',
+        message: 'Authenticator setup initialized. Verify with a code from your authenticator app.',
+        data: {
+          method: 'authenticator',
+          requiresVerification: true,
+          manualEntryKey: secret,
+          otpauthUrl,
+        },
+      });
+    } catch (error) {
+      logger.error('Error setting up admin 2FA:', error);
+      next(error);
+    }
+  }
+
+  static async verifyTwoFactorSetup(req, res, next) {
+    try {
+      const methodInput = String(req.body?.method || '').trim().toLowerCase();
+      const code = String(req.body?.code || '').trim();
+
+      if (!code) {
+        return next(new AppError('Verification code is required', 400));
+      }
+
+      const admin = await User.findById(req.admin._id).select('twoFactor');
+
+      if (!admin) {
+        return next(new AppError('Admin user not found', 404));
+      }
+
+      admin.twoFactor = admin.twoFactor || {};
+
+      const method = methodInput || (admin.twoFactor.pendingAuthenticatorSecret ? 'authenticator' : 'email');
+      if (!['email', 'authenticator'].includes(method)) {
+        return next(new AppError('2FA method must be either email or authenticator', 400));
+      }
+
+      if (method === 'email') {
+        const validCode = hashTwoFactorCode(code) === admin?.twoFactor?.emailOtpHash;
+        const notExpired =
+          admin?.twoFactor?.emailOtpExpires &&
+          new Date(admin.twoFactor.emailOtpExpires).getTime() > Date.now();
+
+        if (!validCode || !notExpired) {
+          return next(new AppError('Invalid or expired verification code', 400));
+        }
+
+        admin.twoFactor.enabled = true;
+        admin.twoFactor.method = 'email';
+        admin.twoFactor.pendingAuthenticatorSecret = undefined;
+      } else {
+        const secret = admin?.twoFactor?.pendingAuthenticatorSecret || admin?.twoFactor?.authenticatorSecret;
+
+        if (!secret) {
+          return next(new AppError('No authenticator setup is pending. Start setup first.', 400));
+        }
+
+        const isValidCode = verifyTotp(secret, code, { window: 1 });
+        if (!isValidCode) {
+          return next(new AppError('Invalid authenticator code', 400));
+        }
+
+        admin.twoFactor.enabled = true;
+        admin.twoFactor.method = 'authenticator';
+        admin.twoFactor.authenticatorSecret = secret;
+        admin.twoFactor.pendingAuthenticatorSecret = undefined;
+      }
+
+      admin.twoFactor.emailOtpHash = undefined;
+      admin.twoFactor.emailOtpExpires = undefined;
+      admin.twoFactor.lastVerifiedAt = new Date();
+      await admin.save();
+
+      res.status(200).json({
+        status: 'success',
+        message: `${method === 'authenticator' ? 'Authenticator app' : 'Email'} 2FA enabled successfully`,
+        data: {
+          twoFactor: {
+            enabled: true,
+            method,
+            lastVerifiedAt: admin.twoFactor.lastVerifiedAt,
+          },
+        },
+      });
+    } catch (error) {
+      logger.error('Error verifying admin 2FA setup:', error);
+      next(error);
+    }
+  }
+
+  static async sendDisableTwoFactorCode(req, res, next) {
+    try {
+      const admin = await User.findById(req.admin._id).select('email twoFactor');
+
+      if (!admin) {
+        return next(new AppError('Admin user not found', 404));
+      }
+
+      if (!admin?.twoFactor?.enabled) {
+        return next(new AppError('Two-factor authentication is not enabled', 400));
+      }
+
+      await sendTwoFactorEmailCode(admin);
+
+      res.status(200).json({
+        status: 'success',
+        message: 'Disable verification code sent to your email',
+      });
+    } catch (error) {
+      logger.error('Error sending admin 2FA disable code:', error);
+      next(error);
+    }
+  }
+
+  static async disableTwoFactor(req, res, next) {
+    try {
+      const code = String(req.body?.code || '').trim();
+      const methodInput = String(req.body?.method || '').trim().toLowerCase();
+
+      if (!code) {
+        return next(new AppError('Verification code is required', 400));
+      }
+
+      const admin = await User.findById(req.admin._id).select('twoFactor');
+
+      if (!admin) {
+        return next(new AppError('Admin user not found', 404));
+      }
+
+      if (!admin?.twoFactor?.enabled) {
+        return next(new AppError('Two-factor authentication is not enabled', 400));
+      }
+
+      const method = methodInput || admin.twoFactor.method || 'email';
+      if (!['email', 'authenticator'].includes(method)) {
+        return next(new AppError('2FA method must be either email or authenticator', 400));
+      }
+
+      if (method === 'authenticator') {
+        const secret = admin?.twoFactor?.authenticatorSecret;
+        if (!secret || !verifyTotp(secret, code, { window: 1 })) {
+          return next(new AppError('Invalid authenticator code', 400));
+        }
+      } else {
+        const validCode = hashTwoFactorCode(code) === admin?.twoFactor?.emailOtpHash;
+        const notExpired =
+          admin?.twoFactor?.emailOtpExpires &&
+          new Date(admin.twoFactor.emailOtpExpires).getTime() > Date.now();
+
+        if (!validCode || !notExpired) {
+          return next(new AppError('Invalid or expired verification code', 400));
+        }
+      }
+
+      admin.twoFactor.enabled = false;
+      admin.twoFactor.method = 'email';
+      admin.twoFactor.emailOtpHash = undefined;
+      admin.twoFactor.emailOtpExpires = undefined;
+      admin.twoFactor.authenticatorSecret = undefined;
+      admin.twoFactor.pendingAuthenticatorSecret = undefined;
+      admin.twoFactor.lastVerifiedAt = undefined;
+      await admin.save();
+
+      res.status(200).json({
+        status: 'success',
+        message: 'Two-factor authentication disabled successfully',
+        data: {
+          twoFactor: {
+            enabled: false,
+            method: 'email',
+          },
+        },
+      });
+    } catch (error) {
+      logger.error('Error disabling admin 2FA:', error);
+      next(error);
+    }
+  }
+
   static async exportData(req, res, next) {
     try {
       const { type, format = 'json', startDate, endDate } = req.body;
@@ -2646,12 +2913,9 @@ class AdminController {
       });
       
       if (format === 'csv') {
-        // Convert to CSV
-        // In a real implementation, you would use a CSV library
         res.setHeader('Content-Type', 'text/csv');
         res.setHeader('Content-Disposition', `attachment; filename=${filename}.csv`);
         
-        // Simple CSV conversion (for demonstration)
         if (data.length > 0) {
           const headers = Object.keys(data[0]).join(',');
           const rows = data.map(row => 
@@ -2767,9 +3031,9 @@ module.exports = {
   exportData: AdminController.exportData,
   exportWallets: createQuickExportHandler('wallets'),
   exportTransactions: createQuickExportHandler('transactions'),
-  getTwoFactorSettings: notImplementedHandler('Admin 2FA settings'),
-  setupTwoFactor: notImplementedHandler('Admin 2FA setup'),
-  verifyTwoFactorSetup: notImplementedHandler('Admin 2FA verification'),
-  sendDisableTwoFactorCode: notImplementedHandler('Admin 2FA disable code'),
-  disableTwoFactor: notImplementedHandler('Admin 2FA disable'),
+  getTwoFactorSettings: AdminController.getTwoFactorSettings,
+  setupTwoFactor: AdminController.setupTwoFactor,
+  verifyTwoFactorSetup: AdminController.verifyTwoFactorSetup,
+  sendDisableTwoFactorCode: AdminController.sendDisableTwoFactorCode,
+  disableTwoFactor: AdminController.disableTwoFactor,
 };

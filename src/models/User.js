@@ -103,12 +103,12 @@ const userSchema = new mongoose.Schema({
   
   role: {
     type: String,
-    enum: ['user', 'agent', 'staff', 'admin', 'super_admin','support'],
+    enum: ['superadmin','user', 'agent', 'staff', 'admin', 'super_admin','support'],
     default: 'user',
   },
   roles: {
     type: [String],
-    enum: ['client', 'agent', 'staff', 'admin', 'super_admin'],
+    enum: ['superadmin','client', 'agent', 'staff', 'admin', 'super_admin'],
     default: ['client'],
   },
   isApproved: {
@@ -135,7 +135,6 @@ const userSchema = new mongoose.Schema({
     default: true,
   },
   
-  // Agent specific fields
   agentInfo: {
     agentId: {
       type: String,
@@ -259,7 +258,6 @@ userSchema.pre('save', async function(next) {
 });
 
 userSchema.pre('save', async function(next) {
-  // Only run this hook for NEW documents (not updates)
   if (!this.isNew) {
     return next();
   }
@@ -268,10 +266,8 @@ userSchema.pre('save', async function(next) {
     this.referralCode = Math.random().toString(36).substring(2, 8).toUpperCase();
   }
   
-  // Set default roles based on role field
   if (this.role === 'agent' && (!this.roles || this.roles.length === 0)) {
     this.roles = ['agent'];
-    // Agents need approval by default
     if (!this.isApproved) {
       this.isApproved = false;
     }

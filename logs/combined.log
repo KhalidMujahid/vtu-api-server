@@ -552,3 +552,31 @@
 {"ip":"::1","level":"info","message":"GET /api/v1/telecom/data/plans?network=mtn","service":"yareema-data-hub","timestamp":"2026-04-01 04:54:41","userAgent":"PostmanRuntime/7.52.0"}
 {"ip":"::1","level":"info","message":"GET /api/v1/telecom/data/plans?network=mtn&dataType=DIRECT","service":"yareema-data-hub","timestamp":"2026-04-01 04:55:21","userAgent":"PostmanRuntime/7.52.0"}
 {"ip":"::1","level":"info","message":"GET /api/v1/telecom/data/plans?network=mtn","service":"yareema-data-hub","timestamp":"2026-04-01 04:55:44","userAgent":"PostmanRuntime/7.52.0"}
+{"level":"info","message":"VTU Providers initialized","service":"yareema-data-hub","timestamp":"2026-04-02 02:10:52"}
+{"level":"info","message":"API balance alert worker started (every 900s)","service":"yareema-data-hub","timestamp":"2026-04-02 02:10:52"}
+{"ip":"::1","level":"info","message":"POST /api/v1/auth/login","service":"yareema-data-hub","timestamp":"2026-04-02 02:10:58","userAgent":"PostmanRuntime/7.53.0"}
+{"level":"info","message":"User logged in: binkhalid267@gmail.com","service":"yareema-data-hub","timestamp":"2026-04-02 02:11:02"}
+{"ip":"::1","level":"info","message":"POST /api/v1/auth/login","service":"yareema-data-hub","timestamp":"2026-04-02 02:11:53","userAgent":"PostmanRuntime/7.53.0"}
+{"level":"info","message":"User logged in: binkhalid267@gmail.com","service":"yareema-data-hub","timestamp":"2026-04-02 02:11:56"}
+{"ip":"::1","level":"info","message":"POST /api/v1/auth/login","service":"yareema-data-hub","timestamp":"2026-04-02 02:12:25","userAgent":"PostmanRuntime/7.53.0"}
+{"level":"info","message":"User logged in: admin@yareemadata.com","service":"yareema-data-hub","timestamp":"2026-04-02 02:12:28"}
+{"ip":"::1","level":"info","message":"POST /api/v1/auth/login","service":"yareema-data-hub","timestamp":"2026-04-02 02:12:48","userAgent":"PostmanRuntime/7.53.0"}
+{"level":"info","message":"User logged in: admin@yareemadata.com","service":"yareema-data-hub","timestamp":"2026-04-02 02:12:51"}
+{"ip":"::1","level":"info","message":"POST /api/v1/auth/login","service":"yareema-data-hub","timestamp":"2026-04-02 02:15:03","userAgent":"PostmanRuntime/7.53.0"}
+{"level":"info","message":"OTP email sent to binkhalid267@gmail.com","service":"yareema-data-hub","timestamp":"2026-04-02 02:15:08"}
+{"ip":"::1","level":"info","message":"POST /api/v1/auth/login","service":"yareema-data-hub","timestamp":"2026-04-02 02:16:33","userAgent":"PostmanRuntime/7.53.0"}
+{"ip":"::1","level":"error","message":"Invalid or expired two-factor code","method":"POST","path":"/api/v1/auth/login","service":"yareema-data-hub","stack":"Error: Invalid or expired two-factor code\n    at exports.login (C:\\Users\\Khalid\\Documents\\vtu-api-server-main\\src\\controllers\\authController.js:228:21)","timestamp":"2026-04-02 02:16:37","user":"anonymous"}
+{"ip":"::1","level":"info","message":"POST /api/v1/auth/login","service":"yareema-data-hub","timestamp":"2026-04-02 02:16:48","userAgent":"PostmanRuntime/7.53.0"}
+{"level":"info","message":"OTP email sent to binkhalid267@gmail.com","service":"yareema-data-hub","timestamp":"2026-04-02 02:16:52"}
+{"ip":"::1","level":"info","message":"POST /api/v1/auth/login","service":"yareema-data-hub","timestamp":"2026-04-02 02:18:53","userAgent":"PostmanRuntime/7.53.0"}
+{"level":"info","message":"User logged in: admin@yareemadata.com","service":"yareema-data-hub","timestamp":"2026-04-02 02:18:58"}
+{"ip":"::1","level":"info","message":"POST /api/v1/auth/login","service":"yareema-data-hub","timestamp":"2026-04-02 02:20:03","userAgent":"PostmanRuntime/7.53.0"}
+{"level":"info","message":"User logged in: binkhalid267@gmail.com","service":"yareema-data-hub","timestamp":"2026-04-02 02:20:07"}
+{"ip":"::1","level":"info","message":"POST /api/v1/admin/settings/2fa/setup","service":"yareema-data-hub","timestamp":"2026-04-02 02:21:36","userAgent":"PostmanRuntime/7.53.0"}
+{"level":"info","message":"OTP email sent to binkhalid267@gmail.com","service":"yareema-data-hub","timestamp":"2026-04-02 02:21:38"}
+{"level":"info","message":"NelloBytes API Request: /APIWalletBalanceV1.asp","params":{"APIKey":"1N6P675ASG2341TWAMI0979GVVTMCCGI83AZ54I6H5JBN2WE1E467642F15HG661","UserID":"CK101269269"},"service":"yareema-data-hub","timestamp":"2026-04-02 02:25:53"}
+{"level":"info","message":"NelloBytes API Response: /APIWalletBalanceV1.asp","response":{"balance":"58.19","date":"2nd-Apr-2026","id":"CK101269269","phoneno":"08021580029"},"service":"yareema-data-hub","timestamp":"2026-04-02 02:25:53"}
+{"level":"warn","message":"Unable to fetch balance for provider pluginng: Pluginng wallet balance is not exposed by the available API responses.","service":"yareema-data-hub","timestamp":"2026-04-02 02:25:56"}
+{"level":"info","message":"API balance alert check completed: 1 low, 0 sent","service":"yareema-data-hub","timestamp":"2026-04-02 02:25:56"}
+{"ip":"::1","level":"info","message":"POST /api/v1/auth/login","service":"yareema-data-hub","timestamp":"2026-04-02 02:27:07","userAgent":"PostmanRuntime/7.53.0"}
+{"level":"info","message":"OTP email sent to binkhalid267@gmail.com","service":"yareema-data-hub","timestamp":"2026-04-02 02:27:10"}

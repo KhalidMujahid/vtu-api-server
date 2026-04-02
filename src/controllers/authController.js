@@ -42,7 +42,11 @@ const generateOTP = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
-const isAdminRole = (role) => ['admin', 'superadmin', 'super_admin', 'staff', 'support'].includes(role);
+const ADMIN_ROLES = ['admin', 'superadmin', 'super_admin', 'staff', 'support'];
+const isAdminRole = (role) => ADMIN_ROLES.includes(role);
+const hasAdminPrivileges = (user) =>
+  isAdminRole(user?.role) ||
+  (Array.isArray(user?.roles) && user.roles.some((role) => isAdminRole(role)));
 
 const sendTwoFactorEmailCode = async (user) => {
   const otp = generateOTP();
@@ -186,9 +190,22 @@ exports.login = async (req, res, next) => {
       );
     }
 
-    const twoFactorEnabledForAdmin = Boolean(user?.twoFactor?.enabled && isAdminRole(user.role));
+    const twoFactorEnabledForAdmin = Boolean(user?.twoFactor?.enabled && hasAdminPrivileges(user));
     if (twoFactorEnabledForAdmin) {
       const twoFactorMethod = user.twoFactor.method || 'email';
+
+      if (!['email', 'authenticator'].includes(twoFactorMethod)) {
+        return next(new AppError('Invalid two-factor method configured for this account', 400));
+      }
+
+      if (twoFactorMethod === 'authenticator' && !user?.twoFactor?.authenticatorSecret) {
+        return next(
+          new AppError(
+            'Authenticator 2FA is enabled but not properly configured. Please reset 2FA in admin settings.',
+            400
+          )
+        );
+      }
 
       if (!twoFactorCode) {
         if (twoFactorMethod === 'email') {
@@ -283,12 +300,10 @@ exports.verifyOTP = async (req, res, next) => {
       return next(new AppError("Too many attempts. Try again later.", 429));
     }
 
-    // Check if verification token exists
     if (!user.verificationToken) {
       return next(new AppError("No OTP found. Please request a new OTP.", 400));
     }
 
-    // Check if OTP has expired
     if (!user.verificationTokenExpires || user.verificationTokenExpires < Date.now()) {
       return next(new AppError("OTP has expired. Please request a new OTP.", 400));
     }
@@ -387,38 +402,6 @@ exports.resendOTP = async (req, res, next) => {
   }
 };
 
-// exports.forgotPassword = async (req, res, next) => {
-//   try {
-//     const { email } = req.body;
-
-//     const user = await User.findOne({ email });
-
-//     if (!user) {
-//       return next(new AppError("User not found", 404));
-//     }
-
-//     const otp = generateOTP();
-
-//     const hashedOTP = crypto.createHash("sha256").update(otp).digest("hex");
-
-//     user.resetPasswordToken = hashedOTP;
-//     user.resetPasswordExpires = Date.now() + 5 * 60 * 1000;
-
-//     await user.save();
-
-//     await sendOTPEmail(user.email, otp);
-
-//     res.status(200).json({
-//       status: "success",
-//       message: "Password reset OTP sent to email",
-//     });
-
-//     logger.info(`Password reset OTP sent: ${user.email}`);
-//   } catch (error) {
-//     next(error);
-//   }
-// };
-
 exports.resetPassword = async (req, res, next) => {
   try {
     const { email, otp, password } = req.body;
@@ -448,45 +431,6 @@ exports.resetPassword = async (req, res, next) => {
     next(error);
   }
 };
-
-// exports.setTransactionPin = async (req, res, next) => {
-//   try {
-//     const { transactionPin } = req.body;
-
-//     if (!transactionPin) {
-//       return next(new AppError("Please provide a transaction PIN", 400));
-//     }
-
-//     if (!/^\d{4}$/.test(transactionPin)) {
-//       return next(new AppError("PIN must be 4 digits", 400));
-//     }
-
-//     // Check if user is authenticated
-//     if (!req.user || !req.user.id) {
-//       return next(new AppError("You are not logged in. Please log in to set your PIN.", 401));
-//     }
-
-//     const user = await User.findById(req.user.id || req.user._id);
-
-//     if (user.transactionPin) {
-//       return next(new AppError("Transaction PIN already set", 400));
-//     }
-
-//     user.transactionPin = transactionPin;
-//     user.pin = true;
-
-//     await user.save();
-
-//     res.status(200).json({
-//       status: "success",
-//       message: "Transaction PIN set successfully",
-//     });
-
-//     logger.info(`Transaction PIN set for user: ${user.email}`);
-//   } catch (error) {
-//     next(error);
-//   }
-// };
 
 exports.changePassword = async (req, res, next) => {
   try {
@@ -527,128 +471,6 @@ exports.getProfile = async (req, res, next) => {
   }
 };
 
-// exports.verifyOTP = async (req, res, next) => {
-//   try {
-//     const { email, otp, verificationType = "email" } = req.body;
-
-//     if (!email || !otp) {
-//       return next(new AppError("Please provide email and OTP", 400));
-//     }
-
-//     const user = await User.findOne({ email: email.toLowerCase().trim() });
-
-//     if (!user) {
-//       return next(new AppError("User not found", 404));
-//     }
-
-//     if (user.otpBlockedUntil && user.otpBlockedUntil > Date.now()) {
-//       return next(new AppError("Too many attempts. Try again later.", 429));
-//     }
-
-//     // Check if verification token exists
-//     if (!user.verificationToken) {
-//       return next(new AppError("No OTP found. Please request a new OTP.", 400));
-//     }
-
-//     // Check if OTP has expired
-//     if (!user.verificationTokenExpires || user.verificationTokenExpires < Date.now()) {
-//       return next(new AppError("OTP has expired. Please request a new OTP.", 400));
-//     }
-
-//     const hashedToken = crypto.createHash("sha256").update(otp.trim()).digest("hex");
-
-//     if (user.verificationToken !== hashedToken) {
-//       user.otpAttempts = (user.otpAttempts || 0) + 1;
-
-//       if (user.otpAttempts >= 5) {
-//         user.otpBlockedUntil = Date.now() + 15 * 60 * 1000;
-//       }
-
-//       await user.save();
-
-//       const attemptsLeft = 5 - user.otpAttempts;
-//       if (attemptsLeft > 0) {
-//         return next(new AppError(`Invalid OTP. ${attemptsLeft} attempts remaining.`, 400));
-//       }
-//       return next(new AppError("Too many attempts. Try again later.", 429));
-//     }
-
-//     user.otpAttempts = 0;
-//     user.otpBlockedUntil = undefined;
-
-//     if (verificationType === "email") {
-//       user.isEmailVerified = true;
-//     }
-
-//     if (verificationType === "phone") {
-//       user.isPhoneVerified = true;
-//     }
-
-//     user.verificationToken = undefined;
-//     user.verificationTokenExpires = undefined;
-
-//     await user.save();
-
-//     res.status(200).json({
-//       status: "success",
-//       message: "OTP verified successfully",
-//     });
-
-//     logger.info(`User verified ${verificationType}: ${user.email}`);
-//   } catch (error) {
-//     next(error);
-//   }
-// };
-
-// exports.resendOTP = async (req, res, next) => {
-//   try {
-//     const { email, verificationType = "email" } = req.body;
-
-//     const user = await User.findOne({ email: email.toLowerCase().trim() });
-
-//     if (!user) {
-//       return next(new AppError("User not found", 404));
-//     }
-
-//     if (user.otpResendAfter && user.otpResendAfter > Date.now()) {
-//       return next(
-//         new AppError("Please wait before requesting another OTP", 429)
-//       );
-//     }
-
-//     const otp = generateOTP();
-
-//     const verificationToken = crypto
-//       .createHash("sha256")
-//       .update(otp)
-//       .digest("hex");
-
-//     user.verificationToken = verificationToken;
-//     user.verificationTokenExpires = Date.now() + 5 * 60 * 1000;
-
-//     user.otpResendAfter = Date.now() + 60 * 1000;
-
-//     await user.save();
-
-//     if (verificationType === "email") {
-//       await sendOTPEmail(user.email, otp);
-//     }
-
-//     if (verificationType === "phone") {
-//       await sendOTPSMS(user.phoneNumber, otp);
-//     }
-
-//     res.status(200).json({
-//       status: "success",
-//       message: "OTP sent successfully",
-//     });
-
-//     logger.info(`OTP resent to ${verificationType}: ${user.email}`);
-//   } catch (error) {
-//     next(error);
-//   }
-// };
-
 exports.forgotPassword = async (req, res, next) => {
   try {
     const { email } = req.body;
@@ -681,36 +503,6 @@ exports.forgotPassword = async (req, res, next) => {
   }
 };
 
-// exports.resetPassword = async (req, res, next) => {
-//   try {
-//     const { email, otp, password } = req.body;
-
-//     const hashedOTP = crypto.createHash("sha256").update(otp.trim()).digest("hex");
-
-//     const user = await User.findOne({
-//       email,
-//       resetPasswordToken: hashedOTP,
-//       resetPasswordExpires: { $gt: Date.now() },
-//     });
-
-//     if (!user) {
-//       return next(new AppError("Invalid or expired OTP", 400));
-//     }
-
-//     user.password = password;
-//     user.resetPasswordToken = undefined;
-//     user.resetPasswordExpires = undefined;
-
-//     await user.save();
-
-//     createSendToken(user, 200, res);
-
-//     logger.info(`Password reset successful: ${user.email}`);
-//   } catch (error) {
-//     next(error);
-//   }
-// };
-
 exports.setTransactionPin = async (req, res, next) => {
   try {
     const { transactionPin } = req.body;
@@ -723,7 +515,6 @@ exports.setTransactionPin = async (req, res, next) => {
       return next(new AppError("PIN must be 4 digits", 400));
     }
 
-    // Check if user is authenticated
     if (!req.user || !req.user.id) {
       return next(new AppError("You are not logged in. Please log in to set your PIN.", 401));
     }
@@ -745,45 +536,6 @@ exports.setTransactionPin = async (req, res, next) => {
     });
 
     logger.info(`Transaction PIN set for user: ${user.email}`);
-  } catch (error) {
-    next(error);
-  }
-};
-
-// exports.changePassword = async (req, res, next) => {
-//   try {
-//     const { currentPassword, newPassword } = req.body;
-    
-//     const user = await User.findById(req.user.id).select('+password');
-    
-//     if (!(await user.comparePassword(currentPassword))) {
-//       return next(new AppError('Current password is incorrect', 401));
-//     }
-    
-//     user.password = newPassword;
-//     await user.save();
-    
-//     res.status(200).json({
-//       status: 'success',
-//       message: 'Password changed successfully',
-//     });
-    
-//     logger.info(`Password changed for user: ${user.email}`);
-//   } catch (error) {
-//     next(error);
-//   }
-// };
-
-exports.getProfile = async (req, res, next) => {
-  try {
-    const user = await User.findById(req.user.id);
-    
-    res.status(200).json({
-      status: 'success',
-      data: {
-        user,
-      },
-    });
   } catch (error) {
     next(error);
   }

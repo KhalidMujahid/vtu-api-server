@@ -133,7 +133,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"john.doe@example.com\",\n  \"password\": \"Password@123\"\n}"
+              "raw": "{\n  \"email\": \"john.doe@example.com\",\n  \"password\": \"Password@123\",\n  \"twoFactorCode\": \"123456\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/auth/login",
@@ -147,7 +147,7 @@
                 "login"
               ]
             },
-            "description": "Login with email and password"
+            "description": "Login with email and password. For accounts with 2FA enabled, resend this request with twoFactorCode."
           },
           "response": []
         },
@@ -476,7 +476,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"john.doe@example.com\",\n  \"password\": \"Password@123\"\n}"
+              "raw": "{\n  \"email\": \"john.doe@example.com\",\n  \"password\": \"Password@123\",\n  \"twoFactorCode\": \"123456\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/auth/login",
@@ -2116,7 +2116,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"admin@yareemadata.com\",\n  \"password\": \"Admin@1234\"\n}"
+              "raw": "{\n  \"email\": \"admin@yareemadata.com\",\n  \"password\": \"Admin@1234\",\n  \"twoFactorCode\": \"123456\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/auth/login",
@@ -2130,7 +2130,7 @@
                 "login"
               ]
             },
-            "description": "Admin login (uses same endpoint)"
+            "description": "Admin login (uses same endpoint). If 2FA is enabled, first call without twoFactorCode to get pending response, then call again with twoFactorCode."
           },
           "response": []
         },
@@ -3860,7 +3860,7 @@
             "description": "Verify code and enable 2FA",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"code\": \"123456\"\n}"
+              "raw": "{\n  \"method\": \"authenticator\",\n  \"code\": \"123456\"\n}"
             }
           },
           "response": []
@@ -3932,7 +3932,7 @@
             "description": "Disable admin 2FA after verification",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"code\": \"123456\"\n}"
+              "raw": "{\n  \"method\": \"email\",\n  \"code\": \"123456\"\n}"
             }
           },
           "response": []
