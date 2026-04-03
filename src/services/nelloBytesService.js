@@ -52,12 +52,15 @@ class NelloBytesService {
     ikedc: '02',
     aedc: '03',
     kedco: '04',
-    kaedco: '04',
-    kaedc: '04',
+    kaedco: '08',
+    kaedc: '08',
     phedc: '05',
     jedc: '06',
     ibedc: '07',
-    bedc: '08',
+    eedc: '09',
+    bedc: '10',
+    yedc: '11',
+    aple: '12',
   };
 
   static meterTypes = {
@@ -73,7 +76,11 @@ class NelloBytesService {
     '05': 'phedc',
     '06': 'jedc',
     '07': 'ibedc',
-    '08': 'bedc',
+    '08': 'kaedc',
+    '09': 'eedc',
+    '10': 'bedc',
+    '11': 'yedc',
+    '12': 'aple',
   };
 
   static normalizeMobileNumber(phoneNumber) {
@@ -106,11 +113,16 @@ class NelloBytesService {
       kedco: 'kedco',
       kano: 'kedco',
       kanoelectric: 'kedco',
+      kaduna: 'kaedc',
+      kadunaelectric: 'kaedc',
       portharcourt: 'phedc',
       phed: 'phedc',
       jos: 'jedc',
       ibadan: 'ibedc',
+      enugu: 'eedc',
       benin: 'bedc',
+      yola: 'yedc',
+      aba: 'aple',
     };
 
     const normalizedName = aliases[value] || value;
@@ -132,29 +144,81 @@ class NelloBytesService {
   }
 
   static normalizeElectricityDiscosResponse(response) {
+    const safeResolveElectricityCompany = (candidate) => {
+      try {
+        return this.resolveElectricityCompany(candidate);
+      } catch (error) {
+        return null;
+      }
+    };
+
+    const normalizeProducts = (products = []) => {
+      if (!Array.isArray(products)) return [];
+
+      return products.map((product = {}) => ({
+        id: String(product.PRODUCT_ID || product.product_id || product.id || '').trim() || null,
+        type: String(product.PRODUCT_TYPE || product.product_type || product.type || '').trim() || null,
+        discountAmount: Number(product.PRODUCT_DISCOUNT_AMOUNT ?? product.product_discount_amount ?? product.discount_amount ?? NaN),
+        discount: String(product.PRODUCT_DISCOUNT || product.product_discount || product.discount || '').trim() || null,
+        minAmount: Number(product.MINAMOUNT ?? product.minamount ?? product.minAmount ?? NaN),
+        maxAmount: Number(product.MAXAMOUNT ?? product.maxamount ?? product.maxAmount ?? NaN),
+      })).map((product) => ({
+        ...product,
+        discountAmount: Number.isNaN(product.discountAmount) ? null : product.discountAmount,
+        minAmount: Number.isNaN(product.minAmount) ? null : product.minAmount,
+        maxAmount: Number.isNaN(product.maxAmount) ? null : product.maxAmount,
+      }));
+    };
+
+    const electricCompanyData = response?.ELECTRIC_COMPANY;
+    if (electricCompanyData && typeof electricCompanyData === 'object') {
+      const parsed = [];
+
+      Object.entries(electricCompanyData).forEach(([companyKey, companyValue]) => {
+        if (!Array.isArray(companyValue)) return;
+
+        companyValue.forEach((item = {}) => {
+          const explicitCode = String(item.ID || item.id || '').trim();
+          const resolved = safeResolveElectricityCompany(explicitCode)
+            || safeResolveElectricityCompany(item.NAME || item.name)
+            || safeResolveElectricityCompany(companyKey);
+
+          parsed.push({
+            code: resolved?.code || explicitCode || null,
+            key: resolved?.key || String(companyKey || '').trim().toLowerCase() || null,
+            name: String(item.NAME || item.name || companyKey || '').trim(),
+            products: normalizeProducts(item.PRODUCT || item.product),
+          });
+        });
+      });
+
+      return parsed.filter((item) => item.code || item.name);
+    }
+
     const raw = response?.DISCOS || response?.discos || response?.data || response;
 
     if (Array.isArray(raw)) {
       return raw.map((item) => {
         const code = String(item.code || item.id || item.disco_code || item.value || '').trim();
         const name = String(item.name || item.disco || item.label || '').trim();
-        const resolved = code ? this.resolveElectricityCompany(code) : this.resolveElectricityCompany(name);
+        const resolved = safeResolveElectricityCompany(code) || safeResolveElectricityCompany(name);
 
         return {
-          code: resolved.code,
-          key: resolved.key,
-          name: name || resolved.key.toUpperCase(),
+          code: resolved?.code || code || null,
+          key: resolved?.key || null,
+          name: name || resolved?.key?.toUpperCase() || code,
         };
       });
     }
 
     if (raw && typeof raw === 'object') {
       return Object.entries(raw).map(([code, value]) => {
-        const resolved = this.resolveElectricityCompany(code);
+        const resolved = safeResolveElectricityCompany(code)
+          || safeResolveElectricityCompany(value?.name || value?.disco || value);
         return {
-          code: resolved.code,
-          key: resolved.key,
-          name: typeof value === 'string' ? value : value?.name || value?.disco || resolved.key.toUpperCase(),
+          code: resolved?.code || code,
+          key: resolved?.key || null,
+          name: typeof value === 'string' ? value : value?.name || value?.disco || resolved?.key?.toUpperCase() || code,
         };
       });
     }

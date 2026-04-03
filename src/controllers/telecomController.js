@@ -350,6 +350,59 @@ function normalizeNigerianPhoneNumber(phoneNumber = '') {
   return '';
 }
 
+function normalizeCallbackStatus(input = '') {
+  return String(input || '').trim().toUpperCase();
+}
+
+function extractNelloCallbackFields(data = {}) {
+  return {
+    orderId: String(data.orderid || data.orderId || '').trim(),
+    requestId: String(data.requestid || data.requestId || '').trim(),
+    statusCode: String(data.statuscode || data.statusCode || '').trim(),
+    orderStatus: normalizeCallbackStatus(data.orderstatus || data.orderStatus),
+    rawStatus: normalizeCallbackStatus(data.status),
+    remark: data.orderremark || data.orderRemark || data.remark || data.message || '',
+  };
+}
+
+function classifyNelloCallbackStatus({ statusCode = '', orderStatus = '', rawStatus = '' } = {}) {
+  const code = String(statusCode).trim();
+  const normalizedOrderStatus = normalizeCallbackStatus(orderStatus);
+  const normalizedRawStatus = normalizeCallbackStatus(rawStatus);
+  const statusSignals = [normalizedOrderStatus, normalizedRawStatus].filter(Boolean);
+
+  if (code === '200' || statusSignals.includes('ORDER_COMPLETED')) {
+    return 'successful';
+  }
+
+  if (code === '100' || statusSignals.includes('ORDER_RECEIVED') || statusSignals.includes('ORDER_ONHOLD')) {
+    return 'pending';
+  }
+
+  const explicitFailureStatuses = new Set([
+    'FAILED',
+    'FAIL',
+    'ERROR',
+    'REJECTED',
+    'CANCELLED',
+    'ORDER_CANCELLED',
+    'ORDER_FAILED',
+    'INVALID_MOBILE_NUMBER',
+    'INVALID_ACCOUNTNO',
+    'INSUFFICIENT_BALANCE',
+  ]);
+
+  if (code && !['100', '200'].includes(code)) {
+    return 'failed';
+  }
+
+  if (statusSignals.some((signal) => explicitFailureStatuses.has(signal))) {
+    return 'failed';
+  }
+
+  return 'unknown';
+}
+
 async function resolvePluginngDataSubcategory({ attemptPricing = {}, network, planIdentifier }) {
   const fromPricing = (
     attemptPricing?.providerMeta?.subcategoryId ||
@@ -961,13 +1014,17 @@ exports.purchaseAirtime = async (req, res, next) => {
 
 exports.airtimeCallback = async (req, res) => {
   try {
+    const data = { ...(req.body || {}), ...(req.query || {}) };
+    const { orderId, requestId, statusCode, orderStatus, rawStatus, remark } = extractNelloCallbackFields(data);
 
-    const { orderid, requestid, orderstatus, statuscode, orderremark } = req.query;
+    if (!orderId && !requestId) {
+      return res.status(400).send('Missing orderid/requestid');
+    }
 
     const transaction = await Transaction.findOne({
       $or: [
-        ...(orderid ? [{ "service.orderId": orderid }, { reference: orderid }] : []),
-        ...(requestid ? [{ "service.requestId": requestid }, { reference: requestid }] : []),
+        ...(orderId ? [{ "service.orderId": orderId }, { reference: orderId }] : []),
+        ...(requestId ? [{ "service.requestId": requestId }, { reference: requestId }] : []),
       ],
     });
 
@@ -975,17 +1032,23 @@ exports.airtimeCallback = async (req, res) => {
       return res.send("Transaction not found");
     }
 
-    if (transaction.status === "successful") {
+    if (transaction.status === "successful" || transaction.status === 'failed') {
       return res.send("Already processed");
     }
 
-    if (orderstatus === "ORDER_COMPLETED" || statuscode === "200") {
+    transaction.providerResponse = {
+      ...(transaction.providerResponse || {}),
+      callback: data,
+    };
 
+    const mappedStatus = classifyNelloCallbackStatus({ statusCode, orderStatus, rawStatus });
+
+    if (mappedStatus === "successful") {
       transaction.status = "successful";
 
       transaction.statusHistory.push({
         status: "successful",
-        note: orderremark || "Airtime delivered successfully",
+        note: remark || "Airtime delivered successfully",
         timestamp: new Date()
       });
 
@@ -999,32 +1062,29 @@ exports.airtimeCallback = async (req, res) => {
         transaction.service?.phoneNumber
       );
 
-    } else if (orderstatus === "ORDER_RECEIVED" || orderstatus === "ORDER_ONHOLD" || statuscode === "100") {
+    } else if (mappedStatus === "pending") {
       transaction.status = "pending";
       transaction.statusHistory.push({
         status: "pending",
-        note: orderremark || "Order received, processing",
+        note: remark || "Order received, processing",
         timestamp: new Date()
       });
       await transaction.save();
-    } else {
+    } else if (mappedStatus === 'failed') {
 
       transaction.status = "failed";
 
       transaction.statusHistory.push({
         status: "failed",
-        note: orderremark || "Provider reported failure",
+        note: remark || rawStatus || orderStatus || "Provider reported failure",
         timestamp: new Date()
       });
 
       await transaction.save();
       
       // Refund wallet and send notification
-      const wallet = await Wallet.findOne({ user: transaction.user });
-      if (wallet) {
-        await refundTransactionToWallet(transaction, 'Airtime purchase refund');
-        await transaction.save();
-      }
+      await refundTransactionToWallet(transaction, 'Airtime purchase refund');
+      await transaction.save();
       
       await NotificationService.create({
         user: transaction.user,
@@ -1033,6 +1093,14 @@ exports.airtimeCallback = async (req, res) => {
         type: 'airtime_failed',
         reference: transaction.reference,
       });
+    } else {
+      transaction.status = "pending";
+      transaction.statusHistory.push({
+        status: "pending",
+        note: remark || rawStatus || orderStatus || "Callback received, awaiting terminal provider status",
+        timestamp: new Date()
+      });
+      await transaction.save();
 
     }
 
@@ -1113,12 +1181,16 @@ exports.cancelAirtimeTransaction = async (req, res, next) => {
 exports.airtimeWebhook = async (req, res) => {
   try {
     const data = { ...(req.body || {}), ...(req.query || {}) };
-    const { orderid, requestid, statuscode, status, orderstatus, orderremark } = data;
+    const { orderId, requestId, statusCode, orderStatus, rawStatus, remark } = extractNelloCallbackFields(data);
+
+    if (!orderId && !requestId) {
+      return res.status(400).send('Missing orderid/requestid');
+    }
 
     const transaction = await Transaction.findOne({
       $or: [
-        ...(orderid ? [{ 'service.orderId': orderid }, { reference: orderid }] : []),
-        ...(requestid ? [{ 'service.requestId': requestid }, { reference: requestid }] : []),
+        ...(orderId ? [{ 'service.orderId': orderId }, { reference: orderId }] : []),
+        ...(requestId ? [{ 'service.requestId': requestId }, { reference: requestId }] : []),
       ],
     });
     if (!transaction) return res.status(404).send('Transaction not found');
@@ -1127,21 +1199,25 @@ exports.airtimeWebhook = async (req, res) => {
       return res.status(200).send('Already processed');
     }
 
-    transaction.providerResponse = data;
+    transaction.providerResponse = {
+      ...(transaction.providerResponse || {}),
+      callback: data,
+    };
+    const mappedStatus = classifyNelloCallbackStatus({ statusCode, orderStatus, rawStatus });
 
-    if (statuscode === "100" || orderstatus === 'ORDER_RECEIVED' || orderstatus === 'ORDER_ONHOLD') {
+    if (mappedStatus === 'pending') {
       transaction.status = 'pending';
       transaction.statusHistory.push({
         status: 'pending',
-        note: orderremark || status || orderstatus || 'Order received',
+        note: remark || rawStatus || orderStatus || 'Order received',
         timestamp: new Date(),
       });
 
-    } else if (statuscode === "200" || orderstatus === 'ORDER_COMPLETED') {
+    } else if (mappedStatus === 'successful') {
       transaction.status = 'successful';
       transaction.statusHistory.push({
         status: 'successful',
-        note: orderremark || status || 'Confirmed by provider',
+        note: remark || rawStatus || 'Confirmed by provider',
         timestamp: new Date(),
       });
 
@@ -1153,19 +1229,16 @@ exports.airtimeWebhook = async (req, res) => {
         transaction.service?.phoneNumber
       );
 
-    } else {
+    } else if (mappedStatus === 'failed') {
       transaction.status = 'failed';
       transaction.statusHistory.push({
         status: 'failed',
-        note: orderremark || status || orderstatus || 'Provider failure',
+        note: remark || rawStatus || orderStatus || 'Provider failure',
         timestamp: new Date(),
       });
 
       // Refund wallet on failure
-      const wallet = await Wallet.findOne({ user: transaction.user });
-      if (wallet) {
-        await refundTransactionToWallet(transaction, 'Airtime purchase refund');
-      }
+      await refundTransactionToWallet(transaction, 'Airtime purchase refund');
 
       // Send notification for failed airtime purchase
       await NotificationService.create({
@@ -1174,6 +1247,13 @@ exports.airtimeWebhook = async (req, res) => {
         message: `Your airtime purchase of ₦${transaction.amount} to ${transaction.service?.phoneNumber} failed. Amount has been refunded.`,
         type: 'airtime_failed',
         reference: transaction.reference,
+      });
+    } else {
+      transaction.status = 'pending';
+      transaction.statusHistory.push({
+        status: 'pending',
+        note: remark || rawStatus || orderStatus || 'Callback received, awaiting terminal provider status',
+        timestamp: new Date(),
       });
     }
 
@@ -1387,123 +1467,107 @@ exports.smedataWebhook = async (req, res, next) => {
  */
 exports.nelloBytesWebhook = async (req, res, next) => {
   try {
-    // NelloBytes sends data as query string or JSON body
-    const queryData = req.query;
-    const bodyData = req.body;
-    
-    // Merge both - query params take precedence
-    const data = { ...bodyData, ...queryData };
-    
-    const { orderid, orderstatus, statuscode, orderremark, orderdate } = data;
+    const queryData = req.query || {};
+    const bodyData = req.body || {};
+    const payloads = Array.isArray(bodyData)
+      ? bodyData
+      : (Array.isArray(bodyData?.events) ? bodyData.events : [bodyData]);
+    const mergedPayloads = payloads.map((item) => ({ ...(item || {}), ...queryData }));
 
-    if (!orderid) {
-      logger.warn('NelloBytes webhook received without orderid');
-      return res.status(400).send('Missing orderid');
-    }
+    for (const data of mergedPayloads) {
+      const { orderId, requestId, statusCode, orderStatus, rawStatus, remark } = extractNelloCallbackFields(data);
 
-    logger.info(`NelloBytes webhook received: ${orderid}`, { data });
-
-    // Find transaction by orderId
-    const transaction = await Transaction.findOne({
-      $or: [
-        { 'service.orderId': orderid },
-        { reference: orderid }
-      ]
-    });
-
-    if (!transaction) {
-      logger.warn(`Transaction not found for orderid: ${orderid}`);
-      return res.status(404).send('Transaction not found');
-    }
-
-    // Skip if already processed
-    if (transaction.status === 'successful' || transaction.status === 'failed') {
-      logger.info(`Transaction ${transaction.reference} already processed`);
-      return res.status(200).send('Already processed');
-    }
-
-    const user = await User.findById(transaction.user);
-
-    // Handle different status codes
-    if (statuscode === '200' || orderstatus === 'ORDER_COMPLETED') {
-      // Success
-      transaction.status = 'successful';
-      transaction.statusHistory.push({
-        status: 'successful',
-        note: orderremark || 'Transaction completed successfully',
-        timestamp: new Date(),
-      });
-      await transaction.save();
-      
-      // Send notification based on transaction type
-      if (transaction.type === 'data_recharge') {
-        await NotificationService.dataPurchase(
-          transaction.user,
-          transaction.service?.network,
-          transaction.service?.plan,
-          transaction.service?.phoneNumber
-        );
-      } else if (transaction.type === 'airtime_recharge') {
-        await NotificationService.airtimePurchase(
-          transaction.user,
-          transaction.service?.network,
-          transaction.amount,
-          transaction.service?.phoneNumber
-        );
+      if (!orderId && !requestId) {
+        logger.warn('NelloBytes webhook received without orderid/requestid');
+        continue;
       }
-      
-      logger.info(`Transaction ${transaction.reference} marked as successful`);
-      
-    } else if (statuscode === '100' || orderstatus === 'ORDER_RECEIVED') {
-      // Order received, still processing
-      transaction.status = 'pending';
-      transaction.statusHistory.push({
-        status: 'pending',
-        note: orderremark || 'Order received, processing',
-        timestamp: new Date(),
+
+      logger.info(`NelloBytes webhook received: ${orderId || requestId}`, { data });
+
+      const transaction = await Transaction.findOne({
+        $or: [
+          ...(orderId ? [{ 'service.orderId': orderId }, { reference: orderId }] : []),
+          ...(requestId ? [{ 'service.requestId': requestId }, { reference: requestId }] : []),
+        ],
       });
-      await transaction.save();
-      
-    } else if (orderstatus === 'ORDER_ONHOLD') {
-      // Order on hold
-      transaction.status = 'pending';
-      transaction.statusHistory.push({
-        status: 'pending',
-        note: orderremark || 'Order on hold',
-        timestamp: new Date(),
-      });
-      await transaction.save();
-      
-    } else {
-      // Failed - refund wallet
-      if (user) {
+
+      if (!transaction) {
+        logger.warn(`Transaction not found for callback. orderId=${orderId} requestId=${requestId}`);
+        continue;
+      }
+
+      if (transaction.status === 'successful' || transaction.status === 'failed') {
+        continue;
+      }
+
+      transaction.providerResponse = {
+        ...(transaction.providerResponse || {}),
+        callback: data,
+      };
+
+      const mappedStatus = classifyNelloCallbackStatus({ statusCode, orderStatus, rawStatus });
+
+      if (mappedStatus === 'successful') {
+        transaction.status = 'successful';
+        transaction.statusHistory.push({
+          status: 'successful',
+          note: remark || 'Transaction completed successfully',
+          timestamp: new Date(),
+        });
+        await transaction.save();
+
+        if (transaction.type === 'data_recharge') {
+          await NotificationService.dataPurchase(
+            transaction.user,
+            transaction.service?.network,
+            transaction.service?.plan,
+            transaction.service?.phoneNumber
+          );
+        } else if (transaction.type === 'airtime_recharge') {
+          await NotificationService.airtimePurchase(
+            transaction.user,
+            transaction.service?.network,
+            transaction.amount,
+            transaction.service?.phoneNumber
+          );
+        }
+
+        logger.info(`Transaction ${transaction.reference} marked as successful`);
+      } else if (mappedStatus === 'pending' || mappedStatus === 'unknown') {
+        transaction.status = 'pending';
+        transaction.statusHistory.push({
+          status: 'pending',
+          note: remark || rawStatus || orderStatus || 'Order received, processing',
+          timestamp: new Date(),
+        });
+        await transaction.save();
+      } else {
         await refundTransactionToWallet(transaction, 'Transaction failed - refund');
+
+        transaction.status = 'failed';
+        transaction.statusHistory.push({
+          status: 'failed',
+          note: remark || rawStatus || orderStatus || 'Transaction failed',
+          timestamp: new Date(),
+        });
+        await transaction.save();
+
+        await NotificationService.create({
+          user: transaction.user,
+          title: 'Transaction Failed',
+          message: `Your ${transaction.type || 'transaction'} of ₦${transaction.amount} has failed. Amount has been refunded to your wallet.`,
+          type: 'transaction_failed',
+          reference: transaction.reference,
+        });
+
+        logger.info(`Transaction ${transaction.reference} marked as failed, wallet refunded`);
       }
-
-      transaction.status = 'failed';
-      transaction.statusHistory.push({
-        status: 'failed',
-        note: orderremark || 'Transaction failed',
-        timestamp: new Date(),
-      });
-      await transaction.save();
-
-      // Send failure notification
-      await NotificationService.create({
-        user: transaction.user,
-        title: 'Transaction Failed',
-        message: `Your ${transaction.type || 'transaction'} of ₦${transaction.amount} has failed. Amount has been refunded to your wallet.`,
-        type: 'transaction_failed',
-        reference: transaction.reference,
-      });
-      
-      logger.info(`Transaction ${transaction.reference} marked as failed, wallet refunded`);
     }
 
-    res.status(200).send('OK');
+    return res.status(200).send('OK');
   } catch (error) {
     logger.error('NelloBytes webhook error:', error);
-    res.status(500).send('Webhook error');
+    return res.status(500).send('Webhook error');
   }
 };
 

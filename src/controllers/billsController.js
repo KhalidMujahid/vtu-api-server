@@ -77,6 +77,59 @@ function normalizeExamTypeKey(value = '') {
     .replace(/^-|-$/g, '');
 }
 
+function normalizeCallbackStatus(input = '') {
+  return String(input || '').trim().toUpperCase();
+}
+
+function extractNelloCallbackFields(data = {}) {
+  return {
+    orderId: String(data.orderid || data.orderId || '').trim(),
+    requestId: String(data.requestid || data.requestId || '').trim(),
+    statusCode: String(data.statuscode || data.statusCode || '').trim(),
+    orderStatus: normalizeCallbackStatus(data.orderstatus || data.orderStatus),
+    rawStatus: normalizeCallbackStatus(data.status),
+    remark: data.orderremark || data.orderRemark || data.remark || data.status || data.message || '',
+  };
+}
+
+function classifyNelloCallbackStatus({ statusCode = '', orderStatus = '', rawStatus = '' } = {}) {
+  const code = String(statusCode).trim();
+  const normalizedOrderStatus = normalizeCallbackStatus(orderStatus);
+  const normalizedRawStatus = normalizeCallbackStatus(rawStatus);
+  const statusSignals = [normalizedOrderStatus, normalizedRawStatus].filter(Boolean);
+
+  if (code === '200' || statusSignals.includes('ORDER_COMPLETED')) {
+    return 'successful';
+  }
+
+  if (code === '100' || statusSignals.includes('ORDER_RECEIVED') || statusSignals.includes('ORDER_ONHOLD')) {
+    return 'pending';
+  }
+
+  const explicitFailureStatuses = new Set([
+    'FAILED',
+    'FAIL',
+    'ERROR',
+    'REJECTED',
+    'CANCELLED',
+    'ORDER_CANCELLED',
+    'ORDER_FAILED',
+    'INVALID_ACCOUNTNO',
+    'INVALID_METERNO',
+    'INSUFFICIENT_BALANCE',
+  ]);
+
+  if (code && !['100', '200'].includes(code)) {
+    return 'failed';
+  }
+
+  if (statusSignals.some((signal) => explicitFailureStatuses.has(signal))) {
+    return 'failed';
+  }
+
+  return 'unknown';
+}
+
 function resolveEducationExamType(value = '') {
   const normalized = normalizeExamTypeKey(value);
   const aliases = {
@@ -1375,11 +1428,7 @@ exports.nelloBytesWebhook = async (req, res, next) => {
     const mergedPayloads = payloads.map((item) => ({ ...(item || {}), ...queryData }));
 
     for (const data of mergedPayloads) {
-      const orderId = String(data.orderid || data.orderId || '').trim();
-      const requestId = String(data.requestid || data.requestId || '').trim();
-      const statusCode = String(data.statuscode || data.statusCode || '').trim();
-      const orderStatus = String(data.orderstatus || data.orderStatus || '').trim().toUpperCase();
-      const orderRemark = data.orderremark || data.orderRemark || data.status || '';
+      const { orderId, requestId, statusCode, orderStatus, rawStatus, remark } = extractNelloCallbackFields(data);
 
       if (!orderId && !requestId) {
         logger.warn('NelloBytes bills webhook received without orderid/requestid');
@@ -1404,13 +1453,18 @@ exports.nelloBytesWebhook = async (req, res, next) => {
         continue;
       }
 
-      const wallet = await Wallet.findOne({ user: transaction.user });
+      transaction.providerResponse = {
+        ...(transaction.providerResponse || {}),
+        callback: data,
+      };
 
-      if (statusCode === '200' || orderStatus === 'ORDER_COMPLETED') {
+      const mappedStatus = classifyNelloCallbackStatus({ statusCode, orderStatus, rawStatus });
+
+      if (mappedStatus === 'successful') {
         transaction.status = 'successful';
         transaction.statusHistory.push({
           status: 'successful',
-          note: orderRemark || 'Payment completed successfully',
+          note: remark || 'Payment completed successfully',
           timestamp: new Date(),
         });
         await transaction.save();
@@ -1432,23 +1486,21 @@ exports.nelloBytesWebhook = async (req, res, next) => {
             reference: transaction.reference,
           });
         }
-      } else if (statusCode === '100' || orderStatus === 'ORDER_RECEIVED' || orderStatus === 'ORDER_ONHOLD') {
+      } else if (mappedStatus === 'pending' || mappedStatus === 'unknown') {
         transaction.status = 'pending';
         transaction.statusHistory.push({
           status: 'pending',
-          note: orderRemark || 'Payment received, processing',
+          note: remark || rawStatus || orderStatus || 'Payment received, processing',
           timestamp: new Date(),
         });
         await transaction.save();
       } else {
-        if (wallet) {
-          await refundTransactionToWallet(transaction, 'Payment failed - refund', transaction.amount);
-        }
+        await refundTransactionToWallet(transaction, 'Payment failed - refund', transaction.amount);
 
         transaction.status = 'failed';
         transaction.statusHistory.push({
           status: 'failed',
-          note: orderRemark || 'Payment failed',
+          note: remark || rawStatus || orderStatus || 'Payment failed',
           timestamp: new Date(),
         });
         await transaction.save();
