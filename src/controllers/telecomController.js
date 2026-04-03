@@ -1126,6 +1126,58 @@ exports.queryAirtimeStatus = async (requestId) => {
   return NelloBytesService.queryAirtimeTransaction({ requestId });
 };
 
+async function reconcileSingleNelloAirtimeTransaction(transaction, providerResult) {
+  const mappedStatus = classifyNelloCallbackStatus({
+    statusCode: providerResult?.statusCode,
+    orderStatus: providerResult?.status,
+    rawStatus: providerResult?.status,
+  });
+
+  if (!transaction || ['successful', 'failed'].includes(transaction.status)) {
+    return { mappedStatus, updated: false };
+  }
+
+  transaction.providerResponse = {
+    ...(transaction.providerResponse || {}),
+    query: providerResult?.response || providerResult,
+  };
+
+  if (mappedStatus === 'successful') {
+    transaction.status = 'successful';
+    transaction.statusHistory = transaction.statusHistory || [];
+    transaction.statusHistory.push({
+      status: 'successful',
+      note: providerResult?.remark || providerResult?.status || 'Confirmed by provider query',
+      timestamp: new Date(),
+    });
+
+    await NotificationService.airtimePurchase(
+      transaction.user,
+      transaction.service?.network,
+      transaction.amount,
+      transaction.service?.phoneNumber
+    );
+    await transaction.save();
+    return { mappedStatus, updated: true };
+  }
+
+  if (mappedStatus === 'failed') {
+    transaction.status = 'failed';
+    transaction.statusHistory = transaction.statusHistory || [];
+    transaction.statusHistory.push({
+      status: 'failed',
+      note: providerResult?.remark || providerResult?.status || 'Failed per provider query',
+      timestamp: new Date(),
+    });
+
+    await refundTransactionToWallet(transaction, 'Airtime purchase refund');
+    await transaction.save();
+    return { mappedStatus, updated: true };
+  }
+
+  return { mappedStatus, updated: false };
+}
+
 exports.queryAirtimeTransaction = async (req, res, next) => {
   try {
     const { orderId, requestId } = req.body;
@@ -1141,11 +1193,6 @@ exports.queryAirtimeTransaction = async (req, res, next) => {
     }
 
     const result = await NelloBytesService.queryAirtimeTransaction({ orderId, requestId });
-    const mappedStatus = classifyNelloCallbackStatus({
-      statusCode: result.statusCode,
-      orderStatus: result.status,
-      rawStatus: result.status,
-    });
 
     const transaction = await Transaction.findOne({
       $or: [
@@ -1155,49 +1202,7 @@ exports.queryAirtimeTransaction = async (req, res, next) => {
       ],
     });
 
-    if (transaction && !['successful', 'failed'].includes(transaction.status)) {
-      transaction.providerResponse = {
-        ...(transaction.providerResponse || {}),
-        query: result.response,
-      };
-
-      if (mappedStatus === 'successful') {
-        transaction.status = 'successful';
-        transaction.statusHistory = transaction.statusHistory || [];
-        transaction.statusHistory.push({
-          status: 'successful',
-          note: result.remark || result.status || 'Confirmed by provider query',
-          timestamp: new Date(),
-        });
-
-        await NotificationService.airtimePurchase(
-          transaction.user,
-          transaction.service?.network,
-          transaction.amount,
-          transaction.service?.phoneNumber
-        );
-      } else if (mappedStatus === 'failed') {
-        transaction.status = 'failed';
-        transaction.statusHistory = transaction.statusHistory || [];
-        transaction.statusHistory.push({
-          status: 'failed',
-          note: result.remark || result.status || 'Failed per provider query',
-          timestamp: new Date(),
-        });
-
-        await refundTransactionToWallet(transaction, 'Airtime purchase refund');
-      } else {
-        transaction.status = 'pending';
-        transaction.statusHistory = transaction.statusHistory || [];
-        transaction.statusHistory.push({
-          status: 'pending',
-          note: result.remark || result.status || 'Still pending per provider query',
-          timestamp: new Date(),
-        });
-      }
-
-      await transaction.save();
-    }
+    await reconcileSingleNelloAirtimeTransaction(transaction, result);
 
     return res.status(200).json({
       status: 'success',

@@ -4,8 +4,8 @@ const logger = require('../utils/logger');
 class BulkSmsNigeriaService {
   static getConfig() {
     return {
-      baseUrl: process.env.BULKSMS_NIGERIA_BASE_URL || 'https://www.bulksmsnigeria.com/api/v2',
-      apiToken: process.env.BULKSMS_NIGERIA_API_TOKEN || '',
+      baseUrl: process.env.BULKSMS_NIGERIA_BASE_URL || 'https://www.bulksmsnigeria.com/api/v3',
+      apiToken: process.env.BULKSMS_NIGERIA_API_TOKEN || process.env.BULKSMS_NIGERIA_BEARER_TOKEN || '',
       defaultSenderId: process.env.BULKSMS_NIGERIA_SENDER_ID || '',
       timeout: Number(process.env.BULKSMS_NIGERIA_TIMEOUT_MS || 45000),
     };
@@ -113,7 +113,7 @@ class BulkSmsNigeriaService {
   static async getBalance() {
     try {
       const response = await axios.get(
-        `${this.getConfig().baseUrl}/balance`,
+        `${this.getConfig().baseUrl}/sms/balance`,
         {
           headers: this.getHeaders(),
           timeout: this.getConfig().timeout,
