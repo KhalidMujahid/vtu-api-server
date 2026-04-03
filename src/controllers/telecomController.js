@@ -380,6 +380,16 @@ function classifyNelloCallbackStatus({ statusCode = '', orderStatus = '', rawSta
   }
 
   const explicitFailureStatuses = new Set([
+    'INVALID_CREDENTIALS',
+    'MISSING_CREDENTIALS',
+    'MISSING_USERID',
+    'MISSING_APIKEY',
+    'MISSING_MOBILENETWORK',
+    'MISSING_AMOUNT',
+    'INVALID_AMOUNT',
+    'MINIMUM_50',
+    'MINIMUM_200000',
+    'INVALID_RECIPIENT',
     'FAILED',
     'FAIL',
     'ERROR',
@@ -775,9 +785,9 @@ const networkMap = {
 
 const profitConfig = {
   MTN: 3,
-  GLO: 4,
+  GLO: 8,
   AIRTEL: 3,
-  "9MOBILE": 2,
+  "9MOBILE": 7,
 };
 
 exports.purchaseAirtime = async (req, res, next) => {

@@ -88,11 +88,23 @@ class NelloBytesService {
       return '';
     }
 
-    return String(phoneNumber)
-      .trim()
-      .replace(/^\+234/, '')
-      .replace(/^234/, '')
-      .replace(/^0/, '');
+    const digits = String(phoneNumber).replace(/\D/g, '');
+
+    if (!digits) return '';
+
+    if (digits.length === 13 && digits.startsWith('234')) {
+      return `0${digits.substring(3)}`;
+    }
+
+    if (digits.length === 11 && digits.startsWith('0')) {
+      return digits;
+    }
+
+    if (digits.length === 10) {
+      return `0${digits}`;
+    }
+
+    return digits;
   }
 
   static resolveElectricityCompany(electricCompany) {
