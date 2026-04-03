@@ -1141,12 +1141,71 @@ exports.queryAirtimeTransaction = async (req, res, next) => {
     }
 
     const result = await NelloBytesService.queryAirtimeTransaction({ orderId, requestId });
+    const mappedStatus = classifyNelloCallbackStatus({
+      statusCode: result.statusCode,
+      orderStatus: result.status,
+      rawStatus: result.status,
+    });
+
+    const transaction = await Transaction.findOne({
+      $or: [
+        ...(result.orderId ? [{ 'service.orderId': result.orderId }, { reference: result.orderId }] : []),
+        ...(result.requestId ? [{ 'service.requestId': result.requestId }, { reference: result.requestId }] : []),
+        ...(requestId ? [{ reference: requestId }] : []),
+      ],
+    });
+
+    if (transaction && !['successful', 'failed'].includes(transaction.status)) {
+      transaction.providerResponse = {
+        ...(transaction.providerResponse || {}),
+        query: result.response,
+      };
+
+      if (mappedStatus === 'successful') {
+        transaction.status = 'successful';
+        transaction.statusHistory = transaction.statusHistory || [];
+        transaction.statusHistory.push({
+          status: 'successful',
+          note: result.remark || result.status || 'Confirmed by provider query',
+          timestamp: new Date(),
+        });
+
+        await NotificationService.airtimePurchase(
+          transaction.user,
+          transaction.service?.network,
+          transaction.amount,
+          transaction.service?.phoneNumber
+        );
+      } else if (mappedStatus === 'failed') {
+        transaction.status = 'failed';
+        transaction.statusHistory = transaction.statusHistory || [];
+        transaction.statusHistory.push({
+          status: 'failed',
+          note: result.remark || result.status || 'Failed per provider query',
+          timestamp: new Date(),
+        });
+
+        await refundTransactionToWallet(transaction, 'Airtime purchase refund');
+      } else {
+        transaction.status = 'pending';
+        transaction.statusHistory = transaction.statusHistory || [];
+        transaction.statusHistory.push({
+          status: 'pending',
+          note: result.remark || result.status || 'Still pending per provider query',
+          timestamp: new Date(),
+        });
+      }
+
+      await transaction.save();
+    }
+
     return res.status(200).json({
       status: 'success',
       data: {
         provider: activeProvider,
         orderId: result.orderId,
         requestId: result.requestId || requestId || null,
+        localStatus: transaction?.status || null,
         providerStatusCode: result.statusCode,
         providerStatus: result.status,
         providerRemark: result.remark,
