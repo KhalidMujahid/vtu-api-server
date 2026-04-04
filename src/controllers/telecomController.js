@@ -548,7 +548,7 @@ exports.getDataPlans = async (req, res, next) => {
       });
     }
 
-    return next(new AppError(`Data plans endpoint is not implemented for provider source '${selectedSource}'`, 400));
+    return next(new AppError('Data plans are currently unavailable. Please try again shortly.', 400));
   } catch (error) {
     console.error('getDataPlans error:', error);
     next(error);
@@ -809,7 +809,7 @@ exports.purchaseData = async (req, res, next) => {
       await transaction.save();
 
       logger.error(`Data purchase failed → ${err.message}`);
-      return next(new AppError(`Data purchase failed: ${err.message}`, 500));
+      return next(new AppError('Data purchase failed. Please try again shortly.', 500));
     }
   } catch (error) {
     next(error);
@@ -1491,7 +1491,7 @@ exports.purchaseRechargePin = async (req, res, next) => {
 
     try {
       if (!(activeProvider === 'clubkonnect' || providerConfig.source === 'nellobytes')) {
-        throw new AppError(`Recharge PIN purchase is not implemented for provider '${activeProvider}'`, 400);
+        throw new AppError('Recharge PIN service is currently unavailable. Please try again later.', 400);
       }
 
       const providerResponse = await NelloBytesService.buyEPIN({
@@ -1551,7 +1551,7 @@ exports.purchaseRechargePin = async (req, res, next) => {
       });
       await transaction.save();
 
-      return next(new AppError(`Recharge PIN purchase failed: ${err.message}`, 500));
+      return next(new AppError('Recharge PIN purchase failed. Please try again shortly.', 500));
     }
   } catch (error) {
     next(error);
@@ -1938,7 +1938,7 @@ exports.purchaseAirtimeNigeriaData = async (req, res, next) => {
       await transaction.save();
 
       logger.error(`AirtimeNigeria data purchase failed → ${err.message}`);
-      return next(new AppError(`Data purchase failed: ${err.message}`, 500));
+      return next(new AppError('Data purchase failed. Please try again shortly.', 500));
     }
   } catch (error) {
     next(error);
@@ -2072,7 +2072,7 @@ exports.purchaseAirtimeNigeriaAirtime = async (req, res, next) => {
       await transaction.save();
 
       logger.error(`AirtimeNigeria airtime purchase failed → ${err.message}`);
-      return next(new AppError(`Airtime purchase failed: ${err.message}`, 500));
+      return next(new AppError('Airtime purchase failed. Please try again shortly.', 500));
     }
   } catch (error) {
     next(error);
@@ -2484,7 +2484,7 @@ exports.purchaseSmePlugData = async (req, res, next) => {
       await transaction.save();
 
       logger.error(`SMEPlug data purchase failed → ${err.message}`);
-      return next(new AppError(`Data purchase failed: ${err.message}`, 500));
+      return next(new AppError('Data purchase failed. Please try again shortly.', 500));
     }
   } catch (error) {
     next(error);
@@ -2618,7 +2618,7 @@ exports.purchaseSmePlugAirtime = async (req, res, next) => {
       await transaction.save();
 
       logger.error(`SMEPlug airtime purchase failed → ${err.message}`);
-      return next(new AppError(`Airtime purchase failed: ${err.message}`, 500));
+      return next(new AppError('Airtime purchase failed. Please try again shortly.', 500));
     }
   } catch (error) {
     next(error);
@@ -2815,7 +2815,7 @@ exports.purchasePluginngData = async (req, res, next) => {
       transaction.failureReason = err.message;
       transaction.statusHistory.push({ status: 'failed', note: err.message, timestamp: new Date() });
       await transaction.save();
-      return next(new AppError(`Data purchase failed: ${err.message}`, 500));
+      return next(new AppError('Data purchase failed. Please try again shortly.', 500));
     }
   } catch (error) {
     next(error);
@@ -2951,7 +2951,7 @@ exports.purchasePluginngAirtime = async (req, res, next) => {
       transaction.failureReason = err.message;
       transaction.statusHistory.push({ status: 'failed', note: err.message, timestamp: new Date() });
       await transaction.save();
-      return next(new AppError(`Airtime purchase failed: ${err.message}`, 500));
+      return next(new AppError('Airtime purchase failed. Please try again shortly.', 500));
     }
   } catch (error) {
     next(error);

@@ -7,6 +7,8 @@ const { sendApiBalanceAlertEmail } = require('../utils/emailService');
 
 class ProviderPurchaseGuardService {
   static lastAlertAtByProvider = new Map();
+  static CLIENT_UNAVAILABLE_MESSAGE = 'Service is temporarily unavailable. Please try again shortly.';
+  static CLIENT_LOW_BALANCE_MESSAGE = 'Service is temporarily unavailable at the moment. Please try again later.';
 
   static async getAdminAlertEmails() {
     const config = await Settings.findOne({ key: 'notification.apiBalanceAlertEmails' }).lean();
@@ -59,22 +61,17 @@ class ProviderPurchaseGuardService {
       balanceInfo = await VtuProviderService.getProviderBalance(providerId);
     } catch (error) {
       logger.warn(`Provider balance check failed for ${providerId}: ${error.message}`);
-      throw new AppError(
-        `Unable to verify ${providerId} balance at the moment. Please try again shortly.`,
-        503
-      );
+      throw new AppError(this.CLIENT_UNAVAILABLE_MESSAGE, 503);
     }
     if (!balanceInfo?.available || balanceInfo.balance === null || balanceInfo.balance === undefined) {
       logger.warn(`Provider balance unavailable for ${providerId}`);
-      throw new AppError(
-        `Unable to verify ${providerId} balance at the moment. Please try again shortly.`,
-        503
-      );
+      throw new AppError(this.CLIENT_UNAVAILABLE_MESSAGE, 503);
     }
 
     const providerBalance = Number(balanceInfo.balance);
     if (Number.isNaN(providerBalance)) {
-      throw new AppError(`Invalid provider balance response from ${providerId}`, 503);
+      logger.warn(`Invalid provider balance response from ${providerId}`);
+      throw new AppError(this.CLIENT_UNAVAILABLE_MESSAGE, 503);
     }
 
     if (providerBalance < amount) {
@@ -85,10 +82,7 @@ class ProviderPurchaseGuardService {
         context,
       });
 
-      throw new AppError(
-        `${balanceInfo.providerName || providerId} provider balance is insufficient for this purchase. Please try again later.`,
-        400
-      );
+      throw new AppError(this.CLIENT_LOW_BALANCE_MESSAGE, 400);
     }
 
     return {
