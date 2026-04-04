@@ -1,4 +1,12 @@
 module.exports = {
+  providerAliases: {
+    clubconnect: 'clubkonnect',
+    club_konnect: 'clubkonnect',
+    clubkonnect: 'clubkonnect',
+    nello: 'clubkonnect',
+    nellobytes: 'clubkonnect',
+  },
+
   providers: {
     clubkonnect: {
       id: 'clubkonnect',
@@ -183,8 +191,14 @@ module.exports = {
     airtime2cash: 'smeplug',
   },
 
+  normalizeProviderId(providerId) {
+    const key = String(providerId || '').trim().toLowerCase();
+    if (!key) return '';
+    return this.providerAliases[key] || key;
+  },
+
   async getProviderForService(serviceType) {
-    const providerId = await this.getProviderIdForService(serviceType);
+    const providerId = this.normalizeProviderId(await this.getProviderIdForService(serviceType));
     if (providerId && this.providers[providerId]) {
       return this.providers[providerId];
     }
@@ -192,7 +206,7 @@ module.exports = {
   },
 
   getProviderForServiceSync(serviceType) {
-    const providerId = this.serviceRouting[serviceType] || this.defaults.primaryProvider;
+    const providerId = this.normalizeProviderId(this.serviceRouting[serviceType] || this.defaults.primaryProvider);
     if (providerId && this.providers[providerId]) {
       return this.providers[providerId];
     }
@@ -212,25 +226,31 @@ module.exports = {
         const dbConfig = await VtuConfig.findOne({ key: 'serviceRouting' }).lean();
         
         if (dbConfig && dbConfig.value && dbConfig.value[serviceType]) {
-          this.serviceRouting[serviceType] = dbConfig.value[serviceType];
-          console.log('getProviderIdForService - routing config fetched from DB:', serviceType, '=', dbConfig.value[serviceType]);
-          return dbConfig.value[serviceType];
+          const resolvedProviderId = this.normalizeProviderId(dbConfig.value[serviceType]);
+          if (this.providers[resolvedProviderId]) {
+            this.serviceRouting[serviceType] = resolvedProviderId;
+            console.log('getProviderIdForService - routing config fetched from DB:', serviceType, '=', resolvedProviderId);
+            return resolvedProviderId;
+          }
         }
       }
     } catch (error) {
       console.error('getProviderIdForService - DB fetch error:', error.message);
     }
     
-    return this.serviceRouting[serviceType] || this.defaults.primaryProvider;
+    const fallbackProviderId = this.normalizeProviderId(this.serviceRouting[serviceType] || this.defaults.primaryProvider);
+    return this.providers[fallbackProviderId] ? fallbackProviderId : this.defaults.primaryProvider;
   },
 
   getProviderIdForServiceSync(serviceType) {
-    return this.serviceRouting[serviceType] || this.defaults.primaryProvider;
+    const providerId = this.normalizeProviderId(this.serviceRouting[serviceType] || this.defaults.primaryProvider);
+    return this.providers[providerId] ? providerId : this.defaults.primaryProvider;
   },
 
   setProviderForService(serviceType, providerId) {
-    if (this.providers[providerId]) {
-      this.serviceRouting[serviceType] = providerId;
+    const resolvedProviderId = this.normalizeProviderId(providerId);
+    if (this.providers[resolvedProviderId]) {
+      this.serviceRouting[serviceType] = resolvedProviderId;
       return true;
     }
     return false;
@@ -240,8 +260,9 @@ module.exports = {
     const validServices = ['data', 'airtime', 'airtimepin', 'education', 'electricity', 'cable', 'airtime2cash'];
     
     for (const [service, provider] of Object.entries(config)) {
-      if (validServices.includes(service) && this.providers[provider]) {
-        this.serviceRouting[service] = provider;
+      const resolvedProviderId = this.normalizeProviderId(provider);
+      if (validServices.includes(service) && this.providers[resolvedProviderId]) {
+        this.serviceRouting[service] = resolvedProviderId;
       }
     }
     return this.serviceRouting;
@@ -290,8 +311,15 @@ module.exports = {
       console.log('Database query result:', dbConfig);
       
       if (dbConfig && dbConfig.value) {
-        this.serviceRouting = { ...this.serviceRouting, ...dbConfig.value };
-        console.log('✓ VTU service routing loaded from database:', JSON.stringify(dbConfig.value));
+        const normalizedRouting = {};
+        for (const [service, providerId] of Object.entries(dbConfig.value)) {
+          const resolvedProviderId = this.normalizeProviderId(providerId);
+          if (this.providers[resolvedProviderId]) {
+            normalizedRouting[service] = resolvedProviderId;
+          }
+        }
+        this.serviceRouting = { ...this.serviceRouting, ...normalizedRouting };
+        console.log('✓ VTU service routing loaded from database:', JSON.stringify(normalizedRouting));
       } else {
         console.log('⚠ No VTU service routing found in database. Using default config.');
         console.log('   Save a config using API Console to persist settings.');
@@ -311,13 +339,14 @@ module.exports = {
     try {
       const VtuConfig = require('../models/VtuConfig');
       
-      console.log('Saving VTU config to database:', serviceRouting);
+      const normalizedRouting = this.updateServiceRouting(serviceRouting);
+      console.log('Saving VTU config to database:', normalizedRouting);
       
       const result = await VtuConfig.findOneAndUpdate(
         { key: 'serviceRouting' },
         {
           key: 'serviceRouting',
-          value: serviceRouting,
+          value: normalizedRouting,
           description: 'VTU service provider routing configuration',
           updatedBy: userId,
           updatedAt: new Date(),

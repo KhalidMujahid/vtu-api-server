@@ -15,6 +15,12 @@ const PluginngService = require('./pluginngService');
 class VtuProviderService {
   static AUTO_FAILOVER_THRESHOLD = 40;
   
+  static normalizeProviderId(providerId) {
+    return vtuConfig.normalizeProviderId
+      ? vtuConfig.normalizeProviderId(providerId)
+      : String(providerId || '').trim().toLowerCase();
+  }
+  
   /**
    * Get all configured providers
    */
@@ -26,26 +32,28 @@ class VtuProviderService {
    * Get provider by ID
    */
   static getProvider(providerId) {
-    return vtuConfig.providers[providerId] || null;
+    const resolvedProviderId = this.normalizeProviderId(providerId);
+    return vtuConfig.providers[resolvedProviderId] || null;
   }
 
   /**
    * Get provider status from database
    */
   static async getProviderStatus(providerId) {
-    const provider = vtuConfig.providers[providerId];
+    const resolvedProviderId = this.normalizeProviderId(providerId);
+    const provider = vtuConfig.providers[resolvedProviderId];
     if (!provider) {
-      return { providerId, status: 'unknown', message: 'Provider not configured' };
+      return { providerId: resolvedProviderId || providerId, status: 'unknown', message: 'Provider not configured' };
     }
 
     try {
       const [dbStatus, balance] = await Promise.all([
-        ProviderStatus.findOne({ providerName: providerId }),
-        this.getProviderBalance(providerId),
+        ProviderStatus.findOne({ providerName: resolvedProviderId }),
+        this.getProviderBalance(resolvedProviderId),
       ]);
       
       return {
-        providerId,
+        providerId: resolvedProviderId,
         providerName: provider.name,
         displayName: provider.displayName,
         status: dbStatus?.status || 'active',
@@ -64,16 +72,16 @@ class VtuProviderService {
         balance,
       };
     } catch (error) {
-      logger.error(`Error getting provider status for ${providerId}:`, error);
+      logger.error(`Error getting provider status for ${resolvedProviderId}:`, error);
       return {
-        providerId,
+        providerId: resolvedProviderId,
         providerName: provider.name,
         status: 'active',
         isDefault: provider.isDefault,
         priority: provider.priority,
         color: provider.color,
         balance: {
-          providerId,
+          providerId: resolvedProviderId,
           providerName: provider.name,
           available: false,
           balance: null,
@@ -114,7 +122,8 @@ class VtuProviderService {
    * Set primary provider
    */
   static async setPrimaryProvider(providerId) {
-    const provider = vtuConfig.providers[providerId];
+    const resolvedProviderId = this.normalizeProviderId(providerId);
+    const provider = vtuConfig.providers[resolvedProviderId];
     if (!provider) {
       throw new Error(`Provider ${providerId} not found`);
     }
@@ -124,9 +133,9 @@ class VtuProviderService {
 
     // Set the selected provider as default in database
     await ProviderStatus.findOneAndUpdate(
-      { providerName: providerId },
+      { providerName: resolvedProviderId },
       { 
-        providerName: providerId,
+        providerName: resolvedProviderId,
         isDefault: true,
         status: 'active',
         supportedServices: provider.supportedServices,
@@ -220,10 +229,11 @@ class VtuProviderService {
    * Health check for a single provider
    */
   static async healthCheck(providerId) {
-    const provider = vtuConfig.providers[providerId];
+    const resolvedProviderId = this.normalizeProviderId(providerId);
+    const provider = vtuConfig.providers[resolvedProviderId];
     if (!provider) {
       return {
-        providerId,
+        providerId: resolvedProviderId || providerId,
         status: 'unknown',
         message: 'Provider not configured',
         responseTime: 0,
@@ -258,7 +268,7 @@ class VtuProviderService {
 
       // Update provider status in database
       await ProviderStatus.findOneAndUpdate(
-        { providerName: providerId },
+        { providerName: resolvedProviderId },
         {
           $set: {
             status,
@@ -272,7 +282,7 @@ class VtuProviderService {
       );
 
       return {
-        providerId,
+        providerId: resolvedProviderId,
         providerName: provider.name,
         status,
         message,
@@ -286,7 +296,7 @@ class VtuProviderService {
       
       // Update provider status in database
       await ProviderStatus.findOneAndUpdate(
-        { providerName: providerId },
+        { providerName: resolvedProviderId },
         {
           $set: {
             status: 'down',
@@ -299,7 +309,7 @@ class VtuProviderService {
       );
 
       return {
-        providerId,
+        providerId: resolvedProviderId,
         providerName: provider.name,
         status: 'down',
         message: error.message || 'Health check failed',
@@ -441,7 +451,8 @@ class VtuProviderService {
    * Get provider balance (mock for now - actual implementation would call provider API)
    */
   static async getProviderBalance(providerId) {
-    const provider = vtuConfig.providers[providerId];
+    const resolvedProviderId = this.normalizeProviderId(providerId);
+    const provider = vtuConfig.providers[resolvedProviderId];
     if (!provider) {
       throw new Error(`Provider ${providerId} not found`);
     }
@@ -460,7 +471,7 @@ class VtuProviderService {
             0;
 
           return {
-            providerId,
+            providerId: resolvedProviderId,
             providerName: provider.name,
             available: true,
             balance: primaryBalance,
@@ -473,7 +484,7 @@ class VtuProviderService {
         case 'smeplug': {
           const result = await SmePlugService.getWalletBalance();
           return {
-            providerId,
+            providerId: resolvedProviderId,
             providerName: provider.name,
             available: true,
             balance: Number(result?.balance || 0),
@@ -487,7 +498,7 @@ class VtuProviderService {
         case 'clubkonnect': {
           const result = await NelloBytesService.getWalletBalance();
           return {
-            providerId,
+            providerId: resolvedProviderId,
             providerName: provider.name,
             available: true,
             balance: Number(result?.balance || 0),
@@ -502,7 +513,7 @@ class VtuProviderService {
         case 'pluginng': {
           const result = await PluginngService.getWalletBalance();
           return {
-            providerId,
+            providerId: resolvedProviderId,
             providerName: provider.name,
             available: true,
             balance: Number(result?.balance || 0),
@@ -514,7 +525,7 @@ class VtuProviderService {
 
         default:
           return {
-            providerId,
+            providerId: resolvedProviderId,
             providerName: provider.name,
             available: false,
             balance: null,
@@ -524,9 +535,9 @@ class VtuProviderService {
           };
       }
     } catch (error) {
-      logger.warn(`Unable to fetch balance for provider ${providerId}: ${error.message}`);
+      logger.warn(`Unable to fetch balance for provider ${resolvedProviderId || providerId}: ${error.message}`);
       return {
-        providerId,
+        providerId: resolvedProviderId,
         providerName: provider.name,
         available: false,
         balance: null,
@@ -555,7 +566,8 @@ class VtuProviderService {
     if (!service) {
       return Object.values(vtuConfig.providers).find(p => p.isDefault) || Object.values(vtuConfig.providers)[0];
     }
-    return vtuConfig.providers[service.defaultProvider];
+    const providerId = this.normalizeProviderId(service.defaultProvider);
+    return vtuConfig.providers[providerId];
   }
 
   /**
@@ -567,7 +579,8 @@ class VtuProviderService {
       throw new Error(`Service type ${serviceType} not configurable`);
     }
 
-    const provider = vtuConfig.providers[providerId];
+    const resolvedProviderId = this.normalizeProviderId(providerId);
+    const provider = vtuConfig.providers[resolvedProviderId];
     if (!provider) {
       throw new Error(`Provider ${providerId} not found`);
     }
@@ -577,7 +590,7 @@ class VtuProviderService {
     }
 
     // Update the default provider for this service
-    service.defaultProvider = providerId;
+    service.defaultProvider = resolvedProviderId;
 
     logger.info(`Default provider for ${serviceType} switched to: ${provider.name}`);
 
@@ -625,3 +638,5 @@ class VtuProviderService {
 }
 
 module.exports = VtuProviderService;
+
+
