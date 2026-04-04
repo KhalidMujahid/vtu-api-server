@@ -486,6 +486,56 @@ exports.getProviderMarkups = async (req, res, next) => {
 };
 
 /**
+ * Get markup options list for frontend selectors
+ */
+exports.getProviderMarkupOptions = async (req, res, next) => {
+  try {
+    const providers = VtuProviderService.getAllProviders();
+    const markups = await ProviderMarkupService.getAllMarkups();
+
+    const serviceLabels = {
+      data_recharge: 'Data Recharge',
+      airtime_recharge: 'Airtime Recharge',
+      recharge_pin: 'Recharge PIN',
+      electricity: 'Electricity',
+      cable_tv: 'Cable TV',
+      education_pin: 'Education PIN',
+      airtime_swap: 'Airtime Swap',
+      sme_data: 'SME Data',
+    };
+
+    const options = providers.map((provider) => {
+      const normalizedProviderId = ProviderMarkupService.normalizeProviderId(provider.id);
+      const providerMarkups = markups[normalizedProviderId] || {};
+      const supportedServiceTypes = [...new Set((provider.supportedServices || []).map((serviceType) => (
+        ProviderMarkupService.normalizeServiceType(serviceType)
+      )))];
+
+      const services = supportedServiceTypes.map((serviceType) => ({
+        serviceType,
+        label: serviceLabels[serviceType] || serviceType,
+        percentage: Number(providerMarkups[serviceType] || 0),
+      }));
+
+      return {
+        providerId: provider.id,
+        displayName: provider.displayName || provider.name || provider.id,
+        services,
+      };
+    });
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        options,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * Set provider markup percentage for a service type
  */
 exports.setProviderMarkup = async (req, res, next) => {

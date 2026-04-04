@@ -6765,6 +6765,34 @@
             }
           },
           "response": []
+        },
+        {
+          "name": "Get Provider Markup Options",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/console/providers/markups/options",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "console",
+                "providers",
+                "markups",
+                "options"
+              ]
+            },
+            "description": "Get frontend-ready provider/service list with current markup percentages."
+          },
+          "response": []
         }
       ]
     }

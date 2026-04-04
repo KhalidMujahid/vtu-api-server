@@ -59,6 +59,7 @@ const { adminAuth } = require('../middlewares/admin');
 router.get('/providers', adminAuth, vtuConsoleController.getAllProviders);
 router.post('/providers', adminAuth, vtuConsoleController.createProvider);
 router.get('/providers/markups', adminAuth, vtuConsoleController.getProviderMarkups);
+router.get('/providers/markups/options', adminAuth, vtuConsoleController.getProviderMarkupOptions);
 router.put('/providers/:providerId/markups', adminAuth, vtuConsoleController.setProviderMarkup);
 
 /**
