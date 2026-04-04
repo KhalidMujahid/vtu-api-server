@@ -11,6 +11,7 @@ const AirtimeNigeriaService = require('../services/airtimeNigeriaService');
 const SmePlugService = require('../services/smePlugService');
 const PluginngService = require('../services/pluginngService');
 const ProviderPurchaseGuardService = require('../services/providerPurchaseGuardService');
+const ProviderMarkupService = require('../services/providerMarkupService');
 const vtuConfig = require('../config/vtuProviders');
 const crypto = require('crypto');
 
@@ -330,6 +331,32 @@ function normalizePhoneForSmePlug(phoneNumber) {
   return phoneNumber;
 }
 
+async function applyProviderMarkupToGroupedPlans(groupedPlans = {}, providerId, serviceType = 'data_recharge') {
+  const result = {};
+  for (const [network, plans] of Object.entries(groupedPlans || {})) {
+    result[network] = await Promise.all((plans || []).map(async (plan) => {
+      const providerPrice = Number(plan?.sellingPrice ?? plan?.price ?? 0);
+      const markup = await ProviderMarkupService.applyMarkup({
+        providerId,
+        serviceType,
+        baseAmount: providerPrice,
+      });
+
+      return {
+        ...plan,
+        providerPrice: markup.baseAmount,
+        price: markup.chargedAmount,
+        sellingPrice: markup.chargedAmount,
+        markup: {
+          percentage: markup.percentage,
+          amount: markup.markupAmount,
+        },
+      };
+    }));
+  }
+  return result;
+}
+
 function normalizeNigerianPhoneNumber(phoneNumber = '') {
   const digits = String(phoneNumber || '').replace(/\D/g, '');
 
@@ -490,6 +517,7 @@ exports.getDataPlans = async (req, res, next) => {
       const unifiedPlans = vtuConfig.transformDataPlans(selectedSource, rawPlans);
       const availableTypes = buildAvailableDataTypesFromGroupedPlans(unifiedPlans);
       let responseData = applyDataTypeOnUnifiedPlans(unifiedPlans, normalizedDataType);
+      responseData = await applyProviderMarkupToGroupedPlans(responseData, selectedProviderId, 'data_recharge');
       if (normalizedNetwork) {
         responseData = { [normalizedNetwork]: responseData[normalizedNetwork] || [] };
       }
@@ -583,21 +611,23 @@ exports.purchaseData = async (req, res, next) => {
       return next(new AppError(requestedPricing.availabilityMessage || 'Service Temporarily Unavailable', 503));
     }
 
-    let sellingPrice = requestedPricing?.sellingPrice || 0;
-
-    if (amount && !isNaN(amount) && parseFloat(amount) > 0) {
-      sellingPrice = parseFloat(amount);
-    }
-
-    if (!sellingPrice) {
+    const providerPrice = Number(requestedPricing?.sellingPrice || 0);
+    if (!providerPrice) {
       return next(new AppError('Data plan pricing is not configured for this provider', 404));
     }
 
-    if (wallet.balance < sellingPrice) {
+    const chargePricing = await ProviderMarkupService.applyMarkup({
+      providerId: requestedProvider,
+      serviceType: 'data_recharge',
+      baseAmount: providerPrice,
+    });
+    const chargedAmount = chargePricing.chargedAmount;
+
+    if (wallet.balance < chargedAmount) {
       return next(new AppError('Insufficient wallet balance', 400));
     }
 
-    await wallet.debit(sellingPrice, `Data purchase: ${network} ${planIdentifier}`);
+    await wallet.debit(chargedAmount, `Data purchase: ${network} ${planIdentifier}`);
 
     const reference = generateReference('DATA');
     const nelloCallbackUrl = `${SERVER_URL}/api/v1/telecom/webhook/nellobytes`;
@@ -609,9 +639,9 @@ exports.purchaseData = async (req, res, next) => {
       user: user._id,
       type: 'data_recharge',
       category: 'telecom',
-      amount: sellingPrice,
-      totalAmount: sellingPrice,
-      previousBalance: wallet.balance + sellingPrice,
+      amount: chargedAmount,
+      totalAmount: chargedAmount,
+      previousBalance: wallet.balance + chargedAmount,
       newBalance: wallet.balance,
       status: 'pending',
       description: `${normalizedNetwork.toUpperCase()} ${requestedPricing?.planName || planIdentifier} for ${phoneNumber}`,
@@ -620,6 +650,12 @@ exports.purchaseData = async (req, res, next) => {
         network: normalizedNetwork,
         plan: planIdentifier,
         phoneNumber,
+      },
+      metadata: {
+        providerPrice,
+        chargedAmount,
+        markupPercentage: chargePricing.percentage,
+        markupAmount: chargePricing.markupAmount,
       },
       statusHistory: [{ status: 'pending', note: `Purchase initiated via ${requestedProvider}`, timestamp: new Date() }],
     });
@@ -654,7 +690,7 @@ exports.purchaseData = async (req, res, next) => {
           try {
             await ProviderPurchaseGuardService.assertSufficientProviderBalance(
               providerId,
-              Number(attemptPricing?.sellingPrice || sellingPrice),
+              Number(attemptPricing?.sellingPrice || providerPrice),
               { serviceType: 'data_recharge', network: normalizedNetwork, phoneNumber }
             );
           } catch (balanceCheckError) {
@@ -750,7 +786,12 @@ exports.purchaseData = async (req, res, next) => {
             network: normalizedNetwork,
           dataPlan: activePricing?.planName || planIdentifier,
           dataType: normalizeDataType(activePricing?.providerPlanType || extractDataTypeFromPlanName(activePricing?.planName || '')) || 'other',
-          amount: sellingPrice,
+          amount: chargedAmount,
+          providerAmount: providerPrice,
+          markup: {
+            percentage: chargePricing.percentage,
+            amount: chargePricing.markupAmount,
+          },
           status: 'pending',
           provider: successfulProvider,
           },
@@ -760,7 +801,7 @@ exports.purchaseData = async (req, res, next) => {
       }
     } catch (err) {
       // Refund wallet on failure
-      await refundTransactionToWallet(transaction, 'Data purchase refund', sellingPrice);
+      await refundTransactionToWallet(transaction, 'Data purchase refund', chargedAmount);
 
       transaction.status = 'failed';
       transaction.failureReason = err.message;
@@ -834,7 +875,14 @@ exports.purchaseAirtime = async (req, res, next) => {
       return next(new AppError("Wallet not found", 404));
     }
 
-    if (wallet.balance < parsedAmount) {
+    const chargePricing = await ProviderMarkupService.applyMarkup({
+      providerId: activeProvider,
+      serviceType: 'airtime_recharge',
+      baseAmount: parsedAmount,
+    });
+    const chargedAmount = chargePricing.chargedAmount;
+
+    if (wallet.balance < chargedAmount) {
       return next(new AppError("Insufficient wallet balance", 400));
     }
 
@@ -863,22 +911,28 @@ exports.purchaseAirtime = async (req, res, next) => {
     const profitPercent = profitConfig[normalizedNetwork.toUpperCase()] || 0;
     const profit = (profitPercent / 100) * parsedAmount;
 
-    await wallet.debit(parsedAmount, "Airtime purchase");
+    await wallet.debit(chargedAmount, "Airtime purchase");
 
     const transaction = await Transaction.create({
       reference: requestId,
       user: user._id,
       type: "airtime_recharge",
       category: "telecom",
-      amount: parsedAmount,
+      amount: chargedAmount,
       profit,
-      totalAmount: parsedAmount,
+      totalAmount: chargedAmount,
       status: "pending",
       description: `${normalizedNetwork} airtime for ${normalizedPhoneNumber}`,
       service: {
         provider: activeProvider,
         network: normalizedNetwork,
         phoneNumber: normalizedPhoneNumber,
+      },
+      metadata: {
+        providerAmount: parsedAmount,
+        chargedAmount,
+        markupPercentage: chargePricing.percentage,
+        markupAmount: chargePricing.markupAmount,
       },
       statusHistory: [
         {
@@ -986,7 +1040,7 @@ exports.purchaseAirtime = async (req, res, next) => {
         await NotificationService.airtimePurchase(
           transaction.user,
           transaction.service?.network,
-          transaction.amount,
+          parsedAmount,
           transaction.service?.phoneNumber
         );
       }
@@ -1001,7 +1055,7 @@ exports.purchaseAirtime = async (req, res, next) => {
 
       await transaction.save();
 
-      await refundTransactionToWallet(transaction, 'Airtime refund', parsedAmount);
+      await refundTransactionToWallet(transaction, 'Airtime refund', chargedAmount);
       await transaction.save();
     }
 
@@ -1012,6 +1066,12 @@ exports.purchaseAirtime = async (req, res, next) => {
         reference: requestId,
         provider: activeProvider,
         status: transaction.status,
+        amount: chargedAmount,
+        providerAmount: parsedAmount,
+        markup: {
+          percentage: chargePricing.percentage,
+          amount: chargePricing.markupAmount,
+        },
         orderId: transaction.service?.orderId || null,
         providerResponse: responseData,
       },
@@ -1688,10 +1748,33 @@ exports.getAirtimeNigeriaDataPlans = async (req, res, next) => {
   try {
     const { network } = req.query;
     const plans = await AirtimeNigeriaService.getDataPlans(network);
+    const pricedPlans = {};
+
+    for (const [networkKey, networkPlans] of Object.entries(plans.data || {})) {
+      pricedPlans[networkKey] = await Promise.all((networkPlans || []).map(async (plan = {}) => {
+        const providerPrice = Number(plan.price || 0);
+        const markup = await ProviderMarkupService.applyMarkup({
+          providerId: 'airtimenigeria',
+          serviceType: 'data_recharge',
+          baseAmount: providerPrice,
+        });
+
+        return {
+          ...plan,
+          providerPrice: markup.baseAmount,
+          price: markup.chargedAmount,
+          sellingPrice: markup.chargedAmount,
+          markup: {
+            percentage: markup.percentage,
+            amount: markup.markupAmount,
+          },
+        };
+      }));
+    }
     
     res.status(200).json({
       status: 'success',
-      data: plans.data,
+      data: pricedPlans,
       source: 'airtimenigeria',
     });
   } catch (error) {
@@ -1756,20 +1839,26 @@ exports.purchaseAirtimeNigeriaData = async (req, res, next) => {
       return next(new AppError(`Selected plan is '${planType}' type, but '${requestedDataType}' was requested`, 400));
     }
     
-    const sellingPrice = plan.price;
-    
-    if (wallet.balance < sellingPrice) {
+    const providerAmount = Number(plan.price || 0);
+    const chargePricing = await ProviderMarkupService.applyMarkup({
+      providerId: 'airtimenigeria',
+      serviceType: 'data_recharge',
+      baseAmount: providerAmount,
+    });
+    const chargedAmount = chargePricing.chargedAmount;
+
+    if (wallet.balance < chargedAmount) {
       return next(new AppError('Insufficient wallet balance', 400));
     }
 
     await ProviderPurchaseGuardService.assertSufficientProviderBalance(
       'airtimenigeria',
-      sellingPrice,
+      providerAmount,
       { serviceType: 'data_recharge', network, phoneNumber }
     );
 
     // Debit wallet
-    await wallet.debit(sellingPrice, `AirtimeNigeria Data: ${network} ${plan.planName}`);
+    await wallet.debit(chargedAmount, `AirtimeNigeria Data: ${network} ${plan.planName}`);
 
     const reference = `AN-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
     const callbackUrl = `${SERVER_URL}/api/v1/telecom/webhook/airtimenigeria`;
@@ -1779,9 +1868,9 @@ exports.purchaseAirtimeNigeriaData = async (req, res, next) => {
       user: user._id,
       type: 'data_recharge',
       category: 'telecom',
-      amount: sellingPrice,
-      totalAmount: sellingPrice,
-      previousBalance: wallet.balance + sellingPrice,
+      amount: chargedAmount,
+      totalAmount: chargedAmount,
+      previousBalance: wallet.balance + chargedAmount,
       newBalance: wallet.balance,
       status: 'pending',
       description: `${network.toUpperCase()} ${plan.planName} for ${phoneNumber}`,
@@ -1790,6 +1879,12 @@ exports.purchaseAirtimeNigeriaData = async (req, res, next) => {
         network: network.toLowerCase(),
         plan: packageCode || planId,
         phoneNumber,
+      },
+      metadata: {
+        providerAmount,
+        chargedAmount,
+        markupPercentage: chargePricing.percentage,
+        markupAmount: chargePricing.markupAmount,
       },
       statusHistory: [{ status: 'pending', note: 'Purchase initiated via AirtimeNigeria', timestamp: new Date() }],
     });
@@ -1823,14 +1918,19 @@ exports.purchaseAirtimeNigeriaData = async (req, res, next) => {
           network,
           plan: plan.planName,
           dataType: planType,
-          amount: sellingPrice,
+          amount: chargedAmount,
+          providerAmount,
+          markup: {
+            percentage: chargePricing.percentage,
+            amount: chargePricing.markupAmount,
+          },
           status: 'pending',
           provider: 'airtimenigeria',
         },
       });
     } catch (err) {
       // Refund wallet on failure
-      await refundTransactionToWallet(transaction, 'Data purchase refund', sellingPrice);
+      await refundTransactionToWallet(transaction, 'Data purchase refund', chargedAmount);
 
       transaction.status = 'failed';
       transaction.failureReason = err.message;
@@ -1875,18 +1975,26 @@ exports.purchaseAirtimeNigeriaAirtime = async (req, res, next) => {
       return next(new AppError('Wallet not found', 404));
     }
 
-    if (wallet.balance < amount) {
+    const providerAmount = Number(amount);
+    const chargePricing = await ProviderMarkupService.applyMarkup({
+      providerId: 'airtimenigeria',
+      serviceType: 'airtime_recharge',
+      baseAmount: providerAmount,
+    });
+    const chargedAmount = chargePricing.chargedAmount;
+
+    if (wallet.balance < chargedAmount) {
       return next(new AppError('Insufficient wallet balance', 400));
     }
 
     await ProviderPurchaseGuardService.assertSufficientProviderBalance(
       'airtimenigeria',
-      Number(amount),
+      providerAmount,
       { serviceType: 'airtime_recharge', network, phoneNumber }
     );
 
     // Debit wallet
-    await wallet.debit(amount, `AirtimeNigeria Airtime: ${network} ${amount}`);
+    await wallet.debit(chargedAmount, `AirtimeNigeria Airtime: ${network} ${amount}`);
 
     const reference = `AN-AIR-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
     const callbackUrl = `${SERVER_URL}/api/v1/telecom/webhook/airtimenigeria`;
@@ -1896,9 +2004,9 @@ exports.purchaseAirtimeNigeriaAirtime = async (req, res, next) => {
       user: user._id,
       type: 'airtime_recharge',
       category: 'telecom',
-      amount,
-      totalAmount: amount,
-      previousBalance: wallet.balance + amount,
+      amount: chargedAmount,
+      totalAmount: chargedAmount,
+      previousBalance: wallet.balance + chargedAmount,
       newBalance: wallet.balance,
       status: 'pending',
       description: `${network.toUpperCase()} ${amount} airtime for ${phoneNumber}`,
@@ -1907,6 +2015,12 @@ exports.purchaseAirtimeNigeriaAirtime = async (req, res, next) => {
         network: network.toLowerCase(),
         phoneNumber,
       },
+      metadata: {
+        providerAmount,
+        chargedAmount,
+        markupPercentage: chargePricing.percentage,
+        markupAmount: chargePricing.markupAmount,
+      },
       statusHistory: [{ status: 'pending', note: 'Airtime purchase initiated via AirtimeNigeria', timestamp: new Date() }],
     });
 
@@ -1914,8 +2028,8 @@ exports.purchaseAirtimeNigeriaAirtime = async (req, res, next) => {
       const apiResponse = await AirtimeNigeriaService.purchaseAirtime({
         network: network.toLowerCase(),
         phone: phoneNumber,
-        amount: parseInt(amount),
-        maxAmount: parseInt(amount),
+        amount: parseInt(providerAmount),
+        maxAmount: parseInt(providerAmount),
         callbackUrl,
         customerReference: reference,
       });
@@ -1938,14 +2052,19 @@ exports.purchaseAirtimeNigeriaAirtime = async (req, res, next) => {
           orderId: apiResponse.reference,
           phoneNumber,
           network,
-          amount,
+          amount: chargedAmount,
+          providerAmount,
+          markup: {
+            percentage: chargePricing.percentage,
+            amount: chargePricing.markupAmount,
+          },
           status: 'pending',
           provider: 'airtimenigeria',
         },
       });
     } catch (err) {
       // Refund wallet on failure
-      await refundTransactionToWallet(transaction, 'Airtime purchase refund', amount);
+      await refundTransactionToWallet(transaction, 'Airtime purchase refund', chargedAmount);
 
       transaction.status = 'failed';
       transaction.failureReason = err.message;
@@ -2266,20 +2385,26 @@ exports.purchaseSmePlugData = async (req, res, next) => {
       return next(new AppError(`Selected plan is '${pricingType}' type, but '${requestedDataType}' was requested`, 400));
     }
 
-    const sellingPrice = pricing.sellingPrice;
-    
-    if (wallet.balance < sellingPrice) {
+    const providerAmount = Number(pricing.sellingPrice || 0);
+    const chargePricing = await ProviderMarkupService.applyMarkup({
+      providerId: 'smeplug',
+      serviceType: 'data_recharge',
+      baseAmount: providerAmount,
+    });
+    const chargedAmount = chargePricing.chargedAmount;
+
+    if (wallet.balance < chargedAmount) {
       return next(new AppError('Insufficient wallet balance', 400));
     }
 
     await ProviderPurchaseGuardService.assertSufficientProviderBalance(
       'smeplug',
-      sellingPrice,
+      providerAmount,
       { serviceType: 'data_recharge', network: normalizedNetwork, phoneNumber }
     );
 
     // Debit wallet
-    await wallet.debit(sellingPrice, `SMEPlug Data: ${network} ${planId}`);
+    await wallet.debit(chargedAmount, `SMEPlug Data: ${network} ${planId}`);
 
     const reference = `SP-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
 
@@ -2288,9 +2413,9 @@ exports.purchaseSmePlugData = async (req, res, next) => {
       user: user._id,
       type: 'data_recharge',
       category: 'telecom',
-      amount: sellingPrice,
-      totalAmount: sellingPrice,
-      previousBalance: wallet.balance + sellingPrice,
+      amount: chargedAmount,
+      totalAmount: chargedAmount,
+      previousBalance: wallet.balance + chargedAmount,
       newBalance: wallet.balance,
       status: 'pending',
       description: `${network.toUpperCase()} data for ${phoneNumber}`,
@@ -2299,6 +2424,12 @@ exports.purchaseSmePlugData = async (req, res, next) => {
         network: normalizedNetwork,
         plan: pricing.providerPlanId || pricing.planCode || planId,
         phoneNumber,
+      },
+      metadata: {
+        providerAmount,
+        chargedAmount,
+        markupPercentage: chargePricing.percentage,
+        markupAmount: chargePricing.markupAmount,
       },
       statusHistory: [{ status: 'pending', note: 'Purchase initiated via SMEPlug', timestamp: new Date() }],
     });
@@ -2333,14 +2464,19 @@ exports.purchaseSmePlugData = async (req, res, next) => {
           network,
           planId,
           dataType: pricingType,
-          amount: sellingPrice,
+          amount: chargedAmount,
+          providerAmount,
+          markup: {
+            percentage: chargePricing.percentage,
+            amount: chargePricing.markupAmount,
+          },
           status: 'pending',
           provider: 'smeplug',
         },
       });
     } catch (err) {
       // Refund wallet on failure
-      await refundTransactionToWallet(transaction, 'Data purchase refund', sellingPrice);
+      await refundTransactionToWallet(transaction, 'Data purchase refund', chargedAmount);
 
       transaction.status = 'failed';
       transaction.failureReason = err.message;
@@ -2386,20 +2522,26 @@ exports.purchaseSmePlugAirtime = async (req, res, next) => {
       return next(new AppError('Wallet not found', 404));
     }
 
-    const sellingPrice = parseFloat(amount);
-    
-    if (wallet.balance < sellingPrice) {
+    const providerAmount = Number.parseFloat(amount);
+    const chargePricing = await ProviderMarkupService.applyMarkup({
+      providerId: 'smeplug',
+      serviceType: 'airtime_recharge',
+      baseAmount: providerAmount,
+    });
+    const chargedAmount = chargePricing.chargedAmount;
+
+    if (wallet.balance < chargedAmount) {
       return next(new AppError('Insufficient wallet balance', 400));
     }
 
     await ProviderPurchaseGuardService.assertSufficientProviderBalance(
       'smeplug',
-      sellingPrice,
+      providerAmount,
       { serviceType: 'airtime_recharge', network: normalizedNetwork, phoneNumber }
     );
 
     // Debit wallet
-    await wallet.debit(sellingPrice, `SMEPlug Airtime: ${network} ${amount}`);
+    await wallet.debit(chargedAmount, `SMEPlug Airtime: ${network} ${amount}`);
 
     const reference = `SP-AIR-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
 
@@ -2408,9 +2550,9 @@ exports.purchaseSmePlugAirtime = async (req, res, next) => {
       user: user._id,
       type: 'airtime_recharge',
       category: 'telecom',
-      amount: sellingPrice,
-      totalAmount: sellingPrice,
-      previousBalance: wallet.balance + sellingPrice,
+      amount: chargedAmount,
+      totalAmount: chargedAmount,
+      previousBalance: wallet.balance + chargedAmount,
       newBalance: wallet.balance,
       status: 'pending',
       description: `${network.toUpperCase()} ${amount} airtime for ${phoneNumber}`,
@@ -2418,6 +2560,12 @@ exports.purchaseSmePlugAirtime = async (req, res, next) => {
         provider: 'smeplug',
         network: normalizedNetwork,
         phoneNumber,
+      },
+      metadata: {
+        providerAmount,
+        chargedAmount,
+        markupPercentage: chargePricing.percentage,
+        markupAmount: chargePricing.markupAmount,
       },
       statusHistory: [{ status: 'pending', note: 'Airtime purchase initiated via SMEPlug', timestamp: new Date() }],
     });
@@ -2427,7 +2575,7 @@ exports.purchaseSmePlugAirtime = async (req, res, next) => {
       const apiResponse = await SmePlugService.purchaseAirtime({
         phone: normalizePhoneForSmePlug(phoneNumber),
         network: normalizedNetwork,
-        amount: parseFloat(amount),
+        amount: providerAmount,
         customerReference: reference,
         callbackUrl,
       });
@@ -2450,14 +2598,19 @@ exports.purchaseSmePlugAirtime = async (req, res, next) => {
           orderId: apiResponse.reference,
           phoneNumber,
           network,
-          amount: sellingPrice,
+          amount: chargedAmount,
+          providerAmount,
+          markup: {
+            percentage: chargePricing.percentage,
+            amount: chargePricing.markupAmount,
+          },
           status: 'pending',
           provider: 'smeplug',
         },
       });
     } catch (err) {
       // Refund wallet on failure
-      await refundTransactionToWallet(transaction, 'Airtime purchase refund', sellingPrice);
+      await refundTransactionToWallet(transaction, 'Airtime purchase refund', chargedAmount);
 
       transaction.status = 'failed';
       transaction.failureReason = err.message;
@@ -2465,6 +2618,339 @@ exports.purchaseSmePlugAirtime = async (req, res, next) => {
       await transaction.save();
 
       logger.error(`SMEPlug airtime purchase failed → ${err.message}`);
+      return next(new AppError(`Airtime purchase failed: ${err.message}`, 500));
+    }
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get Pluginng data plans (with markup-applied user prices)
+ */
+exports.getPluginngDataPlans = async (req, res, next) => {
+  try {
+    const { network, dataType } = req.query;
+    const normalizedNetwork = normalizeNetwork(network);
+    const normalizedDataType = normalizeDataType(dataType);
+
+    const rawPlans = await PluginngService.getDataPlans(normalizedNetwork);
+    const unifiedPlans = vtuConfig.transformDataPlans('pluginng', rawPlans);
+    const availableTypes = buildAvailableDataTypesFromGroupedPlans(unifiedPlans);
+    let responseData = applyDataTypeOnUnifiedPlans(unifiedPlans, normalizedDataType);
+    responseData = await applyProviderMarkupToGroupedPlans(responseData, 'pluginng', 'data_recharge');
+
+    if (normalizedNetwork) {
+      responseData = { [normalizedNetwork]: responseData[normalizedNetwork] || [] };
+    }
+
+    return res.status(200).json({
+      status: 'success',
+      data: responseData,
+      availableDataTypes: formatAvailableDataTypes(availableTypes, normalizedNetwork),
+      filters: {
+        network: normalizedNetwork || null,
+        dataType: normalizedDataType || 'all',
+      },
+      source: 'pluginng',
+      provider: 'pluginng',
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Purchase data using Pluginng
+ */
+exports.purchasePluginngData = async (req, res, next) => {
+  try {
+    const { phoneNumber, network, planId, transactionPin, dataType } = req.body;
+    const normalizedNetwork = normalizeNetwork(network);
+    const normalizedPhoneNumber = normalizeNigerianPhoneNumber(phoneNumber);
+    const requestedDataType = normalizeDataType(dataType);
+
+    if (!phoneNumber || !network || !planId) {
+      return next(new AppError('Phone number, network, and plan ID are required', 400));
+    }
+
+    if (!transactionPin) {
+      return next(new AppError('Transaction PIN is required', 400));
+    }
+
+    if (!normalizedPhoneNumber) {
+      return next(new AppError('Invalid phone number', 400));
+    }
+
+    const user = await User.findById(req.user.id).select('+transactionPin');
+    if (!user) {
+      return next(new AppError('User not found', 404));
+    }
+
+    const isPinValid = await user.compareTransactionPin(transactionPin);
+    if (!isPinValid) {
+      return next(new AppError('Invalid transaction PIN', 401));
+    }
+
+    const wallet = await Wallet.findOne({ user: user._id });
+    if (!wallet) {
+      return next(new AppError('Wallet not found', 404));
+    }
+
+    const pricing = await resolveDataPricing({
+      providerId: 'pluginng',
+      network: normalizedNetwork,
+      planIdentifier: planId,
+      dataType: requestedDataType,
+    });
+
+    if (!pricing) {
+      return next(new AppError('Data plan pricing is not configured for Pluginng', 404));
+    }
+
+    const pricingType = normalizeDataType(
+      pricing.providerPlanType || extractDataTypeFromPlanName(pricing.planName || pricing.size || '')
+    ) || 'other';
+    if (requestedDataType && requestedDataType !== 'all' && requestedDataType !== pricingType) {
+      return next(new AppError(`Selected plan is '${pricingType}' type, but '${requestedDataType}' was requested`, 400));
+    }
+
+    const subcategoryId = await resolvePluginngDataSubcategory({
+      attemptPricing: pricing,
+      network: normalizedNetwork,
+      planIdentifier: planId,
+    });
+    if (!subcategoryId) {
+      return next(new AppError('Pluginng data plan is missing subcategory configuration', 400));
+    }
+
+    const providerAmount = Number(pricing.sellingPrice || pricing.price || 0);
+    const chargePricing = await ProviderMarkupService.applyMarkup({
+      providerId: 'pluginng',
+      serviceType: 'data_recharge',
+      baseAmount: providerAmount,
+    });
+    const chargedAmount = chargePricing.chargedAmount;
+
+    if (wallet.balance < chargedAmount) {
+      return next(new AppError('Insufficient wallet balance', 400));
+    }
+
+    await ProviderPurchaseGuardService.assertSufficientProviderBalance(
+      'pluginng',
+      providerAmount,
+      { serviceType: 'data_recharge', network: normalizedNetwork, phoneNumber: normalizedPhoneNumber }
+    );
+
+    await wallet.debit(chargedAmount, `Pluginng Data: ${network} ${planId}`);
+
+    const reference = `PG-DATA-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+    const transaction = await Transaction.create({
+      reference,
+      user: user._id,
+      type: 'data_recharge',
+      category: 'telecom',
+      amount: chargedAmount,
+      totalAmount: chargedAmount,
+      previousBalance: wallet.balance + chargedAmount,
+      newBalance: wallet.balance,
+      status: 'pending',
+      description: `${normalizedNetwork.toUpperCase()} data for ${normalizedPhoneNumber}`,
+      service: {
+        provider: 'pluginng',
+        network: normalizedNetwork,
+        plan: pricing.providerPlanId || pricing.planCode || pricing.planName || planId,
+        phoneNumber: normalizedPhoneNumber,
+      },
+      metadata: {
+        providerAmount,
+        chargedAmount,
+        markupPercentage: chargePricing.percentage,
+        markupAmount: chargePricing.markupAmount,
+      },
+      statusHistory: [{ status: 'pending', note: 'Purchase initiated via Pluginng', timestamp: new Date() }],
+    });
+
+    try {
+      const apiResponse = await PluginngService.purchaseData({
+        planId: pricing.providerPlanId || pricing.planCode || pricing.planName || planId,
+        phoneNumber: normalizedPhoneNumber,
+        subcategoryId,
+        customReference: reference,
+      });
+
+      transaction.status = 'pending';
+      transaction.service.orderId = apiResponse.orderId || apiResponse.reference;
+      transaction.providerResponse = apiResponse;
+      transaction.statusHistory.push({
+        status: 'pending',
+        note: `Order received: ${apiResponse.orderId || apiResponse.reference || reference}`,
+        timestamp: new Date(),
+      });
+      await transaction.save();
+
+      res.status(200).json({
+        status: 'success',
+        message: 'Data purchase initiated successfully',
+        data: {
+          reference,
+          orderId: apiResponse.orderId || apiResponse.reference,
+          phoneNumber: normalizedPhoneNumber,
+          network: normalizedNetwork,
+          planId: pricing.providerPlanId || pricing.planCode || pricing.planName || planId,
+          dataType: pricingType,
+          amount: chargedAmount,
+          providerAmount,
+          markup: {
+            percentage: chargePricing.percentage,
+            amount: chargePricing.markupAmount,
+          },
+          status: 'pending',
+          provider: 'pluginng',
+        },
+      });
+    } catch (err) {
+      await refundTransactionToWallet(transaction, 'Data purchase refund', chargedAmount);
+      transaction.status = 'failed';
+      transaction.failureReason = err.message;
+      transaction.statusHistory.push({ status: 'failed', note: err.message, timestamp: new Date() });
+      await transaction.save();
+      return next(new AppError(`Data purchase failed: ${err.message}`, 500));
+    }
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Purchase airtime using Pluginng
+ */
+exports.purchasePluginngAirtime = async (req, res, next) => {
+  try {
+    const { phoneNumber, network, amount, transactionPin } = req.body;
+    const normalizedNetwork = normalizeNetwork(network);
+    const normalizedPhoneNumber = normalizeNigerianPhoneNumber(phoneNumber);
+    const providerAmount = Number.parseFloat(amount);
+
+    if (!phoneNumber || !network || !amount) {
+      return next(new AppError('Phone number, network, and amount are required', 400));
+    }
+
+    if (!transactionPin) {
+      return next(new AppError('Transaction PIN is required', 400));
+    }
+
+    if (!normalizedPhoneNumber || Number.isNaN(providerAmount) || providerAmount <= 0) {
+      return next(new AppError('Invalid phone number or amount', 400));
+    }
+
+    const user = await User.findById(req.user.id).select('+transactionPin');
+    if (!user) {
+      return next(new AppError('User not found', 404));
+    }
+
+    const isPinValid = await user.compareTransactionPin(transactionPin);
+    if (!isPinValid) {
+      return next(new AppError('Invalid transaction PIN', 401));
+    }
+
+    const wallet = await Wallet.findOne({ user: user._id });
+    if (!wallet) {
+      return next(new AppError('Wallet not found', 404));
+    }
+
+    const subcategoryId = await PluginngService.getAirtimeSubcategoryId(normalizedNetwork);
+    if (!subcategoryId) {
+      return next(new AppError(`Pluginng airtime subcategory was not found for ${normalizedNetwork}`, 400));
+    }
+
+    const chargePricing = await ProviderMarkupService.applyMarkup({
+      providerId: 'pluginng',
+      serviceType: 'airtime_recharge',
+      baseAmount: providerAmount,
+    });
+    const chargedAmount = chargePricing.chargedAmount;
+
+    if (wallet.balance < chargedAmount) {
+      return next(new AppError('Insufficient wallet balance', 400));
+    }
+
+    await ProviderPurchaseGuardService.assertSufficientProviderBalance(
+      'pluginng',
+      providerAmount,
+      { serviceType: 'airtime_recharge', network: normalizedNetwork, phoneNumber: normalizedPhoneNumber }
+    );
+
+    await wallet.debit(chargedAmount, `Pluginng Airtime: ${network} ${providerAmount}`);
+
+    const reference = `PG-AIR-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+    const transaction = await Transaction.create({
+      reference,
+      user: user._id,
+      type: 'airtime_recharge',
+      category: 'telecom',
+      amount: chargedAmount,
+      totalAmount: chargedAmount,
+      previousBalance: wallet.balance + chargedAmount,
+      newBalance: wallet.balance,
+      status: 'pending',
+      description: `${normalizedNetwork.toUpperCase()} ${providerAmount} airtime for ${normalizedPhoneNumber}`,
+      service: {
+        provider: 'pluginng',
+        network: normalizedNetwork,
+        phoneNumber: normalizedPhoneNumber,
+      },
+      metadata: {
+        providerAmount,
+        chargedAmount,
+        markupPercentage: chargePricing.percentage,
+        markupAmount: chargePricing.markupAmount,
+      },
+      statusHistory: [{ status: 'pending', note: 'Airtime purchase initiated via Pluginng', timestamp: new Date() }],
+    });
+
+    try {
+      const apiResponse = await PluginngService.purchaseAirtime({
+        amount: providerAmount,
+        phoneNumber: normalizedPhoneNumber,
+        subcategoryId,
+        customReference: reference,
+      });
+
+      transaction.status = 'pending';
+      transaction.service.orderId = apiResponse.orderId || apiResponse.reference;
+      transaction.providerResponse = apiResponse;
+      transaction.statusHistory.push({
+        status: 'pending',
+        note: `Order received: ${apiResponse.orderId || apiResponse.reference || reference}`,
+        timestamp: new Date(),
+      });
+      await transaction.save();
+
+      res.status(200).json({
+        status: 'success',
+        message: 'Airtime purchase initiated successfully',
+        data: {
+          reference,
+          orderId: apiResponse.orderId || apiResponse.reference,
+          phoneNumber: normalizedPhoneNumber,
+          network: normalizedNetwork,
+          amount: chargedAmount,
+          providerAmount,
+          markup: {
+            percentage: chargePricing.percentage,
+            amount: chargePricing.markupAmount,
+          },
+          status: 'pending',
+          provider: 'pluginng',
+        },
+      });
+    } catch (err) {
+      await refundTransactionToWallet(transaction, 'Airtime purchase refund', chargedAmount);
+      transaction.status = 'failed';
+      transaction.failureReason = err.message;
+      transaction.statusHistory.push({ status: 'failed', note: err.message, timestamp: new Date() });
+      await transaction.save();
       return next(new AppError(`Airtime purchase failed: ${err.message}`, 500));
     }
   } catch (error) {

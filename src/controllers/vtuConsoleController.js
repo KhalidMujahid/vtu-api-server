@@ -4,6 +4,7 @@
  */
 
 const VtuProviderService = require('../services/vtuProviderService');
+const ProviderMarkupService = require('../services/providerMarkupService');
 const ProviderStatus = require('../models/ProviderStatus');
 const Transaction = require('../models/Transaction');
 const logger = require('../utils/logger');
@@ -461,6 +462,77 @@ exports.getProviderStats = async (req, res, next) => {
         lastChecked: stats.lastChecked,
         status: stats.status,
       }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get configured provider markups
+ */
+exports.getProviderMarkups = async (req, res, next) => {
+  try {
+    const markups = await ProviderMarkupService.getAllMarkups();
+    res.status(200).json({
+      status: 'success',
+      data: {
+        markups,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Set provider markup percentage for a service type
+ */
+exports.setProviderMarkup = async (req, res, next) => {
+  try {
+    const providerId = req.params.providerId || req.body.providerId;
+    const { serviceType, percentage } = req.body;
+
+    if (!providerId) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'providerId is required',
+      });
+    }
+
+    if (!serviceType) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'serviceType is required',
+      });
+    }
+
+    if (percentage === undefined || percentage === null) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'percentage is required',
+      });
+    }
+
+    const normalizedProviderId = ProviderMarkupService.normalizeProviderId(providerId);
+    if (!vtuConfig.providers[normalizedProviderId]) {
+      return res.status(400).json({
+        status: 'error',
+        message: `Unknown provider '${providerId}'`,
+      });
+    }
+
+    const result = await ProviderMarkupService.setMarkupPercentage({
+      providerId: normalizedProviderId,
+      serviceType,
+      percentage,
+      updatedBy: req.user?.id || null,
+    });
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Provider markup updated successfully',
+      data: result,
     });
   } catch (error) {
     next(error);

@@ -58,6 +58,8 @@ const { adminAuth } = require('../middlewares/admin');
  */
 router.get('/providers', adminAuth, vtuConsoleController.getAllProviders);
 router.post('/providers', adminAuth, vtuConsoleController.createProvider);
+router.get('/providers/markups', adminAuth, vtuConsoleController.getProviderMarkups);
+router.put('/providers/:providerId/markups', adminAuth, vtuConsoleController.setProviderMarkup);
 
 /**
  * @swagger

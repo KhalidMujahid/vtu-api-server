@@ -1996,6 +1996,33 @@
             "description": "Purchase recharge PINs"
           },
           "response": []
+        },
+        {
+          "name": "Pluginng Data Plans",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/telecom/pluginng/plans?network=mtn&dataType=sme",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "telecom",
+                "pluginng",
+                "plans"
+              ]
+            },
+            "description": "Get Pluginng data plans with frontend prices (markup applied)."
+          },
+          "response": []
         }
       ]
     },
@@ -6646,6 +6673,96 @@
               ]
             },
             "description": "Switch bill payment provider"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Provider Profiles",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/console/providers/profiles",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "console",
+                "providers",
+                "profiles"
+              ]
+            },
+            "description": "Get provider balances and accumulated profile stats for admin dashboard cards."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Provider Markups",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/console/providers/markups",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "console",
+                "providers",
+                "markups"
+              ]
+            },
+            "description": "Get configured provider markup percentages."
+          },
+          "response": []
+        },
+        {
+          "name": "Set Provider Markup",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/console/providers/:providerId/markups",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "console",
+                "providers",
+                ":providerId",
+                "markups"
+              ]
+            },
+            "description": "Set provider markup percentage for a service type.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"serviceType\": \"data_recharge\",\n  \"percentage\": 5\n}"
+            }
           },
           "response": []
         }

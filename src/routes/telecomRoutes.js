@@ -366,6 +366,7 @@ router.get('/provider', protect, telecomController.getCurrentProvider);
  *         description: Data plans from AirtimeNigeria
  */
 router.get('/airtimenigeria/plans', protect, telecomController.getAirtimeNigeriaDataPlans);
+router.get('/pluginng/plans', protect, telecomController.getPluginngDataPlans);
 
 /**
  * @swagger
