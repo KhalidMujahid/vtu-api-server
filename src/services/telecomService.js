@@ -386,7 +386,7 @@ class TelecomService {
     }
   }
 
-  // Verify phone number with provider
+  
   static async verifyPhoneNumber(phoneNumber, providerName) {
     try {
       const config = this.providerConfigs[providerName];
@@ -395,24 +395,24 @@ class TelecomService {
         throw new AppError(`Provider ${providerName} not configured`, 500);
       }
       
-      // Mock verification response
+      
       const mockResponse = {
         success: true,
         data: {
           phoneNumber,
           network: providerName.toUpperCase(),
           status: 'active',
-          name: 'JOHN DOE', // Mock name
+          name: 'JOHN DOE', 
           isVerified: true,
           canReceive: true,
         },
         provider: providerName,
       };
       
-      // Simulate API delay
+      
       await this.simulateDelay(500, 1500);
       
-      // Simulate occasional failure (3% chance)
+      
       if (Math.random() < 0.03) {
         throw new AppError(`Provider ${providerName} verification service temporarily unavailable`, 503);
       }
@@ -425,7 +425,7 @@ class TelecomService {
     }
   }
 
-  // Get provider balance
+  
   static async getProviderBalance(providerName) {
     try {
       const config = this.providerConfigs[providerName];
@@ -434,19 +434,19 @@ class TelecomService {
         throw new AppError(`Provider ${providerName} not configured`, 500);
       }
       
-      // Mock balance response
+      
       const mockResponse = {
         success: true,
         data: {
           provider: providerName,
-          balance: Math.floor(Math.random() * 1000000), // Random balance
+          balance: Math.floor(Math.random() * 1000000), 
           currency: 'NGN',
           lastUpdated: new Date().toISOString(),
           status: 'active',
         },
       };
       
-      // Simulate API delay
+      
       await this.simulateDelay(300, 1000);
       
       return mockResponse;
@@ -457,7 +457,7 @@ class TelecomService {
     }
   }
 
-  // Check provider status
+  
   static async checkProviderStatus(providerName) {
     try {
       const config = this.providerConfigs[providerName];
@@ -471,7 +471,7 @@ class TelecomService {
         };
       }
       
-      // Mock status check
+      
       const statuses = ['active', 'degraded', 'maintenance'];
       const randomStatus = statuses[Math.floor(Math.random() * statuses.length)];
       
@@ -485,10 +485,10 @@ class TelecomService {
         lastChecked: new Date().toISOString(),
       };
       
-      // Simulate API delay
+      
       await this.simulateDelay(200, 800);
       
-      // Update provider status in database
+      
       await ProviderStatus.findOneAndUpdate(
         { providerName },
         {
@@ -506,7 +506,7 @@ class TelecomService {
     } catch (error) {
       logger.error('Error in checkProviderStatus:', error);
       
-      // Update provider as inactive on error
+      
       await ProviderStatus.findOneAndUpdate(
         { providerName },
         {
@@ -527,13 +527,13 @@ class TelecomService {
     }
   }
 
-  // Simulate API delay
+  
   static simulateDelay(min, max) {
     const delay = Math.floor(Math.random() * (max - min + 1)) + min;
     return new Promise(resolve => setTimeout(resolve, delay));
   }
 
-  // Retry failed transaction with fallback provider
+  
   static async retryFailedTransaction(transactionId, retryCount = 0) {
     try {
       const transaction = await Transaction.findById(transactionId);
@@ -550,11 +550,11 @@ class TelecomService {
         throw new AppError('Max retry attempts reached', 400);
       }
       
-      // Get next provider to try
+      
       const currentProvider = transaction.provider?.name;
       const availableProviders = await this.getAvailableProviders(transaction.type, currentProvider);
       
-      // Exclude already tried providers
+      
       const triedProviders = transaction.metadata?.triedProviders || [];
       const nextProvider = availableProviders.find(p => !triedProviders.includes(p.providerName));
       
@@ -562,7 +562,7 @@ class TelecomService {
         throw new AppError('No more providers to try', 503);
       }
       
-      // Update transaction with retry info
+      
       transaction.retryCount += 1;
       transaction.provider = {
         name: nextProvider.providerName,
@@ -576,7 +576,7 @@ class TelecomService {
       
       await transaction.save();
       
-      // Retry the transaction
+      
       const result = await this.processWithProvider(transaction, nextProvider.providerName);
       
       return {
@@ -591,7 +591,7 @@ class TelecomService {
     }
   }
 
-  // Bulk process transactions (for efficiency)
+  
   static async bulkProcessTransactions(transactions, providerName) {
     try {
       const results = [];

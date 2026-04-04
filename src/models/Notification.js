@@ -29,7 +29,7 @@ const notificationSchema = new mongoose.Schema(
         'login',
         'security',
         'system',
-        'broadcast'  // Added for broadcast notifications
+        'broadcast'  
       ],
       default: 'system',
     },

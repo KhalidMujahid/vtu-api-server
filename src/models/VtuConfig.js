@@ -26,7 +26,7 @@ const vtuConfigSchema = new mongoose.Schema({
   timestamps: true,
 });
 
-// Index for faster lookups
+
 vtuConfigSchema.index({ key: 1 });
 
 module.exports = mongoose.model('VtuConfig', vtuConfigSchema);

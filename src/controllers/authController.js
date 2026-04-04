@@ -169,7 +169,7 @@ exports.login = async (req, res, next) => {
       );
     }
 
-    // Check if agent is approved
+    
     if (user.role === 'agent' || (user.roles && user.roles.includes('agent'))) {
       if (!user.isApproved) {
         return next(

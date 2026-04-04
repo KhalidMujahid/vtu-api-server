@@ -309,9 +309,9 @@ class NelloBytesService {
     return Number.isNaN(parsed) ? null : parsed;
   }
 
-  /**
-   * Get wallet balance
-   */
+  
+
+
   static async getWalletBalance() {
     const endpoint = '/APIWalletBalanceV1.asp';
     const response = await this.request(endpoint);
@@ -354,14 +354,14 @@ class NelloBytesService {
     };
   }
 
-  // ============================================
-  // DATA BUNDLE API
-  // ============================================
+  
+  
+  
 
-  /**
-   * Get available data plans for a network
-   * @param {string} network - mtn, glo, airtel, 9mobile
-   */
+  
+
+
+
   static async getDataPlans(network = null) {
     const endpoint = '/APIDatabundlePlansV2.asp';
     const response = await this.request(endpoint);
@@ -375,12 +375,12 @@ class NelloBytesService {
     return response;
   }
 
-  /**
-   * Parse data plans response
-   */
+  
+
+
   static parseDataPlansResponse(response, networkCode) {
     if (typeof response === 'string') {
-      // Parse the response if it's a string
+      
       const plans = {};
       const networks = ['MTN', 'GLO', 'AIRTEL', '9MOBILE'];
       
@@ -393,14 +393,14 @@ class NelloBytesService {
     return response;
   }
 
-  /**
-   * Purchase data bundle
-   * @param {Object} options
-   * @param {string} options.network - mtn, glo, airtel, 9mobile
-   * @param {string} options.dataPlan - Data plan ID
-   * @param {string} options.mobileNumber - Recipient phone number
-   * @param {string} options.callBackURL - Callback URL for async response
-   */
+  
+
+
+
+
+
+
+
   static async purchaseData({ network, dataPlan, mobileNumber, callBackURL }) {
     const endpoint = '/APIDatabundleV1.asp';
     
@@ -430,16 +430,16 @@ class NelloBytesService {
     };
   }
 
-  /**
-   * Purchase airtime
-   * @param {Object} options
-   * @param {string} options.network - mtn, glo, airtel, 9mobile
-   * @param {number|string} options.amount - Airtime amount
-   * @param {string} options.mobileNumber - Recipient phone number
-   * @param {string} options.requestId - Optional external request ID
-   * @param {string} options.callBackURL - Callback URL
-   * @param {string} options.bonusType - Optional promo/bonus code
-   */
+  
+
+
+
+
+
+
+
+
+
   static async purchaseAirtime({ network, amount, mobileNumber, requestId = null, callBackURL, bonusType = null }) {
     const endpoint = '/APIAirtimeV1.asp';
     const normalizedNetwork = this.normalizeNetwork(network);
@@ -475,9 +475,9 @@ class NelloBytesService {
     };
   }
 
-  /**
-   * Query data transaction by OrderID or RequestID
-   */
+  
+
+
   static async queryDataTransaction({ orderId = null, requestId = null }) {
     const endpoint = '/APIQueryV1.asp';
     
@@ -502,9 +502,9 @@ class NelloBytesService {
     return this.queryDataTransaction({ orderId, requestId });
   }
 
-  /**
-   * Cancel data transaction (only if status is ORDER_RECEIVED or ORDER_ONHOLD)
-   */
+  
+
+
   static async cancelDataTransaction(orderId) {
     const endpoint = '/APICancelV1.asp';
     
@@ -522,29 +522,29 @@ class NelloBytesService {
     return this.cancelDataTransaction(orderId);
   }
 
-  // ============================================
-  // CABLE TV SUBSCRIPTION API
-  // ============================================
+  
+  
+  
 
-  /**
-   * Get available cable TV packages
-   * @param {string} cableTV - dstv, gotv, startimes
-   */
+  
+
+
+
   static async getCablePackages(cableTV = null) {
     const endpoint = '/APICableTVPackagesV2.asp';
     const response = await this.request(endpoint);
     
     if (cableTV && this.cableCodes[cableTV.toLowerCase()]) {
-      // Filter packages by provider
+      
       return this.parseCablePackages(response, cableTV.toLowerCase());
     }
     
     return response;
   }
 
-  /**
-   * Parse cable packages response
-   */
+  
+
+
   static parseCablePackages(response, cableTV) {
     if (typeof response === 'string') {
       return response;
@@ -552,9 +552,9 @@ class NelloBytesService {
     return response;
   }
 
-  /**
-   * Verify smartcard/IUC number
-   */
+  
+
+
   static async verifyCableSmartCard({ cableTV, smartCardNo }) {
     const endpoint = '/APIVerifyCableTVV1.0.asp';
     
@@ -575,9 +575,9 @@ class NelloBytesService {
     };
   }
 
-  /**
-   * Purchase cable TV subscription
-   */
+  
+
+
   static async purchaseCableTV({ cableTV, packageCode, smartCardNo, phoneNo, requestId = null, callBackURL }) {
     const endpoint = '/APICableTVV1.asp';
     
@@ -607,9 +607,9 @@ class NelloBytesService {
     };
   }
 
-  /**
-   * Query cable TV transaction
-   */
+  
+
+
   static async queryCableTransaction({ orderId = null, requestId = null }) {
     const endpoint = '/APIQueryV1.asp';
     
@@ -629,9 +629,9 @@ class NelloBytesService {
     };
   }
 
-  /**
-   * Cancel cable TV transaction
-   */
+  
+
+
   static async cancelCableTransaction(orderId) {
     const endpoint = '/APICancelV1.asp';
     
@@ -645,13 +645,13 @@ class NelloBytesService {
     };
   }
 
-  // ============================================
-  // ELECTRICITY BILL PAYMENT API
-  // ============================================
+  
+  
+  
 
-  /**
-   * Get available electricity disco companies
-   */
+  
+
+
   static async getElectricityDiscos() {
     const endpoint = '/APIElectricityDiscosV2.asp';
     const response = await this.request(endpoint);
@@ -661,9 +661,9 @@ class NelloBytesService {
     };
   }
 
-  /**
-   * Verify meter number
-   */
+  
+
+
   static async verifyElectricityMeter({ electricCompany, meterNo, meterType = 'prepaid' }) {
     const endpoint = '/APIVerifyElectricityV1.asp';
     const { code: discoCode, key } = this.resolveElectricityCompany(electricCompany);
@@ -685,9 +685,9 @@ class NelloBytesService {
     };
   }
 
-  /**
-   * Pay electricity bill
-   */
+  
+
+
   static async payElectricityBill({ electricCompany, meterNo, meterType, amount, phoneNo, requestId = null, callBackURL }) {
     const endpoint = '/APIElectricityV1.asp';
     const { code: discoCode, key } = this.resolveElectricityCompany(electricCompany);
@@ -718,9 +718,9 @@ class NelloBytesService {
     };
   }
 
-  /**
-   * Query electricity transaction
-   */
+  
+
+
   static async queryElectricityTransaction({ orderId = null, requestId = null }) {
     const endpoint = '/APIQueryV1.asp';
     
@@ -740,9 +740,9 @@ class NelloBytesService {
     };
   }
 
-  /**
-   * Cancel electricity transaction
-   */
+  
+
+
   static async cancelElectricityTransaction(orderId) {
     const endpoint = '/APICancelV1.asp';
     
@@ -756,22 +756,22 @@ class NelloBytesService {
     };
   }
 
-  // ============================================
-  // AIRTIME RECHARGE PIN (EPIN) API
-  // ============================================
+  
+  
+  
 
-  /**
-   * Get available EPIN services and discounts
-   */
+  
+
+
   static async getEPINDiscount() {
     const endpoint = '/APIEPINDiscountV2.asp';
     const response = await this.request(endpoint);
     return response;
   }
 
-  /**
-   * Buy Airtime EPIN
-   */
+  
+
+
   static async buyEPIN({ mobileNetwork, value, quantity, requestId = null, callBackURL = null }) {
     const endpoint = '/APIEPINV1.asp';
     
@@ -781,13 +781,13 @@ class NelloBytesService {
       throw new AppError('Invalid network. Use: mtn/glo/airtel/9mobile or 01/02/03/04', 400);
     }
 
-    // Validate value
+    
     const allowedValues = ['100', '200', '500'];
     if (!allowedValues.includes(String(value))) {
       throw new AppError('Invalid value. Allowed: 100, 200, 500', 400);
     }
 
-    // Validate quantity
+    
     if (quantity < 1 || quantity > 100) {
       throw new AppError('Invalid quantity. Allowed: 1 to 100', 400);
     }
@@ -813,9 +813,9 @@ class NelloBytesService {
     };
   }
 
-  /**
-   * Query EPIN transaction
-   */
+  
+
+
   static async queryEPINTransaction({ orderId = null, requestId = null }) {
     const endpoint = '/APIQueryV1.asp';
     
@@ -836,26 +836,26 @@ class NelloBytesService {
     };
   }
 
-  // ============================================
-  // WAEC e-PIN API
-  // ============================================
+  
+  
+  
 
-  /**
-   * Get available WAEC packages
-   */
+  
+
+
   static async getWAECPackages() {
     const endpoint = '/APIWAECPackagesV2.asp';
     const response = await this.request(endpoint);
     return response;
   }
 
-  /**
-   * Buy WAEC e-PIN
-   * @param {Object} options
-   * @param {string} options.examType - waecdirect, waec-registration
-   * @param {string} options.phoneNo - Recipient phone number
-   * @param {string} options.callBackURL - Callback URL
-   */
+  
+
+
+
+
+
+
   static async buyWAECEPIN({ examType, phoneNo, requestId = null, callBackURL }) {
     const endpoint = '/APIWAECV1.asp';
     
@@ -880,9 +880,9 @@ class NelloBytesService {
     };
   }
 
-  /**
-   * Query WAEC transaction
-   */
+  
+
+
   static async queryWAECTransaction({ orderId = null, requestId = null }) {
     const endpoint = '/APIQueryV1.asp';
     
@@ -904,9 +904,9 @@ class NelloBytesService {
     };
   }
 
-  /**
-   * Cancel WAEC transaction
-   */
+  
+
+
   static async cancelWAECTransaction(orderId) {
     const endpoint = '/APICancelV1.asp';
     
@@ -920,22 +920,22 @@ class NelloBytesService {
     };
   }
 
-  // ============================================
-  // JAMB e-PIN API
-  // ============================================
+  
+  
+  
 
-  /**
-   * Get available JAMB packages
-   */
+  
+
+
   static async getJAMBPackages() {
     const endpoint = '/APIJAMBPackagesV2.asp';
     const response = await this.request(endpoint);
     return response;
   }
 
-  /**
-   * Verify JAMB Profile ID
-   */
+  
+
+
   static async verifyJAMBProfile({ examType, profileId }) {
     const endpoint = '/APIVerifyJAMBV1.asp';
     
@@ -951,9 +951,9 @@ class NelloBytesService {
     };
   }
 
-  /**
-   * Buy JAMB e-PIN
-   */
+  
+
+
   static async buyJAMPEPIN({ examType, phoneNo, requestId = null, callBackURL }) {
     const endpoint = '/APIJAMBV1.asp';
     
@@ -978,9 +978,9 @@ class NelloBytesService {
     };
   }
 
-  /**
-   * Query JAMB transaction
-   */
+  
+
+
   static async queryJAMBTransaction({ orderId = null, requestId = null }) {
     const endpoint = '/APIQueryV1.asp';
     
@@ -1002,9 +1002,9 @@ class NelloBytesService {
     };
   }
 
-  /**
-   * Cancel JAMB transaction
-   */
+  
+
+
   static async cancelJAMBTransaction(orderId) {
     const endpoint = '/APICancelV1.asp';
     
@@ -1018,27 +1018,27 @@ class NelloBytesService {
     };
   }
 
-  // ============================================
-  // STATUS CODE HELPERS
-  // ============================================
+  
+  
+  
 
-  /**
-   * Check if status indicates success
-   */
+  
+
+
   static isSuccess(statusCode) {
     return statusCode === '100' || statusCode === '200';
   }
 
-  /**
-   * Check if status indicates order received (can be cancelled)
-   */
+  
+
+
   static canCancel(statusCode) {
     return statusCode === '100' || statusCode === 'ORDER_RECEIVED' || statusCode === 'ORDER_ONHOLD';
   }
 
-  /**
-   * Get human-readable status message
-   */
+  
+
+
   static getStatusMessage(statusCode) {
     const messages = {
       '100': 'Order Received - Processing',

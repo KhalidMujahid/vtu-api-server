@@ -749,3 +749,6 @@
 {"level":"warn","message":"Scheduled SMEPlug airtime reconciliation skipped (provider feed unavailable): Failed to get transactions","service":"yareema-data-hub","timestamp":"2026-04-04 11:48:47"}
 {"level":"info","message":"Scheduled provider reconciliation cycle completed","providers":{"clubkonnect":{"errors":0,"scanned":0,"skipped":0,"stillPending":0,"updatedFailed":0,"updatedSuccessful":0},"smeplug":{"errors":1,"scanned":18,"skipped":0,"stillPending":18,"updatedFailed":0,"updatedSuccessful":0}},"service":"yareema-data-hub","timestamp":"2026-04-04 11:48:47","totals":{"errors":1,"scanned":18,"skipped":0,"stillPending":18,"updatedFailed":0,"updatedSuccessful":0}}
 {"ip":"::1","level":"info","message":"GET /api/v1/console/providers/markups/options","service":"yareema-data-hub","timestamp":"2026-04-04 11:49:30","userAgent":"PostmanRuntime/7.53.0"}
+{"level":"info","message":"VTU Providers initialized","service":"yareema-data-hub","timestamp":"2026-04-04 13:27:57"}
+{"level":"info","message":"API balance alert worker started (every 900s)","service":"yareema-data-hub","timestamp":"2026-04-04 13:27:57"}
+{"level":"info","message":"Airtime reconciliation worker started (every 300s)","service":"yareema-data-hub","timestamp":"2026-04-04 13:27:57"}

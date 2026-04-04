@@ -236,7 +236,7 @@ class AdminController {
     try {
       const { firstName, lastName, email, phoneNumber, role = 'support' } = req.body;
       
-      // Validate required fields
+      
       if (!firstName || !lastName || !email) {
         return res.status(400).json({
           status: 'error',
@@ -244,7 +244,7 @@ class AdminController {
         });
       }
       
-      // Validate role
+      
       const validRoles = ['superadmin', 'admin', 'support'];
       if (!validRoles.includes(role)) {
         return res.status(400).json({
@@ -253,7 +253,7 @@ class AdminController {
         });
       }
       
-      // Check if email already exists
+      
       const existingEmail = await User.findOne({ email: email.toLowerCase() });
       if (existingEmail) {
         return res.status(400).json({
@@ -349,7 +349,7 @@ class AdminController {
       const { staffId } = req.params;
       const { role } = req.body;
       
-      // Validate role
+      
       const validRoles = ['superadmin', 'admin', 'support'];
       if (!role || !validRoles.includes(role)) {
         return res.status(400).json({
@@ -358,7 +358,7 @@ class AdminController {
         });
       }
       
-      // Find staff member
+      
       const staff = await User.findOne({
         _id: staffId,
         role: { $in: ['superadmin', 'admin', 'support'] }
@@ -371,7 +371,7 @@ class AdminController {
         });
       }
       
-      // Prevent removing own admin role
+      
       if (req.user?.id === staffId.toString() && staff.role === 'superadmin' && role !== 'superadmin') {
         return res.status(400).json({
           status: 'error',
@@ -383,7 +383,7 @@ class AdminController {
       staff.role = role;
       await staff.save();
       
-      // Log the action
+      
       await AdminLog.create({
         admin: req.user?.id,
         adminEmail: req.user?.email,
@@ -418,7 +418,7 @@ class AdminController {
     try {
       const { staffId } = req.params;
       
-      // Find staff member
+      
       const staff = await User.findOne({
         _id: staffId,
         role: { $in: ['superadmin', 'admin', 'support'] }
@@ -431,7 +431,7 @@ class AdminController {
         });
       }
       
-      // Prevent removing self
+      
       if (req.user?.id === staffId.toString()) {
         return res.status(400).json({
           status: 'error',
@@ -439,7 +439,7 @@ class AdminController {
         });
       }
       
-      // Prevent removing superadmin if only one
+      
       if (staff.role === 'superadmin') {
         const superadminCount = await User.countDocuments({ role: 'superadmin' });
         if (superadminCount <= 1) {
@@ -453,10 +453,10 @@ class AdminController {
       const staffName = `${staff.firstName} ${staff.lastName}`;
       const staffEmail = staff.email;
       
-      // Delete the staff member
+      
       await User.findByIdAndDelete(staffId);
       
-      // Log the action
+      
       await AdminLog.create({
         admin: req.user?.id,
         adminEmail: req.user?.email,
@@ -478,7 +478,7 @@ class AdminController {
     }
   }
 
-  // User Management
+  
   static async getUsers(req, res, next) {
     try {
       const {
@@ -498,7 +498,7 @@ class AdminController {
       const skip = (parseInt(page) - 1) * parseInt(limit);
       const query = {};
       
-      // Search by name, email, or phone
+      
       if (search) {
         query.$or = [
           { firstName: { $regex: search, $options: 'i' } },
@@ -513,7 +513,7 @@ class AdminController {
       if (isActive !== undefined) query.isActive = isActive === 'true';
       if (isVerified !== undefined) query.isEmailVerified = isVerified === 'true';
       
-      // Date range filter
+      
       if (startDate || endDate) {
         query.createdAt = {};
         if (startDate) query.createdAt.$gte = new Date(startDate);
@@ -533,7 +533,7 @@ class AdminController {
         User.countDocuments(query),
       ]);
       
-      // Get wallet balances for users
+      
       const usersWithBalances = await Promise.all(
         users.map(async (user) => {
           const wallet = await Wallet.findOne({ user: user._id }).lean();
@@ -576,19 +576,19 @@ class AdminController {
         return next(new AppError('User not found', 404));
       }
       
-      // Get user's wallet
+      
       const wallet = await Wallet.findOne({ user: id }).lean();
       
-      // Get user's KYC info
+      
       const kyc = await KYC.findOne({ user: id }).lean();
       
-      // Get user's recent transactions
+      
       const recentTransactions = await Transaction.find({ user: id })
         .sort({ createdAt: -1 })
         .limit(10)
         .lean();
       
-      // Get transaction statistics
+      
       const transactionStats = await Transaction.aggregate([
         { $match: { user: id } },
         {
@@ -632,14 +632,14 @@ class AdminController {
         return next(new AppError('User is already suspended', 400));
       }
       
-      // Suspend user
+      
       user.isActive = false;
       await user.save();
       
-      // Lock user's wallet
+      
       await WalletService.lockWallet(id, `User suspended by admin: ${reason}`);
       
-      // Log the action
+      
       await AdminLog.log({
         admin: req.admin._id,
         adminEmail: req.admin.email,
@@ -691,15 +691,15 @@ class AdminController {
         return next(new AppError('User is already approved', 400));
       }
       
-      // Activate user
+      
       user.isActive = true;
       user.isApproved = true;
       await user.save();
       
-      // Unlock user's wallet
-      // await WalletService.unlockWallet(id);
       
-      // Log the action
+      
+      
+      
       await AdminLog.log({
         admin: req.admin._id,
         adminEmail: req.admin.email,
@@ -733,13 +733,13 @@ class AdminController {
     }
   }
 
-  // Get Pending Agents
+  
   static async getPendingAgents(req, res, next) {
     try {
       const { page = 1, limit = 20 } = req.query;
       const skip = (parseInt(page) - 1) * parseInt(limit);
       
-      // Find agents that are not approved
+      
       const query = {
         $or: [
           { role: 'agent' },
@@ -775,7 +775,7 @@ class AdminController {
     }
   }
 
-  // Role Management
+  
   static async assignRole(req, res, next) {
     try {
       const { id } = req.params;
@@ -787,7 +787,7 @@ class AdminController {
         return next(new AppError('User not found', 404));
       }
       
-      // Handle single role or array of roles
+      
       let newRoles = [];
       if (roles && Array.isArray(roles)) {
         newRoles = roles;
@@ -797,7 +797,7 @@ class AdminController {
         return next(new AppError('Please provide role or roles to assign', 400));
       }
       
-      // Validate roles
+      
       const validRoles = ['client', 'agent', 'staff', 'admin', 'super_admin'];
       for (const r of newRoles) {
         if (!validRoles.includes(r)) {
@@ -805,15 +805,15 @@ class AdminController {
         }
       }
       
-      // Update roles
+      
       user.roles = newRoles;
       
-      // Update legacy role field for backward compatibility
+      
       if (newRoles.includes('admin') || newRoles.includes('super_admin')) {
         user.role = newRoles.includes('super_admin') ? 'super_admin' : 'admin';
       } else if (newRoles.includes('agent')) {
         user.role = 'agent';
-        // Agents need approval unless they already have it
+        
         if (!user.isApproved) {
           user.isApproved = false;
         }
@@ -825,7 +825,7 @@ class AdminController {
       
       await user.save();
       
-      // Log the action
+      
       await AdminLog.log({
         admin: req.admin._id,
         adminEmail: req.admin.email,
@@ -871,7 +871,7 @@ class AdminController {
         return next(new AppError('User not found', 404));
       }
       
-      // Check if user has agent role
+      
       if (user.role !== 'agent' && (!user.roles || !user.roles.includes('agent'))) {
         return next(new AppError('User does not have agent role', 400));
       }
@@ -880,7 +880,7 @@ class AdminController {
         return next(new AppError('Agent is already approved', 400));
       }
       
-      // Approve agent using findOneAndUpdate for reliability
+      
       const updatedUser = await User.findOneAndUpdate(
         { _id: id },
         {
@@ -895,7 +895,7 @@ class AdminController {
         return next(new AppError('Failed to approve agent', 500));
       }
       
-      // Log the action
+      
       await AdminLog.log({
         admin: req.admin._id,
         adminEmail: req.admin.email,
@@ -941,12 +941,12 @@ class AdminController {
         return next(new AppError('User not found', 404));
       }
       
-      // Check if user has agent role
+      
       if (user.role !== 'agent' && (!user.roles || !user.roles.includes('agent'))) {
         return next(new AppError('User does not have agent role', 400));
       }
       
-      // Deactivate the agent account using findOneAndUpdate for reliability
+      
       const updatedUser = await User.findOneAndUpdate(
         { _id: id },
         {
@@ -960,7 +960,7 @@ class AdminController {
         return next(new AppError('Failed to reject agent', 500));
       }
       
-      // Log the action
+      
       await AdminLog.log({
         admin: req.admin._id,
         adminEmail: req.admin.email,
@@ -1011,22 +1011,22 @@ class AdminController {
         return next(new AppError('User account is already locked', 400));
       }
       
-      // Check if trying to lock admin/super_admin
+      
       if (user.role === 'super_admin') {
         return next(new AppError('Cannot lock super admin account', 400));
       }
       
-      // Lock the account
+      
       user.isAccountLocked = true;
       user.lockedBy = req.admin._id;
       user.lockedAt = new Date();
       user.lockReason = reason || 'Locked by administrator';
       await user.save();
       
-      // Lock user's wallet
+      
       await WalletService.lockWallet(id, `User account locked by admin: ${user.lockReason}`);
       
-      // Log the action
+      
       await AdminLog.log({
         admin: req.admin._id,
         adminEmail: req.admin.email,
@@ -1077,17 +1077,17 @@ class AdminController {
         return next(new AppError('User account is not locked', 400));
       }
       
-      // Unlock the account
+      
       user.isAccountLocked = false;
       user.lockedBy = undefined;
       user.lockedAt = undefined;
       user.lockReason = undefined;
       await user.save();
       
-      // Unlock user's wallet
+      
       await WalletService.unlockWallet(id);
       
-      // Log the action
+      
       await AdminLog.log({
         admin: req.admin._id,
         adminEmail: req.admin.email,
@@ -1131,11 +1131,11 @@ class AdminController {
         return next(new AppError('User not found', 404));
       }
       
-      // Clear transaction PIN
+      
       user.transactionPin = undefined;
       await user.save();
       
-      // Log the action
+      
       await AdminLog.log({
         admin: req.admin._id,
         adminEmail: req.admin.email,
@@ -1168,7 +1168,7 @@ class AdminController {
     }
   }
 
-  // Wallet Management
+  
   static async getWallets(req, res, next) {
     try {
       const {
@@ -1184,7 +1184,7 @@ class AdminController {
       const skip = (parseInt(page) - 1) * parseInt(limit);
       const query = {};
       
-      // Balance range filter
+      
       if (minBalance || maxBalance) {
         query.balance = {};
         if (minBalance) query.balance.$gte = parseFloat(minBalance);
@@ -1238,7 +1238,7 @@ class AdminController {
     try {
       const { userId } = req.params;
       
-      // Check if user exists
+      
       const user = await User.findById(userId);
       if (!user) {
         return next(new AppError('User not found', 404));
@@ -1252,7 +1252,7 @@ class AdminController {
         return next(new AppError('Wallet not found', 404));
       }
       
-      // Get wallet transactions
+      
       const transactions = await Transaction.find({ user: userId })
         .sort({ createdAt: -1 })
         .limit(20)
@@ -1281,7 +1281,7 @@ class AdminController {
         return next(new AppError('Please provide a valid amount', 400));
       }
       
-      // Check if user exists
+      
       const user = await User.findById(userId);
       if (!user) {
         return next(new AppError('User not found', 404));
@@ -1298,7 +1298,7 @@ class AdminController {
       
       const transactionReference = reference || `ADMIN-CREDIT-${Date.now()}`;
       
-      // Credit wallet
+      
       const result = await WalletService.creditWallet(
         userId,
         amount,
@@ -1306,7 +1306,7 @@ class AdminController {
         `Manual credit by admin: ${reason || 'No reason provided'}`
       );
       
-      // Log the action
+      
       await AdminLog.log({
         admin: req.admin._id,
         adminEmail: req.admin.email,
@@ -1355,7 +1355,7 @@ class AdminController {
         return next(new AppError('Please provide a valid amount', 400));
       }
       
-      // Check if user exists
+      
       const user = await User.findById(userId);
       if (!user) {
         return next(new AppError('User not found', 404));
@@ -1376,7 +1376,7 @@ class AdminController {
       
       const transactionReference = reference || `ADMIN-DEBIT-${Date.now()}`;
       
-      // Debit wallet
+      
       const result = await WalletService.debitWallet(
         userId,
         amount,
@@ -1384,7 +1384,7 @@ class AdminController {
         `Manual debit by admin: ${reason || 'No reason provided'}`
       );
       
-      // Log the action
+      
       await AdminLog.log({
         admin: req.admin._id,
         adminEmail: req.admin.email,
@@ -1429,7 +1429,7 @@ class AdminController {
       const { userId } = req.params;
       const { reason } = req.body;
       
-      // Check if user exists
+      
       const user = await User.findById(userId);
       if (!user) {
         return next(new AppError('User not found', 404));
@@ -1444,10 +1444,10 @@ class AdminController {
         return next(new AppError('Wallet is already locked', 400));
       }
       
-      // Lock wallet
+      
       const lockedWallet = await WalletService.lockWallet(userId, reason || 'Administrative action');
       
-      // Log the action
+      
       await AdminLog.log({
         admin: req.admin._id,
         adminEmail: req.admin.email,
@@ -1482,7 +1482,7 @@ class AdminController {
     try {
       const { userId } = req.params;
       
-      // Check if user exists
+      
       const user = await User.findById(userId);
       if (!user) {
         return next(new AppError('User not found', 404));
@@ -1497,10 +1497,10 @@ class AdminController {
         return next(new AppError('Wallet is not locked', 400));
       }
       
-      // Unlock wallet
+      
       const unlockedWallet = await WalletService.unlockWallet(userId);
       
-      // Log the action
+      
       await AdminLog.log({
         admin: req.admin._id,
         adminEmail: req.admin.email,
@@ -1530,7 +1530,7 @@ class AdminController {
     }
   }
 
-  // Transaction Management
+  
   static async getTransactions(req, res, next) {
     try {
       const {
@@ -1558,14 +1558,14 @@ class AdminController {
       if (reference) query.reference = { $regex: reference, $options: 'i' };
       if (provider) query['provider.name'] = provider;
       
-      // Date range filter
+      
       if (startDate || endDate) {
         query.createdAt = {};
         if (startDate) query.createdAt.$gte = new Date(startDate);
         if (endDate) query.createdAt.$lte = new Date(endDate);
       }
       
-      // Amount range filter
+      
       if (minAmount || maxAmount) {
         query.amount = {};
         if (minAmount) query.amount.$gte = parseFloat(minAmount);
@@ -1585,7 +1585,7 @@ class AdminController {
         Transaction.countDocuments(query),
       ]);
       
-      // Get transaction statistics
+      
       const stats = await Transaction.aggregate([
         { $match: query },
         {
@@ -1683,10 +1683,10 @@ class AdminController {
         return next(new AppError('Refund already processed for this transaction', 400));
       }
       
-      // Process refund
+      
       const refundTransaction = await TransactionService.refundFailedTransaction(id);
       
-      // Log the action
+      
       await AdminLog.log({
         admin: req.admin._id,
         adminEmail: req.admin.email,
@@ -1791,7 +1791,7 @@ class AdminController {
         }
       }
       
-      // Log the action
+      
       await AdminLog.log({
         admin: req.admin._id,
         adminEmail: req.admin.email,
@@ -1823,7 +1823,7 @@ class AdminController {
     }
   }
 
-  // Service Pricing Management
+  
   static async getPricing(req, res, next) {
     try {
       const {
@@ -1852,7 +1852,7 @@ class AdminController {
       if (isActive !== undefined) query.isActive = isActive === 'true';
       if (isAvailable !== undefined) query.isAvailable = isAvailable === 'true';
       
-      // Search by plan name or code
+      
       if (search) {
         query.$or = [
           { planName: { $regex: search, $options: 'i' } },
@@ -1897,7 +1897,7 @@ class AdminController {
     try {
       const pricingData = req.body;
       
-      // Validate required fields
+      
       const requiredFields = ['serviceType', 'provider', 'planName', 'costPrice', 'sellingPrice'];
       for (const field of requiredFields) {
         if (!pricingData[field]) {
@@ -1905,17 +1905,17 @@ class AdminController {
         }
       }
       
-      // Calculate profit margin
+      
       if (pricingData.costPrice && pricingData.sellingPrice) {
         pricingData.profitMargin = pricingData.sellingPrice - pricingData.costPrice;
       }
       
-      // Set created by
+      
       pricingData.createdBy = req.admin._id;
       
       const pricing = await ServicePricing.create(pricingData);
       
-      // Log the action
+      
       await AdminLog.log({
         admin: req.admin._id,
         adminEmail: req.admin.email,
@@ -1962,7 +1962,7 @@ class AdminController {
         return next(new AppError('Pricing not found', 404));
       }
       
-      // Store old data for logging
+      
       const oldData = {
         costPrice: pricing.costPrice,
         sellingPrice: pricing.sellingPrice,
@@ -1970,22 +1970,22 @@ class AdminController {
         isAvailable: pricing.isAvailable,
       };
       
-      // Update pricing
+      
       Object.assign(pricing, updateData);
       
-      // Recalculate profit margin if prices changed
+      
       if (updateData.costPrice || updateData.sellingPrice) {
         const newCostPrice = updateData.costPrice || pricing.costPrice;
         const newSellingPrice = updateData.sellingPrice || pricing.sellingPrice;
         pricing.profitMargin = newSellingPrice - newCostPrice;
       }
       
-      // Set updated by
+      
       pricing.updatedBy = req.admin._id;
       
       await pricing.save();
       
-      // Log the action
+      
       await AdminLog.log({
         admin: req.admin._id,
         adminEmail: req.admin.email,
@@ -2034,12 +2034,12 @@ class AdminController {
         return next(new AppError('Pricing not found', 404));
       }
       
-      // Instead of deleting, mark as inactive
+      
       pricing.isActive = false;
       pricing.isAvailable = false;
       await pricing.save();
       
-      // Log the action
+      
       await AdminLog.log({
         admin: req.admin._id,
         adminEmail: req.admin.email,
@@ -2069,7 +2069,7 @@ class AdminController {
     }
   }
 
-  // Provider Management
+  
   static async getProviders(req, res, next) {
     try {
       const {
@@ -2129,10 +2129,10 @@ class AdminController {
         return next(new AppError('Provider not found', 404));
       }
       
-      // Store old status for logging
+      
       const oldStatus = provider.status;
       
-      // Update provider
+      
       if (status) provider.status = status;
       if (maintenanceMessage) provider.maintenanceMessage = maintenanceMessage;
       if (maintenanceStart) provider.maintenanceStart = new Date(maintenanceStart);
@@ -2142,7 +2142,7 @@ class AdminController {
       provider.lastUpdatedBy = req.admin._id;
       await provider.save();
       
-      // Log the action
+      
       await AdminLog.log({
         admin: req.admin._id,
         adminEmail: req.admin.email,
@@ -2182,7 +2182,7 @@ class AdminController {
     }
   }
 
-  // Admin Logs
+  
   static async getAdminLogs(req, res, next) {
     try {
       const {
@@ -2207,14 +2207,14 @@ class AdminController {
       if (adminId) query.admin = adminId;
       if (status) query.status = status;
       
-      // Date range filter
+      
       if (startDate || endDate) {
         query.createdAt = {};
         if (startDate) query.createdAt.$gte = new Date(startDate);
         if (endDate) query.createdAt.$lte = new Date(endDate);
       }
       
-      // Search by description or admin email
+      
       if (search) {
         query.$or = [
           { description: { $regex: search, $options: 'i' } },
@@ -2254,7 +2254,7 @@ class AdminController {
     }
   }
 
-  // Helper Methods for Charts
+  
   static async getDailyTransactionChart() {
     try {
       const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
@@ -2321,7 +2321,7 @@ class AdminController {
         { $sort: { _id: 1 } },
       ]);
       
-      // Calculate cumulative total
+      
       let cumulative = 0;
       const cumulativeData = data.map(d => {
         cumulative += d.count;
@@ -2415,7 +2415,7 @@ class AdminController {
     }
   }
 
-  // Additional Admin Functions
+  
   static async broadcastNotification(req, res, next) {
     try {
       const { title, message, type, targetUsers, sendEmail, sendSMS } = req.body;
@@ -2442,7 +2442,7 @@ class AdminController {
         sentBy: req.admin.email,
       };
       
-      // Log the action
+      
       await AdminLog.log({
         admin: req.admin._id,
         adminEmail: req.admin.email,
@@ -2565,7 +2565,7 @@ class AdminController {
       
       await Promise.all(updatePromises);
       
-      // Log the action
+      
       await AdminLog.log({
         admin: req.admin._id,
         adminEmail: req.admin.email,
@@ -2987,7 +2987,7 @@ class AdminController {
           return next(new AppError('Invalid export type', 400));
       }
       
-      // Log the export
+      
       const exportEntityMap = {
         transactions: 'transaction',
         users: 'user',
@@ -3029,7 +3029,7 @@ class AdminController {
         
         return res.send('');
       } else {
-        // Return JSON
+        
         res.status(200).json({
           status: 'success',
           data: {
@@ -3069,18 +3069,18 @@ const notImplementedHandler = (featureName) => async (req, res) => {
   });
 };
 
-// Export controller methods
+
 module.exports = {
-  // Dashboard
+  
   getDashboardStats: AdminController.getDashboardStats,
   
-  // Staff Management
+  
   getStaff: AdminController.getStaff,
   addStaff: AdminController.addStaff,
   updateStaffRole: AdminController.updateStaffRole,
   removeStaff: AdminController.removeStaff,
   
-  // User Management
+  
   getUsers: AdminController.getUsers,
   getUser: AdminController.getUser,
   getPendingAgents: AdminController.getPendingAgents,
@@ -3088,14 +3088,14 @@ module.exports = {
   activateUser: AdminController.activateUser,
   resetTransactionPin: AdminController.resetTransactionPin,
   
-  // Role Management
+  
   assignRole: AdminController.assignRole,
   approveAgent: AdminController.approveAgent,
   rejectAgent: AdminController.rejectAgent,
   lockAccount: AdminController.lockAccount,
   unlockAccount: AdminController.unlockAccount,
   
-  // Wallet Management
+  
   getWallets: AdminController.getWallets,
   getUserWallet: AdminController.getUserWallet,
   creditWallet: AdminController.creditWallet,
@@ -3103,28 +3103,28 @@ module.exports = {
   lockWallet: AdminController.lockWallet,
   unlockWallet: AdminController.unlockWallet,
   
-  // Transaction Management
+  
   getTransactions: AdminController.getTransactions,
   getTransaction: AdminController.getTransaction,
   refundTransaction: AdminController.refundTransaction,
   retryFailedTransactions: AdminController.retryFailedTransactions,
   
-  // Service Pricing Management
+  
   getPricing: AdminController.getPricing,
   createPricing: AdminController.createPricing,
   bulkUpdatePricing: notImplementedHandler('Bulk pricing update'),
   updatePricing: AdminController.updatePricing,
   deletePricing: AdminController.deletePricing,
   
-  // Provider Management
+  
   getProviders: AdminController.getProviders,
   updateProviderStatus: AdminController.updateProviderStatus,
   checkApiBalanceAlerts: notImplementedHandler('API balance alert check'),
   
-  // Admin Logs
+  
   getAdminLogs: AdminController.getAdminLogs,
   
-  // Additional Functions
+  
   getMyProfile: AdminController.getMyProfile,
   updateMyProfile: AdminController.updateMyProfile,
   changeMyPassword: AdminController.changeMyPassword,

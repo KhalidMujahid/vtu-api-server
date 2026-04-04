@@ -9,7 +9,7 @@ const { startAirtimeReconciliationWorker } = require('./src/workers/airtimeRecon
 const PORT = process.env.PORT || 5000;
 
 connectDB().then(async () => {
-  // Initialize VTU providers
+  
   try {
     await VtuProviderService.initializeProviders();
     console.log('VTU Providers initialized');
@@ -17,7 +17,7 @@ connectDB().then(async () => {
     console.warn('VTU Provider initialization skipped:', error.message);
   }
 
-  // Load VTU service routing from database
+  
   try {
     console.log('Initializing VTU config...');
     await vtuConfig.initialize();

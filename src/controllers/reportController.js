@@ -35,9 +35,7 @@ function resolveReportDateFilter({ type = 'daily', startDate, endDate }) {
   return { createdAt: { $gte: from, $lte: to } };
 }
 
-/**
- * Get User's Own Transaction Report
- */
+
 exports.getMyReport = async (req, res, next) => {
   try {
     const { 
@@ -57,7 +55,7 @@ exports.getMyReport = async (req, res, next) => {
       return next(new AppError('Please provide startDate and endDate for custom range', 400));
     }
 
-    // Build query for user
+    
     const query = { 
       user: userId,
       ...dateFilter 
@@ -65,7 +63,7 @@ exports.getMyReport = async (req, res, next) => {
     if (status) query.status = status;
     if (category) query.category = category;
 
-    // Get transactions with pagination
+    
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const transactions = await Transaction.find(query)
       .sort({ createdAt: -1 })
@@ -74,7 +72,7 @@ exports.getMyReport = async (req, res, next) => {
 
     const total = await Transaction.countDocuments(query);
 
-    // Get summary statistics for user
+    
     const summary = await Transaction.aggregate([
       { $match: query },
       {
@@ -95,7 +93,7 @@ exports.getMyReport = async (req, res, next) => {
       }
     ]);
 
-    // Get spending by category
+    
     const byCategory = await Transaction.aggregate([
       { $match: { ...query, status: 'successful' } },
       {
@@ -137,7 +135,7 @@ exports.getMyReport = async (req, res, next) => {
 exports.getTransactionReport = async (req, res, next) => {
   try {
     const { 
-      type = 'daily', // daily, weekly, monthly, custom
+      type = 'daily', 
       startDate, 
       endDate,
       status,
@@ -151,12 +149,12 @@ exports.getTransactionReport = async (req, res, next) => {
       return next(new AppError('Please provide startDate and endDate for custom range', 400));
     }
 
-    // Build query
+    
     const query = { ...dateFilter };
     if (status) query.status = status;
     if (transactionType) query.type = transactionType;
 
-    // Get transactions with pagination
+    
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const transactions = await Transaction.find(query)
       .populate('user', 'firstName lastName email phoneNumber')
@@ -166,7 +164,7 @@ exports.getTransactionReport = async (req, res, next) => {
 
     const total = await Transaction.countDocuments(query);
 
-    // Get summary statistics
+    
     const summary = await Transaction.aggregate([
       { $match: query },
       {
@@ -187,7 +185,7 @@ exports.getTransactionReport = async (req, res, next) => {
       }
     ]);
 
-    // Get transactions by type
+    
     const byType = await Transaction.aggregate([
       { $match: query },
       {
@@ -225,9 +223,9 @@ exports.getTransactionReport = async (req, res, next) => {
   }
 };
 
-/**
- * Get Financial Report
- */
+
+
+
 exports.getFinancialReport = async (req, res, next) => {
   try {
     const { type = 'monthly', startDate, endDate } = req.query;
@@ -237,7 +235,7 @@ exports.getFinancialReport = async (req, res, next) => {
       return next(new AppError('Please provide startDate and endDate', 400));
     }
 
-    // Revenue from successful transactions
+    
     const revenue = await Transaction.aggregate([
       { $match: { ...dateFilter, status: 'successful' } },
       {
@@ -249,7 +247,7 @@ exports.getFinancialReport = async (req, res, next) => {
       }
     ]);
 
-    // Wallet statistics
+    
     const walletStats = await Wallet.aggregate([
       {
         $group: {
@@ -263,7 +261,7 @@ exports.getFinancialReport = async (req, res, next) => {
       }
     ]);
 
-    // Revenue by category
+    
     const revenueByCategory = await Transaction.aggregate([
       { $match: { ...dateFilter, status: 'successful' } },
       {
@@ -275,7 +273,7 @@ exports.getFinancialReport = async (req, res, next) => {
       }
     ]);
 
-    // Revenue by transaction type
+    
     const revenueByType = await Transaction.aggregate([
       { $match: { ...dateFilter, status: 'successful' } },
       {
@@ -287,7 +285,7 @@ exports.getFinancialReport = async (req, res, next) => {
       }
     ]);
 
-    // Daily revenue for the period
+    
     const dailyRevenue = await Transaction.aggregate([
       { $match: { ...dateFilter, status: 'successful' } },
       {
@@ -326,9 +324,9 @@ exports.getFinancialReport = async (req, res, next) => {
   }
 };
 
-/**
- * Get User Report
- */
+
+
+
 exports.getUserReport = async (req, res, next) => {
   try {
     const { type = 'monthly', startDate, endDate } = req.query;
@@ -338,7 +336,7 @@ exports.getUserReport = async (req, res, next) => {
       return next(new AppError('Please provide startDate and endDate', 400));
     }
 
-    // User registration stats
+    
     const userStats = await User.aggregate([
       { $match: dateFilter },
       {
@@ -349,7 +347,7 @@ exports.getUserReport = async (req, res, next) => {
       }
     ]);
 
-    // Total users by role
+    
     const usersByRole = await User.aggregate([
       {
         $group: {
@@ -359,7 +357,7 @@ exports.getUserReport = async (req, res, next) => {
       }
     ]);
 
-    // KYC status distribution
+    
     const kycStatus = await User.aggregate([
       {
         $group: {
@@ -369,14 +367,14 @@ exports.getUserReport = async (req, res, next) => {
       }
     ]);
 
-    // Active vs inactive users
+    
     const activeUsers = await User.countDocuments({ isActive: true });
     const inactiveUsers = await User.countDocuments({ isActive: false });
 
-    // Users with wallet
+    
     const usersWithWallet = await Wallet.countDocuments();
 
-    // Top users by transaction volume
+    
     const topUsers = await Transaction.aggregate([
       { $match: { ...dateFilter, status: 'successful' } },
       {
@@ -408,7 +406,7 @@ exports.getUserReport = async (req, res, next) => {
       }
     ]);
 
-    // Daily new users
+    
     const dailyNewUsers = await User.aggregate([
       { $match: dateFilter },
       {
@@ -420,7 +418,7 @@ exports.getUserReport = async (req, res, next) => {
       { $sort: { _id: 1 } }
     ]);
 
-    // Email verified vs unverified
+    
     const emailVerified = await User.countDocuments({ isEmailVerified: true });
     const emailUnverified = await User.countDocuments({ isEmailVerified: false });
 
@@ -448,9 +446,9 @@ exports.getUserReport = async (req, res, next) => {
   }
 };
 
-/**
- * Get Agent Report
- */
+
+
+
 exports.getAgentReport = async (req, res, next) => {
   try {
     const { type = 'monthly', startDate, endDate } = req.query;
@@ -460,17 +458,17 @@ exports.getAgentReport = async (req, res, next) => {
       return next(new AppError('Please provide startDate and endDate', 400));
     }
 
-    // Get all agents
+    
     const agents = await User.find({ role: 'agent' })
       .select('agentInfo firstName lastName email phoneNumber isActive createdAt')
       .lean();
 
-    // Agent statistics
+    
     const totalAgents = agents.length;
     const verifiedAgents = agents.filter(a => a.agentInfo?.isVerified).length;
     const activeAgents = agents.filter(a => a.isActive).length;
 
-    // Calculate total commission
+    
     const totalCommissionEarned = agents.reduce(
       (sum, a) => sum + (a.agentInfo?.totalCommissionEarned || 0), 
       0
@@ -480,7 +478,7 @@ exports.getAgentReport = async (req, res, next) => {
       0
     );
 
-    // Agent transactions
+    
     const agentTransactions = await Transaction.aggregate([
       { 
         $match: { 
@@ -498,7 +496,7 @@ exports.getAgentReport = async (req, res, next) => {
       }
     ]);
 
-    // Top agents by performance
+    
     const topAgents = agents
       .map(agent => {
         const tx = agentTransactions.find(
@@ -518,7 +516,7 @@ exports.getAgentReport = async (req, res, next) => {
       .sort((a, b) => b.totalSales - a.totalSales)
       .slice(0, 10);
 
-    // Agents by state
+    
     const agentsByState = await User.aggregate([
       { $match: { role: 'agent' } },
       {
@@ -551,9 +549,9 @@ exports.getAgentReport = async (req, res, next) => {
   }
 };
 
-/**
- * Get Service Report
- */
+
+
+
 exports.getServiceReport = async (req, res, next) => {
   try {
     const { type = 'monthly', startDate, endDate } = req.query;
@@ -563,7 +561,7 @@ exports.getServiceReport = async (req, res, next) => {
       return next(new AppError('Please provide startDate and endDate', 400));
     }
 
-    // Transactions by category
+    
     const byCategory = await Transaction.aggregate([
       { $match: { ...dateFilter, status: 'successful' } },
       {
@@ -575,7 +573,7 @@ exports.getServiceReport = async (req, res, next) => {
       }
     ]);
 
-    // Transactions by type
+    
     const byType = await Transaction.aggregate([
       { $match: { ...dateFilter, status: 'successful' } },
       {
@@ -587,7 +585,7 @@ exports.getServiceReport = async (req, res, next) => {
       }
     ]);
 
-    // Transactions by network (for telecom)
+    
     const byNetwork = await Transaction.aggregate([
       { 
         $match: { 
@@ -605,7 +603,7 @@ exports.getServiceReport = async (req, res, next) => {
       }
     ]);
 
-    // Transactions by provider (for bills)
+    
     const byProvider = await Transaction.aggregate([
       { 
         $match: { 
@@ -623,7 +621,7 @@ exports.getServiceReport = async (req, res, next) => {
       }
     ]);
 
-    // Success rate
+    
     const totalTransactions = await Transaction.countDocuments(dateFilter);
     const successfulTransactions = await Transaction.countDocuments({
       ...dateFilter,
@@ -634,7 +632,7 @@ exports.getServiceReport = async (req, res, next) => {
       status: 'failed'
     });
 
-    // Average transaction value
+    
     const avgTransaction = await Transaction.aggregate([
       { $match: { ...dateFilter, status: 'successful' } },
       {
@@ -669,12 +667,12 @@ exports.getServiceReport = async (req, res, next) => {
   }
 };
 
-/**
- * Get Dashboard Summary
- */
+
+
+
 exports.getDashboardSummary = async (req, res, next) => {
   try {
-    // Today's stats
+    
     const now = new Date();
     const startOfDay = new Date(now.setHours(0, 0, 0, 0));
     const endOfDay = new Date(now.setHours(23, 59, 59, 999));
@@ -690,7 +688,7 @@ exports.getDashboardSummary = async (req, res, next) => {
     const todayCount = todayTransactions.length;
     const todaySuccessful = todayTransactions.filter(t => t.status === 'successful').length;
 
-    // Overall stats
+    
     const totalUsers = await User.countDocuments();
     const totalAgents = await User.countDocuments({ role: 'agent' });
     const totalTransactions = await Transaction.countDocuments();
@@ -704,13 +702,13 @@ exports.getDashboardSummary = async (req, res, next) => {
       }
     ]);
 
-    // Recent transactions
+    
     const recentTransactions = await Transaction.find()
       .populate('user', 'firstName lastName email')
       .sort({ createdAt: -1 })
       .limit(10);
 
-    // Top services today
+    
     const topServicesToday = await Transaction.aggregate([
       { 
         $match: { 

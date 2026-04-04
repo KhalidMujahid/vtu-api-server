@@ -6,7 +6,7 @@ function toDate(value, fallbackTime = 'start') {
   const date = new Date(raw);
   if (Number.isNaN(date.getTime())) return null;
 
-  // If date has no explicit time, normalize to day bounds
+  
   const hasTime = raw.includes('T') || raw.includes(':');
   if (!hasTime) {
     if (fallbackTime === 'end') {

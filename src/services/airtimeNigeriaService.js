@@ -1,8 +1,3 @@
-/**
- * AirtimeNigeria.com API Service
- * Documentation: https://www.airtimenigeria.com
- */
-
 const axios = require('axios');
 const logger = require('../utils/logger');
 
@@ -59,10 +54,10 @@ class AirtimeNigeriaService {
     };
   }
 
-  /**
-   * Purchase Airtime
-   * @param {Object} options - { network, phone, amount, maxAmount, callbackUrl, customerReference }
-   */
+  
+
+
+
   static async purchaseAirtime(options) {
     const { network, phone, amount, maxAmount, callbackUrl, customerReference } = options;
     
@@ -106,10 +101,10 @@ class AirtimeNigeriaService {
     }
   }
 
-  /**
-   * Purchase Data
-   * @param {Object} options - { phone, packageCode, planId, variationCode, maxAmount, callbackUrl, customerReference }
-   */
+  
+
+
+
   static async purchaseData(options) {
     const { phone, packageCode, planId, variationCode, maxAmount, callbackUrl, customerReference } = options;
     
@@ -121,7 +116,7 @@ class AirtimeNigeriaService {
         customer_reference: customerReference || '',
       };
 
-      // Variation code is preferred for MTN SME plans.
+      
       if (variationCode) {
         requestBody.variation_code = variationCode;
       } else if (packageCode) {
@@ -165,10 +160,10 @@ class AirtimeNigeriaService {
     }
   }
 
-  /**
-   * Purchase Data from Wallet (Bulk Data)
-   * @param {Object} options - { phone, packageCode, planId, processType, callbackUrl, customerReference }
-   */
+  
+
+
+
   static async purchaseDataFromWallet(options) {
     const { phone, packageCode, planId, processType, callbackUrl, customerReference } = options;
     
@@ -221,10 +216,10 @@ class AirtimeNigeriaService {
     }
   }
 
-  /**
-   * Get Data Plans
-   * @param {string} network - Optional network filter (mtn, airtel, glo, 9mobile)
-   */
+  
+
+
+
   static async getDataPlans(network = null) {
     try {
       const response = await axios.get(
@@ -244,7 +239,7 @@ class AirtimeNigeriaService {
           plans = Object.values(plans || {}).flat().filter(Boolean);
         }
         
-        // Filter by network if specified
+        
         if (network) {
           plans = plans.filter((plan) => {
             const planNetwork = this.normalizeNetwork(plan.network_operator || plan.network || plan.provider || '');
@@ -252,7 +247,7 @@ class AirtimeNigeriaService {
           });
         }
 
-        // Group plans by network
+        
         const groupedPlans = plans.reduce((acc, plan) => {
           const normalizedNetwork = this.normalizeNetwork(plan.network_operator || plan.network || plan.provider || '');
           if (!normalizedNetwork) {
@@ -346,9 +341,9 @@ class AirtimeNigeriaService {
     };
   }
 
-  /**
-   * Get Wallet Balance
-   */
+  
+
+
   static async getWalletBalance() {
     try {
       const response = await axios.get(
@@ -379,9 +374,9 @@ class AirtimeNigeriaService {
     }
   }
 
-  /**
-   * Verify webhook/callback payload
-   */
+  
+
+
   static extractCallbackItems(payload) {
     if (Array.isArray(payload)) {
       return payload;

@@ -1,8 +1,3 @@
-/**
- * VTU Provider Service
- * Handles multi-provider routing, failover, and health checks
- */
-
 const axios = require('axios');
 const ProviderStatus = require('../models/ProviderStatus');
 const vtuConfig = require('../config/vtuProviders');
@@ -21,24 +16,24 @@ class VtuProviderService {
       : String(providerId || '').trim().toLowerCase();
   }
   
-  /**
-   * Get all configured providers
-   */
+  
+
+
   static getAllProviders() {
     return Object.values(vtuConfig.providers);
   }
 
-  /**
-   * Get provider by ID
-   */
+  
+
+
   static getProvider(providerId) {
     const resolvedProviderId = this.normalizeProviderId(providerId);
     return vtuConfig.providers[resolvedProviderId] || null;
   }
 
-  /**
-   * Get provider status from database
-   */
+  
+
+
   static async getProviderStatus(providerId) {
     const resolvedProviderId = this.normalizeProviderId(providerId);
     const provider = vtuConfig.providers[resolvedProviderId];
@@ -93,9 +88,9 @@ class VtuProviderService {
     }
   }
 
-  /**
-   * Get all providers with their statuses
-   */
+  
+
+
   static async getAllProvidersWithStatus() {
     const providers = this.getAllProviders();
     const statuses = await Promise.all(
@@ -104,23 +99,23 @@ class VtuProviderService {
     return statuses;
   }
 
-  /**
-   * Get primary provider (default or first active)
-   */
+  
+
+
   static async getPrimaryProvider() {
     const dbProvider = await ProviderStatus.findOne({ isDefault: true, status: 'active' });
     if (dbProvider && vtuConfig.providers[dbProvider.providerName]) {
       return vtuConfig.providers[dbProvider.providerName];
     }
     
-    // Return config default
+    
     const defaultId = vtuConfig.defaults.primaryProvider;
     return vtuConfig.providers[defaultId] || Object.values(vtuConfig.providers)[0];
   }
 
-  /**
-   * Set primary provider
-   */
+  
+
+
   static async setPrimaryProvider(providerId) {
     const resolvedProviderId = this.normalizeProviderId(providerId);
     const provider = vtuConfig.providers[resolvedProviderId];
@@ -128,10 +123,10 @@ class VtuProviderService {
       throw new Error(`Provider ${providerId} not found`);
     }
 
-    // Update all providers to non-default
+    
     await ProviderStatus.updateMany({}, { isDefault: false });
 
-    // Set the selected provider as default in database
+    
     await ProviderStatus.findOneAndUpdate(
       { providerName: resolvedProviderId },
       { 
@@ -156,9 +151,9 @@ class VtuProviderService {
     };
   }
 
-  /**
-   * Get providers for a specific network (with fallback order)
-   */
+  
+
+
   static getProvidersForNetwork(network) {
     const networkProviders = vtuConfig.networkProviders[network.toLowerCase()];
     if (!networkProviders) {
@@ -169,9 +164,9 @@ class VtuProviderService {
       .filter(p => p && p.status === 'active');
   }
 
-  /**
-   * Get providers for a specific service type
-   */
+  
+
+
   static getProvidersForService(serviceType) {
     return Object.values(vtuConfig.providers)
       .filter(p => p.supportedServices.includes(serviceType) && p.status === 'active')
@@ -225,9 +220,9 @@ class VtuProviderService {
     );
   }
 
-  /**
-   * Health check for a single provider
-   */
+  
+
+
   static async healthCheck(providerId) {
     const resolvedProviderId = this.normalizeProviderId(providerId);
     const provider = vtuConfig.providers[resolvedProviderId];
@@ -243,15 +238,15 @@ class VtuProviderService {
     const startTime = Date.now();
     
     try {
-      // Make a test request to provider's health endpoint
+      
       const response = await axios.get(provider.baseUrl + '/health', {
         timeout: provider.timeout,
-        validateStatus: () => true, // Accept any status
+        validateStatus: () => true, 
       });
 
       const responseTime = Date.now() - startTime;
       
-      // Determine status based on response
+      
       let status = 'active';
       let message = 'Service is operational';
 
@@ -266,7 +261,7 @@ class VtuProviderService {
         message = 'Service is slow';
       }
 
-      // Update provider status in database
+      
       await ProviderStatus.findOneAndUpdate(
         { providerName: resolvedProviderId },
         {
@@ -294,7 +289,7 @@ class VtuProviderService {
     } catch (error) {
       const responseTime = Date.now() - startTime;
       
-      // Update provider status in database
+      
       await ProviderStatus.findOneAndUpdate(
         { providerName: resolvedProviderId },
         {
@@ -320,9 +315,9 @@ class VtuProviderService {
     }
   }
 
-  /**
-   * Run health check on all providers
-   */
+  
+
+
   static async runAllHealthChecks() {
     const providers = this.getAllProviders();
     const results = await Promise.all(
@@ -331,9 +326,9 @@ class VtuProviderService {
     return results;
   }
 
-  /**
-   * Process transaction with provider failover
-   */
+  
+
+
   static async processWithFailover(transaction, serviceType, network) {
     const providers = await this.getHealthyProvidersForService(serviceType);
     
@@ -345,10 +340,10 @@ class VtuProviderService {
     
     for (const provider of providers) {
       try {
-        // Attempt to process with this provider
+        
         const result = await this.processTransaction(transaction, provider.id, serviceType);
         
-        // Mark provider success
+        
         await this.markProviderSuccess(provider.id);
         
         return {
@@ -367,9 +362,9 @@ class VtuProviderService {
     throw new Error(`All providers failed. Last error: ${lastError?.message}`);
   }
 
-  /**
-   * Process transaction with a specific provider
-   */
+  
+
+
   static async processTransaction(transaction, providerId, serviceType) {
     const provider = vtuConfig.providers[providerId];
     if (!provider) {
@@ -406,9 +401,9 @@ class VtuProviderService {
     }
   }
 
-  /**
-   * Mark provider success
-   */
+  
+
+
   static async markProviderSuccess(providerId) {
     const provider = await ProviderStatus.findOneAndUpdate(
       { providerName: providerId },
@@ -426,9 +421,9 @@ class VtuProviderService {
     }
   }
 
-  /**
-   * Mark provider failure
-   */
+  
+
+
   static async markProviderFailure(providerId) {
     const provider = await ProviderStatus.findOneAndUpdate(
       { providerName: providerId },
@@ -447,9 +442,9 @@ class VtuProviderService {
     }
   }
 
-  /**
-   * Get provider balance (mock for now - actual implementation would call provider API)
-   */
+  
+
+
   static async getProviderBalance(providerId) {
     const resolvedProviderId = this.normalizeProviderId(providerId);
     const provider = vtuConfig.providers[resolvedProviderId];
@@ -548,9 +543,9 @@ class VtuProviderService {
     }
   }
 
-  /**
-   * Get all provider balances
-   */
+  
+
+
   static async getAllProviderBalances() {
     const providers = this.getAllProviders();
     return Promise.all(
@@ -558,9 +553,9 @@ class VtuProviderService {
     );
   }
 
-  /**
-   * Get provider for specific service
-   */
+  
+
+
   static getProviderForService(serviceType) {
     const service = vtuConfig.billPaymentServices?.[serviceType];
     if (!service) {
@@ -570,9 +565,9 @@ class VtuProviderService {
     return vtuConfig.providers[providerId];
   }
 
-  /**
-   * Set provider for specific service (bill payment)
-   */
+  
+
+
   static async setProviderForService(serviceType, providerId) {
     const service = vtuConfig.billPaymentServices?.[serviceType];
     if (!service) {
@@ -589,7 +584,7 @@ class VtuProviderService {
       throw new Error(`Provider ${providerId} does not support ${serviceType}`);
     }
 
-    // Update the default provider for this service
+    
     service.defaultProvider = resolvedProviderId;
 
     logger.info(`Default provider for ${serviceType} switched to: ${provider.name}`);
@@ -605,16 +600,16 @@ class VtuProviderService {
     };
   }
 
-  /**
-   * Get provider for bill payment service
-   */
+  
+
+
   static async getProviderForBillPayment(serviceType) {
     return this.getProviderForService(serviceType);
   }
 
-  /**
-   * Initialize providers in database
-   */
+  
+
+
   static async initializeProviders() {
     const providers = this.getAllProviders();
     

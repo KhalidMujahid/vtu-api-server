@@ -800,7 +800,7 @@ exports.purchaseData = async (req, res, next) => {
         throw new AppError(apiResponse.message || 'Purchase failed', 400);
       }
     } catch (err) {
-      // Refund wallet on failure
+      
       await refundTransactionToWallet(transaction, 'Data purchase refund', chargedAmount);
 
       transaction.status = 'failed';
@@ -947,7 +947,7 @@ exports.purchaseAirtime = async (req, res, next) => {
     let responseData;
     const airtimeCallbackUrl = `${SERVER_URL}/api/v1/telecom/webhook/airtimenigeria`;
 
-    // Route to the appropriate provider
+    
     if (providerConfig?.source === 'airtimenigeria') {
       apiResponse = await AirtimeNigeriaService.purchaseAirtime({
         network: normalizedNetwork,
@@ -1124,7 +1124,7 @@ exports.airtimeCallback = async (req, res) => {
 
       await transaction.save();
       
-      // Send notification
+      
       await NotificationService.airtimePurchase(
         transaction.user,
         transaction.service?.network,
@@ -1152,7 +1152,7 @@ exports.airtimeCallback = async (req, res) => {
 
       await transaction.save();
       
-      // Refund wallet and send notification
+      
       await refundTransactionToWallet(transaction, 'Airtime purchase refund');
       await transaction.save();
       
@@ -1355,7 +1355,7 @@ exports.airtimeWebhook = async (req, res) => {
         timestamp: new Date(),
       });
 
-      // Send notification for successful airtime purchase
+      
       await NotificationService.airtimePurchase(
         transaction.user,
         transaction.service?.network,
@@ -1371,10 +1371,10 @@ exports.airtimeWebhook = async (req, res) => {
         timestamp: new Date(),
       });
 
-      // Refund wallet on failure
+      
       await refundTransactionToWallet(transaction, 'Airtime purchase refund');
 
-      // Send notification for failed airtime purchase
+      
       await NotificationService.create({
         user: transaction.user,
         title: 'Airtime Purchase Failed',
@@ -1595,10 +1595,10 @@ exports.smedataWebhook = async (req, res, next) => {
   }
 };
 
-/**
- * NelloBytes Webhook Handler
- * Handles callbacks from NelloBytes for data, cable TV, electricity, EPIN, WAEC, JAMB
- */
+
+
+
+
 exports.nelloBytesWebhook = async (req, res, next) => {
   try {
     const queryData = req.query || {};
@@ -1705,9 +1705,9 @@ exports.nelloBytesWebhook = async (req, res, next) => {
   }
 };
 
-/**
- * Get EPIN Plans (from NelloBytes)
- */
+
+
+
 exports.getEPINPlans = async (req, res, next) => {
   try {
     const plans = await NelloBytesService.getEPINDiscount();
@@ -1721,9 +1721,9 @@ exports.getEPINPlans = async (req, res, next) => {
   }
 };
 
-/**
- * Get current VTU provider (for frontend)
- */
+
+
+
 exports.getCurrentProvider = async (req, res, next) => {
   try {
     const provider = await VtuProviderService.getPrimaryProvider();
@@ -1741,9 +1741,9 @@ exports.getCurrentProvider = async (req, res, next) => {
   }
 };
 
-/**
- * Get AirtimeNigeria data plans
- */
+
+
+
 exports.getAirtimeNigeriaDataPlans = async (req, res, next) => {
   try {
     const { network } = req.query;
@@ -1782,9 +1782,9 @@ exports.getAirtimeNigeriaDataPlans = async (req, res, next) => {
   }
 };
 
-/**
- * Purchase data using AirtimeNigeria
- */
+
+
+
 exports.purchaseAirtimeNigeriaData = async (req, res, next) => {
   try {
     const { phoneNumber, network, packageCode, planId, transactionPin, dataType } = req.body;
@@ -1817,7 +1817,7 @@ exports.purchaseAirtimeNigeriaData = async (req, res, next) => {
       return next(new AppError('Wallet not found', 404));
     }
 
-    // Get pricing - for now, we'll need to get the price from AirtimeNigeria
+    
     const plansResult = await AirtimeNigeriaService.getDataPlans(network);
     let plan = null;
     const networkPlans = plansResult.data[network.toLowerCase()] || [];
@@ -1857,7 +1857,7 @@ exports.purchaseAirtimeNigeriaData = async (req, res, next) => {
       { serviceType: 'data_recharge', network, phoneNumber }
     );
 
-    // Debit wallet
+    
     await wallet.debit(chargedAmount, `AirtimeNigeria Data: ${network} ${plan.planName}`);
 
     const reference = `AN-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
@@ -1929,7 +1929,7 @@ exports.purchaseAirtimeNigeriaData = async (req, res, next) => {
         },
       });
     } catch (err) {
-      // Refund wallet on failure
+      
       await refundTransactionToWallet(transaction, 'Data purchase refund', chargedAmount);
 
       transaction.status = 'failed';
@@ -1945,9 +1945,9 @@ exports.purchaseAirtimeNigeriaData = async (req, res, next) => {
   }
 };
 
-/**
- * Purchase airtime using AirtimeNigeria
- */
+
+
+
 exports.purchaseAirtimeNigeriaAirtime = async (req, res, next) => {
   try {
     const { phoneNumber, network, amount, transactionPin } = req.body;
@@ -1993,7 +1993,7 @@ exports.purchaseAirtimeNigeriaAirtime = async (req, res, next) => {
       { serviceType: 'airtime_recharge', network, phoneNumber }
     );
 
-    // Debit wallet
+    
     await wallet.debit(chargedAmount, `AirtimeNigeria Airtime: ${network} ${amount}`);
 
     const reference = `AN-AIR-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
@@ -2063,7 +2063,7 @@ exports.purchaseAirtimeNigeriaAirtime = async (req, res, next) => {
         },
       });
     } catch (err) {
-      // Refund wallet on failure
+      
       await refundTransactionToWallet(transaction, 'Airtime purchase refund', chargedAmount);
 
       transaction.status = 'failed';
@@ -2079,9 +2079,9 @@ exports.purchaseAirtimeNigeriaAirtime = async (req, res, next) => {
   }
 };
 
-/**
- * Get AirtimeNigeria wallet balance
- */
+
+
+
 exports.getAirtimeNigeriaBalance = async (req, res, next) => {
   try {
     const balance = await AirtimeNigeriaService.getWalletBalance();
@@ -2096,9 +2096,9 @@ exports.getAirtimeNigeriaBalance = async (req, res, next) => {
   }
 };
 
-/**
- * AirtimeNigeria Webhook Handler
- */
+
+
+
 exports.airtimeNigeriaWebhook = async (req, res) => {
   try {
     const payload = Object.keys(req.body || {}).length ? req.body : req.query;
@@ -2196,13 +2196,13 @@ exports.airtimeNigeriaWebhook = async (req, res) => {
     return res.status(200).send('OK');
   } catch (error) {
     logger.error('AirtimeNigeria webhook error:', error);
-    return res.status(200).send('OK'); // Always return OK to prevent retries
+    return res.status(200).send('OK'); 
   }
 };
 
-/**
- * Pluginng Webhook Handler
- */
+
+
+
 exports.pluginngWebhook = async (req, res) => {
   try {
     const payload = Object.keys(req.body || {}).length ? req.body : req.query;
@@ -2299,9 +2299,9 @@ exports.pluginngWebhook = async (req, res) => {
   }
 };
 
-/**
- * Get SMEPlug networks
- */
+
+
+
 exports.getSmePlugNetworks = async (req, res, next) => {
   try {
     const networks = await SmePlugService.getNetworks();
@@ -2316,9 +2316,9 @@ exports.getSmePlugNetworks = async (req, res, next) => {
   }
 };
 
-/**
- * Get SMEPlug wallet balance
- */
+
+
+
 exports.getSmePlugBalance = async (req, res, next) => {
   try {
     const balance = await SmePlugService.getWalletBalance();
@@ -2336,9 +2336,9 @@ exports.getSmePlugBalance = async (req, res, next) => {
   }
 };
 
-/**
- * Purchase data using SMEPlug
- */
+
+
+
 exports.purchaseSmePlugData = async (req, res, next) => {
   try {
     const { phoneNumber, network, planId, transactionPin, dataType } = req.body;
@@ -2403,7 +2403,7 @@ exports.purchaseSmePlugData = async (req, res, next) => {
       { serviceType: 'data_recharge', network: normalizedNetwork, phoneNumber }
     );
 
-    // Debit wallet
+    
     await wallet.debit(chargedAmount, `SMEPlug Data: ${network} ${planId}`);
 
     const reference = `SP-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
@@ -2475,7 +2475,7 @@ exports.purchaseSmePlugData = async (req, res, next) => {
         },
       });
     } catch (err) {
-      // Refund wallet on failure
+      
       await refundTransactionToWallet(transaction, 'Data purchase refund', chargedAmount);
 
       transaction.status = 'failed';
@@ -2491,9 +2491,9 @@ exports.purchaseSmePlugData = async (req, res, next) => {
   }
 };
 
-/**
- * Purchase airtime using SMEPlug
- */
+
+
+
 exports.purchaseSmePlugAirtime = async (req, res, next) => {
   try {
     const { phoneNumber, network, amount, transactionPin } = req.body;
@@ -2540,7 +2540,7 @@ exports.purchaseSmePlugAirtime = async (req, res, next) => {
       { serviceType: 'airtime_recharge', network: normalizedNetwork, phoneNumber }
     );
 
-    // Debit wallet
+    
     await wallet.debit(chargedAmount, `SMEPlug Airtime: ${network} ${amount}`);
 
     const reference = `SP-AIR-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
@@ -2609,7 +2609,7 @@ exports.purchaseSmePlugAirtime = async (req, res, next) => {
         },
       });
     } catch (err) {
-      // Refund wallet on failure
+      
       await refundTransactionToWallet(transaction, 'Airtime purchase refund', chargedAmount);
 
       transaction.status = 'failed';
@@ -2625,9 +2625,9 @@ exports.purchaseSmePlugAirtime = async (req, res, next) => {
   }
 };
 
-/**
- * Get Pluginng data plans (with markup-applied user prices)
- */
+
+
+
 exports.getPluginngDataPlans = async (req, res, next) => {
   try {
     const { network, dataType } = req.query;
@@ -2660,9 +2660,9 @@ exports.getPluginngDataPlans = async (req, res, next) => {
   }
 };
 
-/**
- * Purchase data using Pluginng
- */
+
+
+
 exports.purchasePluginngData = async (req, res, next) => {
   try {
     const { phoneNumber, network, planId, transactionPin, dataType } = req.body;
@@ -2822,9 +2822,9 @@ exports.purchasePluginngData = async (req, res, next) => {
   }
 };
 
-/**
- * Purchase airtime using Pluginng
- */
+
+
+
 exports.purchasePluginngAirtime = async (req, res, next) => {
   try {
     const { phoneNumber, network, amount, transactionPin } = req.body;

@@ -1607,7 +1607,7 @@ class AgentController {
             return next(new AppError('Wallet not found', 404));
           }
           
-          // Validate service type
+          
           const validServices = ['electricity', 'cable_tv', 'education_pin', 'rrr_payment'];
           if (!validServices.includes(serviceType)) {
             return next(new AppError('Invalid service type', 400));
@@ -1749,7 +1749,7 @@ class AgentController {
             return next(new AppError(apiResponse.status || apiResponse.message || 'Bill payment failed', 500));
           }
           
-          // Get service pricing
+          
           let service;
           let query = {
             serviceType,

@@ -213,11 +213,6 @@ module.exports = {
     return this.providers[this.defaults.primaryProvider];
   },
 
-  /**
-   * Get provider ID for a service - always fetches from database
-   * @param {string} serviceType - The service type (data, airtime, etc.)
-   * @returns {string} Provider ID
-   */
   async getProviderIdForService(serviceType) {
     try {
       const VtuConfig = require('../models/VtuConfig');
@@ -292,9 +287,6 @@ module.exports = {
     return serviceMap[source] || null;
   },
 
-  /**
-   * Load service routing from database
-   */
   async loadFromDatabase() {
     let VtuConfig;
     try {
@@ -332,9 +324,6 @@ module.exports = {
     }
   },
 
-  /**
-   * Save service routing to database
-   */
   async saveToDatabase(serviceRouting, userId = null) {
     try {
       const VtuConfig = require('../models/VtuConfig');
@@ -363,19 +352,14 @@ module.exports = {
     }
   },
 
-  /**
-   * Initialize config from database on startup
-   */
+  
+
+
   async initialize() {
     await this.loadFromDatabase();
   },
 
-  /**
-   * Transform data plans from different providers into a unified format
-   * @param {string} source - The provider source (nellobytes, airtimenigeria, smeplug)
-   * @param {object} data - Raw data from the provider API
-   * @returns {object} Normalized data with unified structure
-   */
+
   transformDataPlans(source, data) {
     console.log('transformDataPlans - source:', source, 'data keys:', data ? Object.keys(data) : 'no data');
     
@@ -409,14 +393,12 @@ module.exports = {
     }
   },
 
-  /**
-   * Normalize ClubKonnect/NelloBytes response
-   */
+
   _normalizeNelloBytes(data) {
     const result = {};
     const mobileNetwork = data.MOBILE_NETWORK || data;
     
-    // Map network names to lowercase
+    
     const networkMap = {
       'MTN': 'mtn',
       'Glo': 'glo',
@@ -437,7 +419,7 @@ module.exports = {
       const normalizedKey = networkMap[networkKey] || networkKey.toLowerCase();
       
       if (Array.isArray(networkData)) {
-        // Handle nested PRODUCT array format from ClubKonnect/NelloBytes
+        
         if (networkData[0] && Array.isArray(networkData[0].PRODUCT)) {
           const products = networkData[0].PRODUCT || [];
           result[normalizedKey] = products.map(plan => this._normalizeNelloBytesPlan(plan));
@@ -452,16 +434,14 @@ module.exports = {
     return result;
   },
 
-  /**
-   * Normalize ClubKonnect plan item
-   */
+
   _normalizeNelloBytesPlan(plan) {
     const planName = plan.PRODUCT_NAME || '';
     return {
       id: plan.PRODUCT_ID || plan.ID || '',
       planCode: plan.PRODUCT_CODE || '',
       planName,
-      network: '', // Will be set by parent
+      network: '', 
       size: planName || '',
       price: parseFloat(plan.PRODUCT_AMOUNT) || 0,
       validity: this._extractValidity(planName || ''),
@@ -469,9 +449,7 @@ module.exports = {
     };
   },
 
-  /**
-   * Normalize SMEPlug response
-   */
+
   _normalizeSmePlug(data) {
     const result = {};
     const plans = data.plans || data;
@@ -502,9 +480,6 @@ module.exports = {
     return result;
   },
 
-  /**
-   * Normalize SMEPlug plan item
-   */
   _normalizeSmePlugPlan(plan) {
     const planName = plan.planName || '';
     return {
@@ -521,9 +496,7 @@ module.exports = {
     };
   },
 
-  /**
-   * Normalize AirtimeNigeria response
-   */
+
   _normalizeAirtimeNigeria(data) {
     const result = {};
     const networkData = data.data || data;
@@ -554,9 +527,7 @@ module.exports = {
     return result;
   },
 
-  /**
-   * Normalize AirtimeNigeria plan item
-   */
+
   _normalizeAirtimeNigeriaPlan(plan) {
     const planName = plan.planName || plan.plan_summary || '';
     return {
@@ -573,9 +544,7 @@ module.exports = {
     };
   },
 
-  /**
-   * Normalize generic plan item
-   */
+
   _normalizePlanItem(plan, source) {
     if (source === 'nellobytes') {
       return this._normalizeNelloBytesPlan(plan);
@@ -587,9 +556,7 @@ module.exports = {
     return plan;
   },
 
-  /**
-   * Normalize Pluginng response
-   */
+
   _normalizePluginng(data) {
     const result = {};
     const plans = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
@@ -639,17 +606,17 @@ module.exports = {
     return null;
   },
 
-  /**
-   * Extract validity from plan name
-   */
+  
+
+
   _extractValidity(planName) {
     const match = planName.match(/(\d+\s*(?:day|week|month|year|hour|hr)s?)/i);
     return match ? match[1] : '';
   },
 
-  /**
-   * Extract normalized data type from plan metadata/name
-   */
+  
+
+
   _extractDataType(planName = '') {
     const normalized = String(planName).toLowerCase();
     if (!normalized) return 'other';

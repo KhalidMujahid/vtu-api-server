@@ -74,7 +74,7 @@ const seedAdmin = async () => {
       },
     ];
     
-    // await ProviderStatus.insertMany(telecomProviders);
+    
     
     const electricityProviders = [
       {
@@ -107,7 +107,7 @@ const seedAdmin = async () => {
       },
     ];
     
-    // await ProviderStatus.insertMany(electricityProviders);
+    
     
     console.log('Seeding sample data plans...');
     
@@ -192,7 +192,7 @@ const seedAdmin = async () => {
       },
     ];
     
-    // await ServicePricing.insertMany(sampleDataPlans);
+    
     
     console.log('Database seeded successfully!');
     process.exit(0);

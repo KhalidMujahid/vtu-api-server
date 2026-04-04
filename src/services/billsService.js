@@ -6,9 +6,9 @@ const { AppError } = require('../middlewares/errorHandler');
 const logger = require('../utils/logger');
 
 class BillsService {
-  // Mock provider configurations for bills
+  
   static providerConfigs = {
-    // Electricity Providers
+    
     aedc: {
       name: 'AEDC',
       baseUrl: 'https://api.aedcmock.com/v1',
@@ -71,7 +71,7 @@ class BillsService {
       timeout: 40000,
     },
     
-    // Cable TV Providers
+    
     dstv: {
       name: 'DStv',
       baseUrl: 'https://api.dstvmock.com/v1',
@@ -118,7 +118,7 @@ class BillsService {
       timeout: 30000,
     },
     
-    // Education Boards
+    
     waec: {
       name: 'WAEC',
       baseUrl: 'https://api.waecmock.com/v1',
@@ -163,16 +163,16 @@ class BillsService {
     },
   };
 
-  // Process bills transaction with provider
+  
   static async processWithProvider(transaction, preferredProvider = null) {
     try {
       const { type, service } = transaction;
       
-      // Determine which provider to use
+      
       let providerName = preferredProvider;
       
       if (!providerName) {
-        // Determine provider based on service type
+        
         switch (type) {
           case 'electricity':
             providerName = service.disco || service.provider;
@@ -192,7 +192,7 @@ class BillsService {
         throw new AppError('No provider specified for transaction', 400);
       }
 
-      // Get available providers for this service type
+      
       const availableProviders = await this.getAvailableProviders(type, providerName);
       
       if (availableProviders.length === 0) {
@@ -201,7 +201,7 @@ class BillsService {
 
       let lastError = null;
       
-      // Try each provider in order of priority
+      
       for (const provider of availableProviders) {
         try {
           logger.info(`Processing ${type} with provider: ${provider.providerName}`);
@@ -224,7 +224,7 @@ class BillsService {
               throw new AppError(`Unsupported bills service type: ${type}`, 400);
           }
           
-          // Update provider success stats
+          
           await ProviderStatus.findOneAndUpdate(
             { providerName: provider.providerName },
             {
@@ -240,7 +240,7 @@ class BillsService {
           lastError = error;
           logger.error(`Provider ${provider.providerName} failed:`, error.message);
           
-          // Update provider failure stats
+          
           await ProviderStatus.findOneAndUpdate(
             { providerName: provider.providerName },
             {
@@ -249,12 +249,12 @@ class BillsService {
             }
           );
           
-          // Continue to next provider
+          
           continue;
         }
       }
       
-      // All providers failed
+      
       throw new AppError(
         `All providers failed for transaction ${transaction.reference}: ${lastError?.message}`,
         503
@@ -266,7 +266,7 @@ class BillsService {
     }
   }
 
-  // Get available providers for a service type
+  
   static async getAvailableProviders(serviceType, preferredProvider = null) {
     try {
       const query = {
@@ -278,12 +278,12 @@ class BillsService {
         .sort({ priority: 1, successRate: -1 })
         .lean();
       
-      // Filter out providers in maintenance
+      
       const availableProviders = providers.filter(provider => {
         if (provider.status === 'maintenance') return false;
         if (provider.status === 'inactive') return false;
         
-        // Check maintenance window
+        
         if (provider.maintenanceStart && provider.maintenanceEnd) {
           const now = new Date();
           if (now >= provider.maintenanceStart && now <= provider.maintenanceEnd) {
@@ -294,7 +294,7 @@ class BillsService {
         return true;
       });
       
-      // If preferred provider is specified, prioritize it
+      
       if (preferredProvider) {
         const preferred = availableProviders.find(p => p.providerName === preferredProvider);
         if (preferred) {
@@ -312,7 +312,7 @@ class BillsService {
     }
   }
 
-  // Process electricity bill payment
+  
   static async processElectricity(transaction, providerName) {
     try {
       const { service } = transaction;
@@ -322,12 +322,12 @@ class BillsService {
         throw new AppError(`Provider ${providerName} not configured`, 500);
       }
       
-      // Generate token (for prepaid)
+      
       const token = service.meterType === 'prepaid' 
         ? this.generateElectricityToken()
         : null;
       
-      // Mock API call to provider
+      
       const mockResponse = {
         success: true,
         message: 'Electricity bill payment successful',
@@ -346,10 +346,10 @@ class BillsService {
         provider: providerName,
       };
       
-      // Simulate API delay
+      
       await this.simulateDelay(2000, 6000);
       
-      // Simulate occasional failure (15% chance for testing - electricity can be unreliable)
+      
       if (Math.random() < 0.15) {
         throw new AppError(`Provider ${providerName} electricity service temporarily unavailable`, 503);
       }
@@ -363,7 +363,7 @@ class BillsService {
     }
   }
 
-  // Process cable TV subscription
+  
   static async processCableTV(transaction, providerName) {
     try {
       const { service, metadata } = transaction;
@@ -373,7 +373,7 @@ class BillsService {
         throw new AppError(`Provider ${providerName} not configured`, 500);
       }
       
-      // Mock API call to provider
+      
       const mockResponse = {
         success: true,
         message: 'Cable TV subscription successful',
@@ -393,10 +393,10 @@ class BillsService {
         provider: providerName,
       };
       
-      // Simulate API delay
+      
       await this.simulateDelay(1500, 4000);
       
-      // Simulate occasional failure (10% chance for testing)
+      
       if (Math.random() < 0.10) {
         throw new AppError(`Provider ${providerName} cable TV service temporarily unavailable`, 503);
       }
@@ -410,7 +410,7 @@ class BillsService {
     }
   }
 
-  // Process education PIN purchase
+  
   static async processEducationPin(transaction, providerName) {
     try {
       const { service, metadata } = transaction;
@@ -420,18 +420,18 @@ class BillsService {
         throw new AppError(`Provider ${providerName} not configured`, 500);
       }
       
-      // Generate mock PINs based on exam type
+      
       const pins = [];
       for (let i = 0; i < metadata.quantity; i++) {
         pins.push({
           pin: this.generateEducationPin(service.plan),
           serial: `${service.plan.substring(0, 3)}${Date.now()}${i}`.substring(0, 12),
           examType: service.plan,
-          expiry: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString(), // 6 months
+          expiry: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString(), 
         });
       }
       
-      // Mock API call to provider
+      
       const mockResponse = {
         success: true,
         message: 'Education PINs generated successfully',
@@ -446,10 +446,10 @@ class BillsService {
         provider: providerName,
       };
       
-      // Simulate API delay
+      
       await this.simulateDelay(1000, 3000);
       
-      // Simulate occasional failure (5% chance for testing)
+      
       if (Math.random() < 0.05) {
         throw new AppError(`Provider ${providerName} education PIN service temporarily unavailable`, 503);
       }
@@ -463,12 +463,12 @@ class BillsService {
     }
   }
 
-  // Process RRR (Remita) payment
+  
   static async processRRRPayment(transaction, providerName = 'remita') {
     try {
       const { service } = transaction;
       
-      // Mock API call to Remita
+      
       const mockResponse = {
         success: true,
         message: 'RRR payment successful',
@@ -487,10 +487,10 @@ class BillsService {
         provider: 'remita',
       };
       
-      // Simulate API delay
-      await this.simulateDelay(3000, 8000); // RRR payments can take longer
       
-      // Simulate occasional failure (20% chance for testing - government payments can be unreliable)
+      await this.simulateDelay(3000, 8000); 
+      
+      
       if (Math.random() < 0.20) {
         throw new AppError('Remita RRR payment service temporarily unavailable', 503);
       }
@@ -504,7 +504,7 @@ class BillsService {
     }
   }
 
-  // Verify electricity customer
+  
   static async verifyElectricityCustomer(meterNumber, disco, meterType = 'prepaid') {
     try {
       const config = this.providerConfigs[disco];
@@ -513,7 +513,7 @@ class BillsService {
         throw new AppError(`DISCO ${disco} not configured`, 500);
       }
       
-      // Mock verification response
+      
       const mockResponse = {
         success: true,
         data: {
@@ -531,10 +531,10 @@ class BillsService {
         provider: disco,
       };
       
-      // Simulate API delay
+      
       await this.simulateDelay(1000, 4000);
       
-      // Simulate occasional failure (8% chance)
+      
       if (Math.random() < 0.08) {
         throw new AppError(`Provider ${disco} verification service temporarily unavailable`, 503);
       }
@@ -547,7 +547,7 @@ class BillsService {
     }
   }
 
-  // Verify cable TV customer
+  
   static async verifyCableCustomer(smartCardNumber, provider) {
     try {
       const config = this.providerConfigs[provider];
@@ -556,7 +556,7 @@ class BillsService {
         throw new AppError(`Provider ${provider} not configured`, 500);
       }
       
-      // Mock verification response
+      
       const mockResponse = {
         success: true,
         data: {
@@ -571,10 +571,10 @@ class BillsService {
         provider,
       };
       
-      // Simulate API delay
+      
       await this.simulateDelay(800, 2500);
       
-      // Simulate occasional failure (5% chance)
+      
       if (Math.random() < 0.05) {
         throw new AppError(`Provider ${provider} verification service temporarily unavailable`, 503);
       }
@@ -587,28 +587,28 @@ class BillsService {
     }
   }
 
-  // Get education provider based on exam type
+  
   static getEducationProvider(examType) {
     const examProviders = {
       'WAEC': 'waec',
       'NECO': 'neco',
-      'NABTEB': 'neco', // Using NECO as fallback
+      'NABTEB': 'neco', 
       'JAMB': 'jamb',
       'WAEC_RESULT': 'waec',
       'NECO_RESULT': 'neco',
     };
     
-    return examProviders[examType] || 'waec'; // Default to WAEC
+    return examProviders[examType] || 'waec'; 
   }
 
-  // Generate electricity token
+  
   static generateElectricityToken() {
     const token = Math.floor(1000000000000000 + Math.random() * 9000000000000000).toString();
-    // Format as 20-digit token with dashes every 4 digits
+    
     return token.substring(0, 20).replace(/(\d{4})(?=\d)/g, '$1-');
   }
 
-  // Generate education PIN
+  
   static generateEducationPin(examType) {
     const prefix = {
       'WAEC': 'WAEC',
@@ -623,14 +623,14 @@ class BillsService {
     return `${prefix}${random}`.substring(0, 12);
   }
 
-  // Calculate electricity units from amount
+  
   static calculateUnits(amount) {
-    // Simplified calculation: NGN 50 per unit
+    
     const units = amount / 50;
     return parseFloat(units.toFixed(2));
   }
 
-  // Check transaction status with provider
+  
   static async checkTransactionStatus(reference, providerName) {
     try {
       const config = this.providerConfigs[providerName];
@@ -639,7 +639,7 @@ class BillsService {
         throw new AppError(`Provider ${providerName} not configured`, 500);
       }
       
-      // Mock status response
+      
       const statuses = ['PENDING', 'SUCCESSFUL', 'FAILED', 'PROCESSING'];
       const randomStatus = statuses[Math.floor(Math.random() * statuses.length)];
       
@@ -659,7 +659,7 @@ class BillsService {
         },
       };
       
-      // Simulate API delay
+      
       await this.simulateDelay(500, 1500);
       
       return mockResponse;
@@ -670,7 +670,7 @@ class BillsService {
     }
   }
 
-  // Get provider balance
+  
   static async getProviderBalance(providerName) {
     try {
       const config = this.providerConfigs[providerName];
@@ -679,12 +679,12 @@ class BillsService {
         throw new AppError(`Provider ${providerName} not configured`, 500);
       }
       
-      // Mock balance response
+      
       const mockResponse = {
         success: true,
         data: {
           provider: providerName,
-          balance: Math.floor(Math.random() * 5000000), // Random balance
+          balance: Math.floor(Math.random() * 5000000), 
           currency: 'NGN',
           lastUpdated: new Date().toISOString(),
           status: 'active',
@@ -693,7 +693,7 @@ class BillsService {
         },
       };
       
-      // Simulate API delay
+      
       await this.simulateDelay(300, 1000);
       
       return mockResponse;
@@ -704,7 +704,7 @@ class BillsService {
     }
   }
 
-  // Check provider status
+  
   static async checkProviderStatus(providerName) {
     try {
       const config = this.providerConfigs[providerName];
@@ -718,7 +718,7 @@ class BillsService {
         };
       }
       
-      // Mock status check
+      
       const statuses = ['active', 'degraded', 'maintenance'];
       const randomStatus = statuses[Math.floor(Math.random() * statuses.length)];
       
@@ -732,10 +732,10 @@ class BillsService {
         lastChecked: new Date().toISOString(),
       };
       
-      // Simulate API delay
+      
       await this.simulateDelay(300, 1000);
       
-      // Update provider status in database
+      
       await ProviderStatus.findOneAndUpdate(
         { providerName },
         {
@@ -753,7 +753,7 @@ class BillsService {
     } catch (error) {
       logger.error('Error in checkProviderStatus:', error);
       
-      // Update provider as inactive on error
+      
       await ProviderStatus.findOneAndUpdate(
         { providerName },
         {
@@ -774,13 +774,13 @@ class BillsService {
     }
   }
 
-  // Simulate API delay
+  
   static simulateDelay(min, max) {
     const delay = Math.floor(Math.random() * (max - min + 1)) + min;
     return new Promise(resolve => setTimeout(resolve, delay));
   }
 
-  // Retry failed transaction with fallback provider
+  
   static async retryFailedTransaction(transactionId, retryCount = 0) {
     try {
       const transaction = await Transaction.findById(transactionId);
@@ -797,11 +797,11 @@ class BillsService {
         throw new AppError('Max retry attempts reached', 400);
       }
       
-      // Get next provider to try
+      
       const currentProvider = transaction.provider?.name;
       const availableProviders = await this.getAvailableProviders(transaction.type, currentProvider);
       
-      // Exclude already tried providers
+      
       const triedProviders = transaction.metadata?.triedProviders || [];
       const nextProvider = availableProviders.find(p => !triedProviders.includes(p.providerName));
       
@@ -809,7 +809,7 @@ class BillsService {
         throw new AppError('No more providers to try', 503);
       }
       
-      // Update transaction with retry info
+      
       transaction.retryCount += 1;
       transaction.provider = {
         name: nextProvider.providerName,
@@ -823,7 +823,7 @@ class BillsService {
       
       await transaction.save();
       
-      // Retry the transaction
+      
       const result = await this.processWithProvider(transaction, nextProvider.providerName);
       
       return {
@@ -838,7 +838,7 @@ class BillsService {
     }
   }
 
-  // Bulk verify customers
+  
   static async bulkVerifyCustomers(verifications, providerName) {
     try {
       const results = [];
@@ -892,10 +892,10 @@ class BillsService {
     }
   }
 
-  // Validate RRR number
+  
   static async validateRRR(rrrNumber) {
     try {
-      // Mock RRR validation
+      
       const mockResponse = {
         success: true,
         data: {
@@ -910,10 +910,10 @@ class BillsService {
         },
       };
       
-      // Simulate API delay
+      
       await this.simulateDelay(1500, 5000);
       
-      // Simulate occasional failure (10% chance)
+      
       if (Math.random() < 0.10) {
         throw new AppError('RRR validation service temporarily unavailable', 503);
       }

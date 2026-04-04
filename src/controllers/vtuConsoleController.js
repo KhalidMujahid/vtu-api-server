@@ -1,7 +1,3 @@
-/**
- * VTU API Console Controller
- * Handles provider switching, health checks, and configuration
- */
 
 const VtuProviderService = require('../services/vtuProviderService');
 const ProviderMarkupService = require('../services/providerMarkupService');
@@ -36,9 +32,7 @@ function normalizeProviderId(providerId = '') {
   return String(providerId || '').trim().toLowerCase();
 }
 
-/**
- * Get all VTU providers with their status
- */
+
 exports.getAllProviders = async (req, res, next) => {
   try {
     const providers = await VtuProviderService.getAllProvidersWithStatus();
@@ -61,9 +55,9 @@ exports.getAllProviders = async (req, res, next) => {
   }
 };
 
-/**
- * Get provider details by ID
- */
+
+
+
 exports.getProvider = async (req, res, next) => {
   try {
     const { providerId } = req.params;
@@ -89,9 +83,9 @@ exports.getProvider = async (req, res, next) => {
   }
 };
 
-/**
- * Switch primary VTU provider
- */
+
+
+
 exports.switchProvider = async (req, res, next) => {
   try {
     const { providerId } = req.body;
@@ -105,7 +99,7 @@ exports.switchProvider = async (req, res, next) => {
     
     const result = await VtuProviderService.setPrimaryProvider(providerId);
     
-    // Log the switch
+    
     logger.info(`Provider switched to ${providerId} by user: ${req.user?.id || 'system'}`);
     
     res.status(200).json({
@@ -118,9 +112,9 @@ exports.switchProvider = async (req, res, next) => {
   }
 };
 
-/**
- * Run health check on all providers
- */
+
+
+
 exports.runHealthCheck = async (req, res, next) => {
   try {
     const results = await VtuProviderService.runAllHealthChecks();
@@ -138,9 +132,9 @@ exports.runHealthCheck = async (req, res, next) => {
   }
 };
 
-/**
- * Run health check on a single provider
- */
+
+
+
 exports.runProviderHealthCheck = async (req, res, next) => {
   try {
     const { providerId } = req.params;
@@ -155,9 +149,9 @@ exports.runProviderHealthCheck = async (req, res, next) => {
   }
 };
 
-/**
- * Get provider balances
- */
+
+
+
 exports.getProviderBalances = async (req, res, next) => {
   try {
     const balances = await VtuProviderService.getAllProviderBalances();
@@ -174,9 +168,9 @@ exports.getProviderBalances = async (req, res, next) => {
   }
 };
 
-/**
- * Get provider balance by ID
- */
+
+
+
 exports.getProviderBalance = async (req, res, next) => {
   try {
     const { providerId } = req.params;
@@ -191,17 +185,17 @@ exports.getProviderBalance = async (req, res, next) => {
   }
 };
 
-/**
- * Get provider configuration (public info only)
- */
+
+
+
 exports.getProviderConfig = async (req, res, next) => {
   try {
     const providers = VtuProviderService.getAllProviders();
     
-    // Get service routing configuration from database
+    
     const serviceRouting = vtuConfig.getServiceRouting();
     
-    // Fetch provider statuses from database for more info
+    
     const dbStatuses = await ProviderStatus.find({}).lean();
     const statusMap = {};
     dbStatuses.forEach(s => {
@@ -216,7 +210,7 @@ exports.getProviderConfig = async (req, res, next) => {
     );
     const balanceMap = Object.fromEntries(balanceEntries);
     
-    // Return only public configuration (no API keys) but include DB status
+    
     const publicConfig = providers.map(p => {
       const dbStatus = statusMap[p.id] || {};
       return {
@@ -231,7 +225,7 @@ exports.getProviderConfig = async (req, res, next) => {
         supportedNetworks: p.supportedNetworks,
         features: p.features,
         rateLimit: p.rateLimit,
-        // Database status
+        
         status: dbStatus.status || p.status || 'active',
         isDefault: dbStatus.isDefault || p.isDefault || false,
         priority: dbStatus.priority || p.priority,
@@ -245,7 +239,7 @@ exports.getProviderConfig = async (req, res, next) => {
       };
     });
     
-    // Get primary provider
+    
     const primaryProvider = publicConfig.find(p => p.isDefault) || publicConfig.find(p => p.status === 'active') || providers[0];
     
     res.status(200).json({
@@ -264,14 +258,14 @@ exports.getProviderConfig = async (req, res, next) => {
   }
 };
 
-/**
- * Save service provider configuration
- */
+
+
+
 exports.saveServiceConfig = async (req, res, next) => {
   try {
     const { data, airtime, airtimepin, education, electricity, cable, airtime2cash } = req.body;
     
-    // Build configuration object
+    
     const config = {};
     if (data) config.data = data;
     if (airtime) config.airtime = airtime;
@@ -281,10 +275,10 @@ exports.saveServiceConfig = async (req, res, next) => {
     if (cable) config.cable = cable;
     if (airtime2cash) config.airtime2cash = airtime2cash;
     
-    // Update the service routing in memory
+    
     const updatedRouting = vtuConfig.updateServiceRouting(config);
     
-    // Save to database for persistence
+    
     await vtuConfig.saveToDatabase(updatedRouting, req.user?.id);
     
     logger.info(`Service configuration updated by user: ${req.user?.id || 'system'}`, config);
@@ -301,17 +295,17 @@ exports.saveServiceConfig = async (req, res, next) => {
   }
 };
 
-/**
- * Get service provider configuration (service routing)
- */
+
+
+
 exports.getServiceConfig = async (req, res, next) => {
   try {
     const requestedProviderId = String(req.query?.providerId || '').trim().toLowerCase() || null;
 
-    // Get current service routing (from memory, but syncs with DB)
+    
     const serviceRouting = vtuConfig.getServiceRouting();
     
-    // Get available providers for reference
+    
     let providers = VtuProviderService.getAllProviders().map(p => ({
       id: p.id,
       name: p.name,
@@ -331,7 +325,7 @@ exports.getServiceConfig = async (req, res, next) => {
       }
     }
     
-    // Map service names to readable labels
+    
     const serviceLabels = {
       data: 'Data Recharge',
       airtime: 'Airtime Recharge',
@@ -358,7 +352,7 @@ exports.getServiceConfig = async (req, res, next) => {
         )
       : serviceLabels;
 
-    // Build detailed response
+    
     const routingDetails = {};
     for (const [service, providerId] of Object.entries(filteredServiceRouting)) {
       const provider = VtuProviderService.getAllProviders().find(p => p.id === providerId);
@@ -389,9 +383,9 @@ exports.getServiceConfig = async (req, res, next) => {
   }
 };
 
-/**
- * Update provider status (activate/deactivate)
- */
+
+
+
 exports.updateProviderStatus = async (req, res, next) => {
   try {
     const { providerId } = req.params;
@@ -410,7 +404,7 @@ exports.updateProviderStatus = async (req, res, next) => {
     if (status) updateData.status = status;
     if (isDefault !== undefined) {
       if (isDefault) {
-        // Reset all other providers to non-default
+        
         await ProviderStatus.updateMany({}, { isDefault: false });
       }
       updateData.isDefault = isDefault;
@@ -432,9 +426,9 @@ exports.updateProviderStatus = async (req, res, next) => {
   }
 };
 
-/**
- * Get provider statistics
- */
+
+
+
 exports.getProviderStats = async (req, res, next) => {
   try {
     const { providerId } = req.params;
@@ -468,9 +462,9 @@ exports.getProviderStats = async (req, res, next) => {
   }
 };
 
-/**
- * Get configured provider markups
- */
+
+
+
 exports.getProviderMarkups = async (req, res, next) => {
   try {
     const markups = await ProviderMarkupService.getAllMarkups();
@@ -485,9 +479,9 @@ exports.getProviderMarkups = async (req, res, next) => {
   }
 };
 
-/**
- * Get markup options list for frontend selectors
- */
+
+
+
 exports.getProviderMarkupOptions = async (req, res, next) => {
   try {
     const providers = VtuProviderService.getAllProviders();
@@ -535,9 +529,9 @@ exports.getProviderMarkupOptions = async (req, res, next) => {
   }
 };
 
-/**
- * Set provider markup percentage for a service type
- */
+
+
+
 exports.setProviderMarkup = async (req, res, next) => {
   try {
     const providerId = req.params.providerId || req.body.providerId;
@@ -589,9 +583,9 @@ exports.setProviderMarkup = async (req, res, next) => {
   }
 };
 
-/**
- * Get all providers with live balance + accumulated profile for dashboard cards
- */
+
+
+
 exports.getProviderProfiles = async (req, res, next) => {
   try {
     const providers = VtuProviderService.getAllProviders();
@@ -757,9 +751,9 @@ exports.getProviderProfiles = async (req, res, next) => {
   }
 };
 
-/**
- * Update provider details (full update)
- */
+
+
+
 exports.updateProvider = async (req, res, next) => {
   try {
     const { providerId } = req.params;
@@ -793,7 +787,7 @@ exports.updateProvider = async (req, res, next) => {
       });
     }
     
-    // Check if provider exists in config
+    
     const configProvider = vtuConfig.providers[providerId];
     if (!configProvider) {
       return res.status(404).json({
@@ -802,7 +796,7 @@ exports.updateProvider = async (req, res, next) => {
       });
     }
     
-    // Build update object
+    
     const updateData = {
       providerName: providerId,
       lastUpdatedBy: req.user?.id,
@@ -826,7 +820,7 @@ exports.updateProvider = async (req, res, next) => {
     if (contactEmail) updateData.contactEmail = contactEmail;
     if (contactPhone) updateData.contactPhone = contactPhone;
     
-    // Handle isDefault - reset others if setting this as default
+    
     if (isDefault !== undefined) {
       if (isDefault) {
         await ProviderStatus.updateMany({}, { isDefault: false });
@@ -836,7 +830,7 @@ exports.updateProvider = async (req, res, next) => {
       }
     }
     
-    // Update in database
+    
     const updated = await ProviderStatus.findOneAndUpdate(
       { providerName: providerId },
       { $set: updateData },
@@ -855,9 +849,9 @@ exports.updateProvider = async (req, res, next) => {
   }
 };
 
-/**
- * Create a new provider
- */
+
+
+
 exports.createProvider = async (req, res, next) => {
   try {
     const {
@@ -890,7 +884,7 @@ exports.createProvider = async (req, res, next) => {
       });
     }
     
-    // Check if provider already exists
+    
     const existing = await ProviderStatus.findOne({ providerName: providerId });
     if (existing) {
       return res.status(400).json({
@@ -902,7 +896,7 @@ exports.createProvider = async (req, res, next) => {
     const allowedStatuses = ['active', 'inactive', 'maintenance', 'degraded'];
     const providerStatus = status && allowedStatuses.includes(status) ? status : 'active';
     
-    // Create new provider in database
+    
     const newProvider = new ProviderStatus({
       providerName: providerId,
       name,
@@ -938,14 +932,14 @@ exports.createProvider = async (req, res, next) => {
   }
 };
 
-/**
- * Get API logs (mock - in production would aggregate from actual logs)
- */
+
+
+
 exports.getApiLogs = async (req, res, next) => {
   try {
     const { provider, limit = 20 } = req.query;
     
-    // Mock API logs - in production, this would fetch from logs database
+    
     const mockLogs = [
       { timestamp: new Date(), provider: 'clubkonnect', endpoint: '/v1/mtn/data', status: 'success', duration: 87 },
       { timestamp: new Date(Date.now() - 180000), provider: 'airtimenigeria', endpoint: '/api/airtime', status: 'success', duration: 124 },
@@ -974,20 +968,20 @@ exports.getApiLogs = async (req, res, next) => {
   }
 };
 
-/**
- * Initialize providers in database
- */
+
+
+
 exports.initializeProviders = async (req, res, next) => {
   try {
     const providers = VtuProviderService.getAllProviders();
     const results = [];
     
     for (const provider of providers) {
-      // Check if already exists
+      
       const existing = await ProviderStatus.findOne({ providerName: provider.id });
       
       if (existing) {
-        // Update with latest config
+        
         await ProviderStatus.findOneAndUpdate(
           { providerName: provider.id },
           {
@@ -1005,7 +999,7 @@ exports.initializeProviders = async (req, res, next) => {
         );
         results.push({ provider: provider.id, action: 'updated' });
       } else {
-        // Create new
+        
         const newProvider = new ProviderStatus({
           providerName: provider.id,
           name: provider.name,
@@ -1040,9 +1034,9 @@ exports.initializeProviders = async (req, res, next) => {
   }
 };
 
-/**
- * Delete a provider from database (soft delete - just marks as inactive)
- */
+
+
+
 exports.deleteProvider = async (req, res, next) => {
   try {
     const { providerId } = req.params;
@@ -1058,7 +1052,7 @@ exports.deleteProvider = async (req, res, next) => {
     }
     
     if (hardDelete === 'true') {
-      // Actually delete from database
+      
       await ProviderStatus.deleteOne({ providerName: providerId });
       logger.info(`Provider ${providerId} hard deleted by user: ${req.user?.id || 'system'}`);
       
@@ -1067,7 +1061,7 @@ exports.deleteProvider = async (req, res, next) => {
         message: 'Provider deleted permanently'
       });
     } else {
-      // Soft delete - just mark as inactive
+      
       provider.status = 'inactive';
       await provider.save();
       logger.info(`Provider ${providerId} soft deleted by user: ${req.user?.id || 'system'}`);
@@ -1082,9 +1076,9 @@ exports.deleteProvider = async (req, res, next) => {
   }
 };
 
-/**
- * Switch provider for bill payment service (electricity, cable TV)
- */
+
+
+
 exports.switchBillPaymentProvider = async (req, res, next) => {
   try {
     const { serviceType, providerId } = req.body;
@@ -1122,9 +1116,9 @@ exports.switchBillPaymentProvider = async (req, res, next) => {
   }
 };
 
-/**
- * Get bill payment provider configuration
- */
+
+
+
 exports.getBillPaymentProviders = async (req, res, next) => {
   try {
     const billPaymentConfig = {

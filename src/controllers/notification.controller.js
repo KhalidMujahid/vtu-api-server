@@ -2,9 +2,6 @@ const Notification = require("../models/Notification");
 const User = require("../models/User");
 const logger = require("../utils/logger");
 
-/**
- * Broadcast notification to all users
- */
 exports.broadcastNotification = async (req, res, next) => {
   try {
     const { title, message, type = 'broadcast', targetUsers = 'all', userIds = [] } = req.body;
@@ -34,7 +31,7 @@ exports.broadcastNotification = async (req, res, next) => {
       });
     }
     
-    // Create broadcast notifications for all users
+    
     const notifications = recipientIds.map(userId => ({
       user: userId,
       title,
@@ -44,7 +41,7 @@ exports.broadcastNotification = async (req, res, next) => {
       isRead: false,
     }));
     
-    // Insert in batches to avoid memory issues
+    
     const batchSize = 1000;
     for (let i = 0; i < notifications.length; i += batchSize) {
       const batch = notifications.slice(i, i + batchSize);
@@ -70,9 +67,7 @@ exports.broadcastNotification = async (req, res, next) => {
   }
 };
 
-/**
- * Send notification to specific user (by admin)
- */
+
 exports.sendNotificationToUser = async (req, res, next) => {
   try {
     const { userId, title, message, type = 'system' } = req.body;

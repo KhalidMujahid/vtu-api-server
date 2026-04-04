@@ -66,7 +66,7 @@ app.get('/api/v1/health', (req, res) => {
   });
 });
 
-// Swagger documentation
+
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.get('/api/v1/docs.json', (req, res) => {
   res.json(swaggerSpec);

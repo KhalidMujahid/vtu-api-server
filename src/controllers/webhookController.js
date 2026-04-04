@@ -96,9 +96,9 @@ async function applyFundingSuccess({ transaction, grossAmount, note, metadata = 
   return { wallet, netAmount, fee };
 }
 
-/**
- * SMEPlug Webhook Handler
- */
+
+
+
 exports.smePlugWebhook = async (req, res) => {
   try {
     const payload = Object.keys(req.body || {}).length ? req.body : req.query;

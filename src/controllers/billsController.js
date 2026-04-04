@@ -785,11 +785,11 @@ exports.purchaseCableTV = async (req, res, next) => {
     
     let totalAmount;
     
-    // If using configured provider (default or specified)
+    
     if (activeProvider === 'clubkonnect') {
       let transaction;
       try {
-        // First verify smartcard
+        
         const verifyResult = await NelloBytesService.verifyCableSmartCard({
           cableTV: provider,
           smartCardNo: smartCardNumber,
@@ -799,7 +799,7 @@ exports.purchaseCableTV = async (req, res, next) => {
           return next(new AppError('Invalid smartcard number', 400));
         }
         
-        // Get packages to find the price
+        
         const packages = await NelloBytesService.getCablePackages(provider);
         plan = packages[provider]?.find(p => p.code === planId || p.variation_code === planId);
         
@@ -819,7 +819,7 @@ exports.purchaseCableTV = async (req, res, next) => {
           { serviceType: 'cable_tv', provider, smartCardNumber }
         );
         
-        // Debit wallet
+        
         await wallet.debit(totalAmount, `Cable TV: ${provider}`);
         
         const reference = `CABLE-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
@@ -847,7 +847,7 @@ exports.purchaseCableTV = async (req, res, next) => {
           statusHistory: [{ status: 'pending', note: `Subscription initiated via ${activeProvider}`, timestamp: new Date() }],
         });
         
-        // Purchase from NelloBytes
+        
         const apiResponse = await NelloBytesService.purchaseCableTV({
           cableTV: provider,
           packageCode: planId,
@@ -894,7 +894,7 @@ exports.purchaseCableTV = async (req, res, next) => {
         throw new Error(apiResponse.response?.status || 'Purchase failed');
         
       } catch (error) {
-        // Refund wallet on failure
+        
         if (transaction) {
           await refundTransactionToWallet(transaction, 'Cable TV refund', totalAmount);
           transaction.status = 'failed';
@@ -1415,9 +1415,9 @@ exports.cancelEducationTransaction = async (req, res, next) => {
   }
 };
 
-/**
- * NelloBytes Bills Webhook Handler
- */
+
+
+
 exports.nelloBytesWebhook = async (req, res, next) => {
   try {
     const queryData = req.query || {};

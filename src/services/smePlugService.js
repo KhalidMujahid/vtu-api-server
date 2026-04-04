@@ -1,8 +1,3 @@
-/**
- * SMEPlug API Service
- * Documentation: https://smeplug.ng
- */
-
 const axios = require('axios');
 const logger = require('../utils/logger');
 
@@ -26,7 +21,7 @@ class SmePlugService {
     };
   }
 
-  // Network ID mapping
+  
   static networkMap = {
     mtn: '1',
     airtel: '2',
@@ -92,9 +87,9 @@ class SmePlugService {
       || (label.includes('weekly') && label.includes('share'));
   }
 
-  /**
-   * Get Wallet Balance
-   */
+  
+
+
   static async getWalletBalance() {
     try {
       const response = await axios.get(
@@ -120,9 +115,9 @@ class SmePlugService {
     }
   }
 
-  /**
-   * Get Available Networks
-   */
+  
+
+
   static async getNetworks() {
     try {
       const response = await axios.get(
@@ -147,10 +142,10 @@ class SmePlugService {
     }
   }
 
-  /**
-   * Get Data Plans
-   * @param {string} network - Network name (mtn, airtel, glo, 9mobile)
-   */
+  
+
+
+
   static async getDataPlans(network = null) {
     try {
       const networks = network ? [this.normalizeNetwork(network)] : ['mtn', 'airtel', 'glo', '9mobile'];
@@ -171,16 +166,16 @@ class SmePlugService {
           
           console.log(`SMEPlug response for ${net}:`, JSON.stringify(response.data));
 
-          // Handle different response structures
+          
           if (response.data?.status && response.data?.data) {
             let plansData = response.data.data;
             
-            // If data is an object with a 'data' property that's an array
+            
             if (plansData.data && Array.isArray(plansData.data)) {
               plansData = plansData.data;
             }
             
-            // If data is still not an array, try to get the first key's value
+            
             if (!Array.isArray(plansData)) {
               const firstKey = Object.keys(plansData)[0];
               if (firstKey && Array.isArray(plansData[firstKey])) {
@@ -229,10 +224,10 @@ class SmePlugService {
     }
   }
 
-  /**
-   * Purchase Data
-   * @param {Object} options - { phone, network, planId, customerReference, callbackUrl }
-   */
+  
+
+
+
   static async purchaseData(options) {
     const { phone, network, planId, customerReference, callbackUrl } = options;
     
@@ -246,7 +241,7 @@ class SmePlugService {
         customer_reference: customerReference || '',
       };
       
-      // Add callback URL if provided
+      
       if (callbackUrl) {
         requestBody.callback_url = callbackUrl;
       }
@@ -276,10 +271,10 @@ class SmePlugService {
     }
   }
 
-  /**
-   * Purchase Airtime
-   * @param {Object} options - { phone, network, amount, customerReference, callbackUrl }
-   */
+  
+
+
+
   static async purchaseAirtime(options) {
     const { phone, network, amount, customerReference, callbackUrl } = options;
     
@@ -293,7 +288,7 @@ class SmePlugService {
         customer_reference: customerReference || '',
       };
       
-      // Add callback URL if provided
+      
       if (callbackUrl) {
         requestBody.callback_url = callbackUrl;
       }
@@ -323,10 +318,10 @@ class SmePlugService {
     }
   }
 
-  /**
-   * VTU Topup / Share & Sell
-   * @param {Object} options - { phone, network, amount, customerReference }
-   */
+  
+
+
+
   static async vtuTopup(options) {
     const { phone, network, amount, customerReference } = options;
     
@@ -363,9 +358,9 @@ class SmePlugService {
     }
   }
 
-  /**
-   * Get Banks List
-   */
+  
+
+
   static async getBanks() {
     try {
       const response = await axios.get(
@@ -390,11 +385,11 @@ class SmePlugService {
     }
   }
 
-  /**
-   * Resolve Account Details
-   * @param {string} bankCode - Bank code
-   * @param {string} accountNumber - Account number
-   */
+  
+
+
+
+
   static async resolveAccount(bankCode, accountNumber) {
     try {
       const response = await axios.post(
@@ -423,10 +418,10 @@ class SmePlugService {
     }
   }
 
-  /**
-   * Bank Transfer
-   * @param {Object} options - { bankCode, accountNumber, amount, customerReference }
-   */
+  
+
+
+
   static async bankTransfer(options) {
     const { bankCode, accountNumber, amount, customerReference } = options;
     
@@ -461,9 +456,9 @@ class SmePlugService {
     }
   }
 
-  /**
-   * Get Transactions
-   */
+  
+
+
   static async getTransactions() {
     try {
       const response = await axios.get(
@@ -488,24 +483,24 @@ class SmePlugService {
     }
   }
 
-  /**
-   * Verify webhook payload
-   */
-  // static verifyCallback(payload) {
-  //   if (payload?.transaction) {
-  //     const tx = payload.transaction;
-  //     return {
-  //       reference: tx.reference,
-  //       customerReference: tx.customer_reference,
-  //       status: tx.status,
-  //       type: tx.type,
-  //       beneficiary: tx.beneficiary,
-  //       amount: tx.price,
-  //       message: tx.response,
-  //     };
-  //   }
-  //   return null;
-  // }
+  
+
+
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
 
   static extractCallbackItems(payload) {
     if (Array.isArray(payload)) {

@@ -50,7 +50,7 @@ module.exports = {
         });
       }
       
-      // Check if agent is approved
+      
       if (user.role === 'agent' || (user.roles && user.roles.includes('agent'))) {
         if (!user.isApproved) {
           return res.status(401).json({
