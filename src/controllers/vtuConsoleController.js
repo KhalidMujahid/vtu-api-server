@@ -5,6 +5,7 @@
 
 const VtuProviderService = require('../services/vtuProviderService');
 const ProviderStatus = require('../models/ProviderStatus');
+const Transaction = require('../models/Transaction');
 const logger = require('../utils/logger');
 const vtuConfig = require('../config/vtuProviders');
 
@@ -25,6 +26,13 @@ function toConsoleServiceName(serviceType = '') {
 
 function toConsoleServiceList(serviceTypes = []) {
   return [...new Set((serviceTypes || []).map(toConsoleServiceName).filter(Boolean))];
+}
+
+function normalizeProviderId(providerId = '') {
+  if (typeof vtuConfig.normalizeProviderId === 'function') {
+    return vtuConfig.normalizeProviderId(providerId);
+  }
+  return String(providerId || '').trim().toLowerCase();
 }
 
 /**
@@ -453,6 +461,174 @@ exports.getProviderStats = async (req, res, next) => {
         lastChecked: stats.lastChecked,
         status: stats.status,
       }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get all providers with live balance + accumulated profile for dashboard cards
+ */
+exports.getProviderProfiles = async (req, res, next) => {
+  try {
+    const providers = VtuProviderService.getAllProviders();
+    const providerIds = providers.map((provider) => provider.id);
+
+    const [dbStatuses, balances, txGroups] = await Promise.all([
+      ProviderStatus.find({ providerName: { $in: providerIds } }).lean(),
+      Promise.all(providerIds.map((providerId) => VtuProviderService.getProviderBalance(providerId))),
+      Transaction.aggregate([
+        {
+          $project: {
+            providerId: {
+              $toLower: {
+                $trim: {
+                  input: {
+                    $ifNull: ['$service.provider', '$provider.name'],
+                  },
+                },
+              },
+            },
+            amount: { $ifNull: ['$amount', 0] },
+            status: 1,
+            createdAt: 1,
+          },
+        },
+        {
+          $match: {
+            providerId: { $ne: '' },
+          },
+        },
+        {
+          $group: {
+            _id: '$providerId',
+            transactionsCount: { $sum: 1 },
+            successfulCount: {
+              $sum: {
+                $cond: [{ $eq: ['$status', 'successful'] }, 1, 0],
+              },
+            },
+            failedCount: {
+              $sum: {
+                $cond: [{ $eq: ['$status', 'failed'] }, 1, 0],
+              },
+            },
+            pendingCount: {
+              $sum: {
+                $cond: [{ $in: ['$status', ['pending', 'processing']] }, 1, 0],
+              },
+            },
+            totalAmount: { $sum: '$amount' },
+            successfulAmount: {
+              $sum: {
+                $cond: [{ $eq: ['$status', 'successful'] }, '$amount', 0],
+              },
+            },
+            lastTransactionAt: { $max: '$createdAt' },
+          },
+        },
+      ]),
+    ]);
+
+    const statusMap = new Map(
+      (dbStatuses || []).map((status) => [normalizeProviderId(status.providerName), status])
+    );
+    const balanceMap = new Map(
+      (balances || []).map((balance) => [normalizeProviderId(balance.providerId), balance])
+    );
+
+    const txMap = new Map();
+    for (const tx of txGroups || []) {
+      const normalizedProviderId = normalizeProviderId(tx._id);
+      const current = txMap.get(normalizedProviderId) || {
+        transactionsCount: 0,
+        successfulCount: 0,
+        failedCount: 0,
+        pendingCount: 0,
+        totalAmount: 0,
+        successfulAmount: 0,
+        lastTransactionAt: null,
+      };
+
+      current.transactionsCount += tx.transactionsCount || 0;
+      current.successfulCount += tx.successfulCount || 0;
+      current.failedCount += tx.failedCount || 0;
+      current.pendingCount += tx.pendingCount || 0;
+      current.totalAmount += Number(tx.totalAmount || 0);
+      current.successfulAmount += Number(tx.successfulAmount || 0);
+      if (!current.lastTransactionAt || (tx.lastTransactionAt && new Date(tx.lastTransactionAt) > new Date(current.lastTransactionAt))) {
+        current.lastTransactionAt = tx.lastTransactionAt;
+      }
+
+      txMap.set(normalizedProviderId, current);
+    }
+
+    const profiles = providers.map((provider) => {
+      const normalizedId = normalizeProviderId(provider.id);
+      const dbStatus = statusMap.get(normalizedId) || {};
+      const balance = balanceMap.get(normalizedId) || null;
+      const tx = txMap.get(normalizedId) || {
+        transactionsCount: 0,
+        successfulCount: 0,
+        failedCount: 0,
+        pendingCount: 0,
+        totalAmount: 0,
+        successfulAmount: 0,
+        lastTransactionAt: null,
+      };
+
+      const txSuccessRate = tx.transactionsCount > 0
+        ? Number(((tx.successfulCount / tx.transactionsCount) * 100).toFixed(2))
+        : 0;
+      const apiSuccessRate = Number(dbStatus.successRate ?? 0);
+
+      return {
+        providerId: provider.id,
+        name: provider.name,
+        displayName: provider.displayName,
+        status: dbStatus.status || provider.status || 'active',
+        isDefault: dbStatus.isDefault || provider.isDefault || false,
+        supportedServices: toConsoleServiceList(provider.supportedServices),
+        supportedNetworks: provider.supportedNetworks || [],
+        balance: balance
+          ? {
+              available: balance.available,
+              amount: balance.balance,
+              currency: balance.currency || 'NGN',
+              message: balance.message || null,
+              lastUpdated: balance.lastUpdated || null,
+            }
+          : null,
+        accumulatedProfile: {
+          transactionsCount: tx.transactionsCount,
+          successfulCount: tx.successfulCount,
+          failedCount: tx.failedCount,
+          pendingCount: tx.pendingCount,
+          totalAmount: Number(tx.totalAmount || 0),
+          successfulAmount: Number(tx.successfulAmount || 0),
+          successRate: txSuccessRate,
+          lastTransactionAt: tx.lastTransactionAt || null,
+        },
+        apiProfile: {
+          totalRequests: dbStatus.totalRequests || 0,
+          successfulRequests: dbStatus.successfulRequests || 0,
+          failedRequests: dbStatus.failedRequests || 0,
+          successRate: Number(apiSuccessRate.toFixed(2)),
+          uptime: dbStatus.uptime ?? 100,
+          averageResponseTime: dbStatus.averageResponseTime ?? null,
+          lastChecked: dbStatus.lastChecked || null,
+        },
+      };
+    });
+
+    res.status(200).json({
+      status: 'success',
+      results: profiles.length,
+      data: {
+        profiles,
+        generatedAt: new Date(),
+      },
     });
   } catch (error) {
     next(error);

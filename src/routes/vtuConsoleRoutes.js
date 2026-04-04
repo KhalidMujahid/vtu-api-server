@@ -61,6 +61,20 @@ router.post('/providers', adminAuth, vtuConsoleController.createProvider);
 
 /**
  * @swagger
+ * /api/v1/console/providers/profiles:
+ *   get:
+ *     summary: Get provider balances and accumulated profiles
+ *     tags: [VTU Console - Providers]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Provider profiles for dashboard cards
+ */
+router.get('/providers/profiles', adminAuth, vtuConsoleController.getProviderProfiles);
+
+/**
+ * @swagger
  * /api/v1/console/providers/config:
  *   get:
  *     summary: Get provider configuration (public info)
