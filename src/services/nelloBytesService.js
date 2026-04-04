@@ -258,8 +258,9 @@ class NelloBytesService {
         timeout: this.config.timeout,
       });
 
-      logger.info(`NelloBytes API Response: ${endpoint}`, { response: response.data });
-      return response.data;
+      const payload = this.normalizeResponsePayload(response.data);
+      logger.info(`NelloBytes API Response: ${endpoint}`, { response: payload });
+      return payload;
     } catch (error) {
       logger.error(`NelloBytes API Error: ${endpoint}`, {
         message: error.message,
@@ -269,20 +270,84 @@ class NelloBytesService {
     }
   }
 
+  static normalizeResponsePayload(payload) {
+    if (typeof payload !== 'string') {
+      return payload;
+    }
+
+    const trimmed = payload.trim();
+    if (!trimmed) {
+      return {};
+    }
+
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      try {
+        return JSON.parse(trimmed);
+      } catch (error) {
+        logger.warn('NelloBytes response JSON parse failed, returning raw payload');
+      }
+    }
+
+    return payload;
+  }
+
+  static parseBalanceValue(value) {
+    if (typeof value === 'number') {
+      return Number.isNaN(value) ? null : value;
+    }
+
+    if (typeof value !== 'string') {
+      return null;
+    }
+
+    const cleaned = value.replace(/[^0-9.-]/g, '');
+    if (!cleaned) {
+      return null;
+    }
+
+    const parsed = Number(cleaned);
+    return Number.isNaN(parsed) ? null : parsed;
+  }
+
   /**
    * Get wallet balance
    */
   static async getWalletBalance() {
     const endpoint = '/APIWalletBalanceV1.asp';
     const response = await this.request(endpoint);
+    const statusText = String(response?.STATUS || response?.status || '').trim().toUpperCase();
 
-    const balanceValue = Number(response?.balance ?? 0);
+    if (statusText) {
+      const knownCredentialErrors = new Set([
+        'INVALID_CREDENTIALS',
+        'MISSING_CREDENTIALS',
+        'MISSING_USERID',
+        'MISSING_APIKEY',
+      ]);
+
+      if (knownCredentialErrors.has(statusText)) {
+        throw new AppError(`ClubKonnect wallet balance error: ${statusText}`, 401);
+      }
+    }
+
+    const balanceCandidate =
+      response?.balance ??
+      response?.BALANCE ??
+      response?.wallet_balance ??
+      response?.WalletBalance ??
+      response?.wallet ??
+      null;
+
+    const balanceValue = this.parseBalanceValue(balanceCandidate);
+    if (balanceValue === null) {
+      throw new AppError('ClubKonnect wallet balance was not found in provider response', 502);
+    }
 
     return {
       success: true,
       id: response?.id || this.config.userId,
       phoneNumber: response?.phoneno || null,
-      balance: Number.isNaN(balanceValue) ? 0 : balanceValue,
+      balance: balanceValue,
       currency: 'NGN',
       date: response?.date || null,
       raw: response,
