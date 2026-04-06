@@ -12,6 +12,7 @@ const TelecomService = require('../services/telecomService');
 const BillsService = require('../services/billsService');
 const { AppError } = require('../middlewares/errorHandler');
 const logger = require('../utils/logger');
+const { toCsv } = require('../utils/exportUtils');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const emailService = require('../utils/emailService');
@@ -3015,19 +3016,9 @@ class AdminController {
       if (format === 'csv') {
         res.setHeader('Content-Type', 'text/csv');
         res.setHeader('Content-Disposition', `attachment; filename=${filename}.csv`);
-        
-        if (data.length > 0) {
-          const headers = Object.keys(data[0]).join(',');
-          const rows = data.map(row => 
-            Object.values(row).map(value => 
-              typeof value === 'object' ? JSON.stringify(value) : value
-            ).join(',')
-          );
-          
-          return res.send([headers, ...rows].join('\n'));
-        }
-        
-        return res.send('');
+        const csvContent = toCsv(data);
+        const withBom = `\uFEFF${csvContent}`;
+        return res.send(withBom);
       } else {
         
         res.status(200).json({

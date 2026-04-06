@@ -4,9 +4,29 @@ function flattenObject(input, prefix = '', result = {}) {
     return result;
   }
 
+  const normalizeValue = (value) => {
+    if (value === null || value === undefined) return '';
+    if (value instanceof Date) return value.toISOString();
+    if (typeof value === 'bigint') return value.toString();
+    if (Buffer.isBuffer(value)) return value.toString('base64');
+    if (typeof value === 'object') {
+      if (typeof value.toHexString === 'function') return value.toHexString();
+      if (value._bsontype === 'ObjectId' || value._bsontype === 'ObjectID') {
+        return typeof value.toString === 'function' ? value.toString() : String(value);
+      }
+    }
+    return value;
+  };
+
   if (Array.isArray(input)) {
     result[prefix] = input
-      .map(item => (typeof item === 'object' ? JSON.stringify(item) : String(item)))
+      .map(item => {
+        const normalized = normalizeValue(item);
+        if (normalized && typeof normalized === 'object') {
+          return JSON.stringify(normalized);
+        }
+        return String(normalized);
+      })
       .join(' | ');
     return result;
   }
@@ -18,10 +38,11 @@ function flattenObject(input, prefix = '', result = {}) {
 
   for (const [key, value] of Object.entries(input)) {
     const path = prefix ? `${prefix}.${key}` : key;
-    if (value && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date)) {
-      flattenObject(value, path, result);
+    const normalized = normalizeValue(value);
+    if (normalized && typeof normalized === 'object') {
+      flattenObject(normalized, path, result);
     } else {
-      result[path] = value instanceof Date ? value.toISOString() : value;
+      result[path] = normalized;
     }
   }
 
@@ -29,7 +50,7 @@ function flattenObject(input, prefix = '', result = {}) {
 }
 
 function escapeCsvValue(value) {
-  const stringValue = value === null || value === undefined ? '' : String(value);
+  const stringValue = value === null || value === undefined ? '' : String(value).replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   if (/[",\n]/.test(stringValue)) {
     return `"${stringValue.replace(/"/g, '""')}"`;
   }
