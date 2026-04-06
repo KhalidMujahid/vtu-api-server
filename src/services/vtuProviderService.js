@@ -6,6 +6,7 @@ const AirtimeNigeriaService = require('./airtimeNigeriaService');
 const SmePlugService = require('./smePlugService');
 const NelloBytesService = require('./nelloBytesService');
 const PluginngService = require('./pluginngService');
+const AlrahuzDataService = require('./alrahuzDataService');
 
 class VtuProviderService {
   static AUTO_FAILOVER_THRESHOLD = 40;
@@ -517,6 +518,18 @@ class VtuProviderService {
             lastUpdated: new Date(),
           };
         }
+        case 'alrahuzdata': {
+          const result = await AlrahuzDataService.getWalletBalance();
+          return {
+            providerId: resolvedProviderId,
+            providerName: provider.name,
+            available: true,
+            balance: Number(result?.balance || 0),
+            currency: result?.currency || 'NGN',
+            raw: result?.raw || result,
+            lastUpdated: new Date(),
+          };
+        }
 
         default:
           return {
@@ -633,5 +646,4 @@ class VtuProviderService {
 }
 
 module.exports = VtuProviderService;
-
 

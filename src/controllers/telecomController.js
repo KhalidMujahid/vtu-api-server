@@ -10,6 +10,7 @@ const VtuProviderService = require('../services/vtuProviderService');
 const AirtimeNigeriaService = require('../services/airtimeNigeriaService');
 const SmePlugService = require('../services/smePlugService');
 const PluginngService = require('../services/pluginngService');
+const AlrahuzDataService = require('../services/alrahuzDataService');
 const ProviderPurchaseGuardService = require('../services/providerPurchaseGuardService');
 const ProviderMarkupService = require('../services/providerMarkupService');
 const vtuConfig = require('../config/vtuProviders');
@@ -27,6 +28,7 @@ const SOURCE_TO_PROVIDER = {
   airtimenigeria: 'airtimenigeria',
   smeplug: 'smeplug',
   pluginng: 'pluginng',
+  alrahuzdata: 'alrahuzdata',
 };
 
 const DATA_NETWORKS = ['mtn', 'glo', 'airtel', '9mobile'];
@@ -599,7 +601,7 @@ exports.purchaseData = async (req, res, next) => {
       return next(new AppError('Wallet not found', 404));
     }
 
-    const requestedPricing = await resolveDataPricing({
+    let requestedPricing = await resolveDataPricing({
       providerId: requestedProvider,
       network: normalizedNetwork,
       planIdentifier,
@@ -609,6 +611,18 @@ exports.purchaseData = async (req, res, next) => {
 
     if (requestedPricing && requestedPricing.isAvailable === false) {
       return next(new AppError(requestedPricing.availabilityMessage || 'Service Temporarily Unavailable', 503));
+    }
+
+    const requestedProviderSource = vtuConfig.providers[requestedProvider]?.source || requestedProvider;
+    const fallbackProviderAmount = Number(amount || 0);
+    if (!requestedPricing && requestedProviderSource === 'alrahuzdata' && fallbackProviderAmount > 0) {
+      requestedPricing = {
+        providerPlanId: planIdentifier,
+        planCode: planIdentifier,
+        planName: planIdentifier,
+        sellingPrice: fallbackProviderAmount,
+        isAvailable: true,
+      };
     }
 
     const providerPrice = Number(requestedPricing?.sellingPrice || 0);
@@ -731,6 +745,13 @@ exports.purchaseData = async (req, res, next) => {
               planId: attemptPricing.providerPlanId || attemptPricing.planCode || attemptPricing.planName || planIdentifier,
               phoneNumber,
               subcategoryId,
+              customReference: reference,
+            });
+          } else if (providerConfig.source === 'alrahuzdata') {
+            apiResponse = await AlrahuzDataService.purchaseData({
+              network: normalizedNetwork,
+              planId: attemptPricing.providerPlanId || attemptPricing.planCode || attemptPricing.planName || planIdentifier,
+              phoneNumber,
               customReference: reference,
             });
           } else {
@@ -987,6 +1008,21 @@ exports.purchaseAirtime = async (req, res, next) => {
         amount: parsedAmount,
         phoneNumber: normalizedPhoneNumber,
         subcategoryId,
+        customReference: requestId,
+      });
+
+      const providerStatus = String(apiResponse.status || '').toLowerCase();
+      responseData = {
+        status: ['success', 'pending'].includes(providerStatus) ? "ORDER_RECEIVED" : "FAILED",
+        orderid: apiResponse.orderId || apiResponse.reference || requestId,
+        raw: apiResponse,
+      };
+      
+    } else if (providerConfig?.source === 'alrahuzdata') {
+      apiResponse = await AlrahuzDataService.purchaseAirtime({
+        network: normalizedNetwork,
+        amount: parsedAmount,
+        phoneNumber: normalizedPhoneNumber,
         customReference: requestId,
       });
 

@@ -5,6 +5,8 @@ module.exports = {
     clubkonnect: 'clubkonnect',
     nello: 'clubkonnect',
     nellobytes: 'clubkonnect',
+    alrahuz: 'alrahuzdata',
+    alrahuzdata: 'alrahuzdata',
   },
 
   providers: {
@@ -131,13 +133,43 @@ module.exports = {
         requestsPerHour: 500,
       },
     },
+    alrahuzdata: {
+      id: 'alrahuzdata',
+      name: 'AlrahuzData',
+      displayName: 'AlrahuzData',
+      description: 'Data - airtime - cable - electricity - exam',
+      color: '#0f766e',
+      icon: 'database',
+      baseUrl: process.env.ALRAHUZDATA_BASE_URL || 'https://alrahuzdata.com.ng',
+      apiKey: process.env.ALRAHUZDATA_TOKEN || '',
+      apiSecret: process.env.ALRAHUZDATA_TOKEN || '',
+      timeout: 45000,
+      retryCount: 2,
+      supportedServices: ['data_recharge', 'airtime_recharge', 'sme_data', 'electricity', 'cable_tv', 'education_pin'],
+      supportedNetworks: ['mtn', 'glo', 'airtel', '9mobile'],
+      status: 'active',
+      priority: 5,
+      isDefault: false,
+      source: 'alrahuzdata',
+      features: {
+        dataBundle: true,
+        airtime: true,
+        cableTv: true,
+        electricity: true,
+        smeData: true,
+      },
+      rateLimit: {
+        requestsPerMinute: 60,
+        requestsPerHour: 500,
+      },
+    },
   },
 
   networkProviders: {
-    mtn: ['clubkonnect', 'airtimenigeria', 'smeplug', 'pluginng'],
-    glo: ['clubkonnect', 'airtimenigeria', 'smeplug', 'pluginng'],
-    airtel: ['clubkonnect', 'airtimenigeria', 'smeplug', 'pluginng'],
-    '9mobile': ['clubkonnect', 'airtimenigeria', 'smeplug', 'pluginng'],
+    mtn: ['clubkonnect', 'airtimenigeria', 'smeplug', 'pluginng', 'alrahuzdata'],
+    glo: ['clubkonnect', 'airtimenigeria', 'smeplug', 'pluginng', 'alrahuzdata'],
+    airtel: ['clubkonnect', 'airtimenigeria', 'smeplug', 'pluginng', 'alrahuzdata'],
+    '9mobile': ['clubkonnect', 'airtimenigeria', 'smeplug', 'pluginng', 'alrahuzdata'],
   },
 
   defaults: {
@@ -172,11 +204,11 @@ module.exports = {
 
   billPaymentServices: {
     electricity: {
-      providers: ['clubkonnect', 'airtimenigeria', 'smeplug', 'pluginng'],
+      providers: ['clubkonnect', 'airtimenigeria', 'smeplug', 'pluginng', 'alrahuzdata'],
       defaultProvider: 'clubkonnect',
     },
     cable_tv: {
-      providers: ['clubkonnect', 'airtimenigeria', 'smeplug', 'pluginng'],
+      providers: ['clubkonnect', 'airtimenigeria', 'smeplug', 'pluginng', 'alrahuzdata'],
       defaultProvider: 'clubkonnect',
     },
   },
@@ -273,6 +305,7 @@ module.exports = {
       'airtimenigeria': require('../services/airtimeNigeriaService'),
       'smeplug': require('../services/smePlugService'),
       'pluginng': require('../services/pluginngService'),
+      'alrahuzdata': require('../services/alrahuzDataService'),
     };
     return serviceMap[source] || null;
   },
@@ -283,6 +316,7 @@ module.exports = {
       'airtimenigeria': require('../services/airtimeNigeriaService'),
       'smeplug': require('../services/smePlugService'),
       'pluginng': require('../services/pluginngService'),
+      'alrahuzdata': require('../services/alrahuzDataService'),
     };
     return serviceMap[source] || null;
   },
@@ -380,6 +414,9 @@ module.exports = {
           break;
         case 'pluginng':
           normalizedData = this._normalizePluginng(data);
+          break;
+        case 'alrahuzdata':
+          normalizedData = this._normalizeAlrahuzData(data);
           break;
         default:
           return data;
@@ -604,6 +641,70 @@ module.exports = {
     if (normalized.startsWith('glo')) return 'glo';
     if (normalized.startsWith('9mobile')) return '9mobile';
     return null;
+  },
+
+  _normalizeAlrahuzData(data) {
+    const payload = data?.data || data?.plans || data;
+    const result = {};
+    const aliases = {
+      mtn: 'mtn',
+      airtel: 'airtel',
+      glo: 'glo',
+      etisalat: '9mobile',
+      '9mobile': '9mobile',
+      '1': 'mtn',
+      '2': 'glo',
+      '3': '9mobile',
+      '4': 'airtel',
+      '01': 'mtn',
+      '02': 'glo',
+      '03': '9mobile',
+      '04': 'airtel',
+    };
+
+    const normalizeKey = (value) => aliases[String(value || '').trim().toLowerCase()] || String(value || '').trim().toLowerCase();
+
+    const pushPlan = (network, item) => {
+      const normalizedNetwork = normalizeKey(network);
+      if (!normalizedNetwork) return;
+      if (!result[normalizedNetwork]) {
+        result[normalizedNetwork] = [];
+      }
+
+      const planName = String(item?.plan || item?.plan_name || item?.name || '').trim();
+      result[normalizedNetwork].push({
+        id: String(item?.id || item?.plan_id || item?.plan_code || planName || '').trim(),
+        planCode: String(item?.plan_code || item?.plan_id || item?.id || planName || '').trim(),
+        providerPlanId: String(item?.plan_id || item?.id || item?.plan_code || planName || '').trim(),
+        planName,
+        network: normalizedNetwork,
+        size: String(item?.volume || item?.size || planName || '').trim(),
+        price: parseFloat(item?.amount || item?.price || item?.selling_price || 0) || 0,
+        validity: String(item?.validity || '').trim(),
+        providerPlanType: this._extractDataType(planName),
+      });
+    };
+
+    if (Array.isArray(payload)) {
+      for (const item of payload) {
+        const network = item?.network || item?.network_name || item?.network_id;
+        if (network != null) {
+          pushPlan(network, item);
+        }
+      }
+      return result;
+    }
+
+    if (payload && typeof payload === 'object') {
+      for (const [network, plans] of Object.entries(payload)) {
+        if (!Array.isArray(plans)) continue;
+        for (const item of plans) {
+          pushPlan(network, item);
+        }
+      }
+    }
+
+    return result;
   },
 
   
