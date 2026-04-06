@@ -51,10 +51,15 @@ class NotificationService {
   }
 
   static async login(userId) {
+    const latestBroadcast = await Notification
+      .findOne({ user: userId, isBroadcast: true })
+      .sort({ createdAt: -1 })
+      .select('title message');
+
     return this.create({
       user: userId,
-      title: 'New Login',
-      message: 'Your account was just accessed',
+      title: latestBroadcast?.title || 'New Login',
+      message: latestBroadcast?.message || 'Your account was just accessed',
       type: 'login',
     });
   }
