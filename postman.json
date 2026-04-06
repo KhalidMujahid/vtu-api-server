@@ -3113,6 +3113,97 @@
           "response": []
         },
         {
+          "name": "Send Notification To Single User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Account Update\",\n  \"message\": \"Your account verification is complete.\",\n  \"type\": \"system\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/notifications/:userId/send",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "notifications",
+                ":userId",
+                "send"
+              ],
+              "variable": [
+                {
+                  "key": "userId",
+                  "value": "64f1234567890abcdef1234"
+                }
+              ]
+            },
+            "description": "Send a notification to a single user (Admin only)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Sent Notification History",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/notifications/sent-history?page=1&limit=20&isBroadcast=false&type=system&search=update",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "notifications",
+                "sent-history"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "isBroadcast",
+                  "value": "false"
+                },
+                {
+                  "key": "type",
+                  "value": "system"
+                },
+                {
+                  "key": "search",
+                  "value": "update"
+                }
+              ]
+            },
+            "description": "Get sent notification history (Admin only). Supports page, limit, type, userId, isBroadcast, startDate, endDate, search."
+          },
+          "response": []
+        },
+        {
           "name": "Get System Settings",
           "request": {
             "method": "GET",

@@ -11,6 +11,7 @@ const AirtimeNigeriaService = require('../services/airtimeNigeriaService');
 const SmePlugService = require('../services/smePlugService');
 const PluginngService = require('../services/pluginngService');
 const AlrahuzDataService = require('../services/alrahuzDataService');
+const AlrahuzDataReconciliationService = require('../services/alrahuzDataReconciliationService');
 const ProviderPurchaseGuardService = require('../services/providerPurchaseGuardService');
 const ProviderMarkupService = require('../services/providerMarkupService');
 const vtuConfig = require('../config/vtuProviders');
@@ -545,6 +546,10 @@ async function refundTransactionToWallet(transaction, reason = 'Transaction refu
   return wallet;
 }
 
+async function reconcileAlrahuzDataTransaction(transaction, providerOrderId = null) {
+  return AlrahuzDataReconciliationService.reconcileTransaction(transaction, providerOrderId);
+}
+
 exports.getDataPlans = async (req, res, next) => {
   try {
     const { network, source, dataType } = req.query;
@@ -837,21 +842,41 @@ exports.purchaseData = async (req, res, next) => {
         transaction.status = 'pending';
         transaction.service.provider = successfulProvider;
         transaction.service.plan = activePricing?.providerPlanId || activePricing?.variationCode || activePricing?.planCode || planIdentifier;
-        transaction.service.orderId = apiResponse.reference || apiResponse.orderId;
+        const providerOrderId = apiResponse.reference
+          || apiResponse.orderId
+          || apiResponse.raw?.id
+          || apiResponse.raw?.data?.id
+          || reference;
+        transaction.service.orderId = providerOrderId;
         transaction.providerResponse = apiResponse;
         transaction.statusHistory.push({ 
           status: 'pending', 
-          note: `Order received from ${successfulProvider}: ${apiResponse.reference || apiResponse.orderId}`, 
+          note: `Order received from ${successfulProvider}: ${providerOrderId}`, 
           timestamp: new Date() 
         });
         await transaction.save();
 
+        if (vtuConfig.providers[successfulProvider]?.source === 'alrahuzdata' && providerOrderId) {
+          try {
+            await reconcileAlrahuzDataTransaction(transaction, providerOrderId);
+          } catch (syncError) {
+            logger.warn(`Alrahuz status sync skipped for ${reference}: ${syncError.message}`);
+          }
+        }
+
+        const localStatus = transaction.status || 'pending';
+        const responseMessage = localStatus === 'successful'
+          ? 'Data purchase successful'
+          : localStatus === 'failed'
+            ? 'Data purchase failed and wallet refunded'
+            : 'Data purchase initiated successfully';
+
         res.status(200).json({
           status: 'success',
-          message: 'Data purchase initiated successfully',
+          message: responseMessage,
           data: {
             reference,
-            orderId: apiResponse.reference || apiResponse.orderId,
+            orderId: providerOrderId,
             phoneNumber,
             network: normalizedNetwork,
           dataPlan: activePricing?.planName || planIdentifier,
@@ -862,7 +887,7 @@ exports.purchaseData = async (req, res, next) => {
             percentage: chargePricing.percentage,
             amount: chargePricing.markupAmount,
           },
-          status: 'pending',
+          status: localStatus,
           provider: successfulProvider,
           },
         });
@@ -1361,6 +1386,49 @@ exports.queryAirtimeTransaction = async (req, res, next) => {
         providerRemark: result.remark,
         providerDate: result.date,
         raw: result.response,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.queryAlrahuzDataTransaction = async (req, res, next) => {
+  try {
+    const { orderId, reference } = req.body;
+    if (!orderId && !reference) {
+      return next(new AppError('Please provide orderId or reference', 400));
+    }
+
+    const transaction = await Transaction.findOne({
+      $or: [
+        ...(orderId ? [{ 'service.orderId': String(orderId) }] : []),
+        ...(reference ? [{ reference: String(reference) }] : []),
+      ],
+    });
+
+    if (!transaction) {
+      return next(new AppError('Transaction not found', 404));
+    }
+
+    const providerId = transaction.service?.provider;
+    const providerSource = vtuConfig.providers[providerId]?.source || providerId;
+    if (providerSource !== 'alrahuzdata') {
+      return next(new AppError('This transaction is not an Alrahuz data transaction', 400));
+    }
+
+    const result = await reconcileAlrahuzDataTransaction(transaction, orderId || transaction.service?.orderId);
+
+    return res.status(200).json({
+      status: 'success',
+      data: {
+        reference: transaction.reference,
+        orderId: transaction.service?.orderId || orderId || null,
+        localStatus: transaction.status,
+        providerStatus: result.status,
+        updated: result.updated,
+        providerMessage: result.providerResult?.message || null,
+        raw: result.providerResult?.raw || null,
       },
     });
   } catch (error) {

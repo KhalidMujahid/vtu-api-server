@@ -70,7 +70,8 @@ exports.broadcastNotification = async (req, res, next) => {
 
 exports.sendNotificationToUser = async (req, res, next) => {
   try {
-    const { userId, title, message, type = 'system' } = req.body;
+    const { title, message, type = 'system' } = req.body;
+    const userId = req.params.userId || req.body.userId;
     
     if (!userId || !title || !message) {
       return res.status(400).json({
@@ -105,6 +106,77 @@ exports.sendNotificationToUser = async (req, res, next) => {
     
   } catch (error) {
     logger.error('Send notification error:', error);
+    next(error);
+  }
+};
+
+exports.getSentNotificationHistory = async (req, res, next) => {
+  try {
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
+    const skip = (page - 1) * limit;
+
+    const {
+      type,
+      userId,
+      isBroadcast,
+      startDate,
+      endDate,
+      search,
+    } = req.query;
+
+    const query = {};
+
+    if (type) {
+      query.type = String(type).trim().toLowerCase();
+    }
+
+    if (userId) {
+      query.user = userId;
+    }
+
+    if (typeof isBroadcast !== 'undefined') {
+      query.isBroadcast = String(isBroadcast).toLowerCase() === 'true';
+    }
+
+    if (startDate || endDate) {
+      query.createdAt = {};
+      if (startDate) query.createdAt.$gte = new Date(startDate);
+      if (endDate) query.createdAt.$lte = new Date(endDate);
+    }
+
+    if (search) {
+      const keyword = String(search).trim();
+      if (keyword) {
+        query.$or = [
+          { title: { $regex: keyword, $options: 'i' } },
+          { message: { $regex: keyword, $options: 'i' } },
+        ];
+      }
+    }
+
+    const [notifications, total] = await Promise.all([
+      Notification.find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate('user', 'firstName lastName email phoneNumber role'),
+      Notification.countDocuments(query),
+    ]);
+
+    res.status(200).json({
+      status: 'success',
+      results: notifications.length,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      data: notifications,
+    });
+  } catch (error) {
+    logger.error('Get sent notification history error:', error);
     next(error);
   }
 };

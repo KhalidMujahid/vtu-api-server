@@ -247,6 +247,65 @@ class AlrahuzDataService {
     };
   }
 
+  static normalizeTransactionStatus(payload = {}) {
+    const statusCandidate = String(
+      payload?.status
+      || payload?.Status
+      || payload?.data?.status
+      || payload?.data?.Status
+      || payload?.order_status
+      || payload?.orderStatus
+      || payload?.transaction_status
+      || ''
+    ).trim().toLowerCase();
+
+    const message = payload?.message || payload?.detail || payload?.api_response || payload?.data?.message || '';
+    const reference = String(
+      payload?.id
+      || payload?.data?.id
+      || payload?.ident
+      || payload?.reference
+      || payload?.data?.reference
+      || ''
+    ).trim() || null;
+
+    let status = 'pending';
+    if (
+      statusCandidate.includes('success')
+      || statusCandidate.includes('completed')
+      || statusCandidate.includes('deliver')
+      || statusCandidate === '1'
+      || payload?.success === true
+    ) {
+      status = 'successful';
+    } else if (
+      statusCandidate.includes('fail')
+      || statusCandidate.includes('error')
+      || statusCandidate.includes('cancel')
+      || statusCandidate.includes('revers')
+      || statusCandidate === '-1'
+    ) {
+      status = 'failed';
+    } else if (
+      statusCandidate.includes('pending')
+      || statusCandidate.includes('process')
+      || statusCandidate.includes('queue')
+      || statusCandidate === '0'
+    ) {
+      status = 'pending';
+    }
+
+    return {
+      success: status === 'successful',
+      pending: status === 'pending',
+      failed: status === 'failed',
+      status,
+      message,
+      reference,
+      raw: payload,
+    };
+  }
+
   static async purchaseData({ network, planId, phoneNumber, customReference, portedNumber = true }) {
     const networkId = this.getNetworkId(network);
     if (!networkId) {
@@ -271,6 +330,27 @@ class AlrahuzDataService {
     });
 
     return this.normalizePurchaseResponse(payload, customReference);
+  }
+
+  static async getDataTransactionById(id) {
+    if (!id) {
+      throw new Error('id is required to query Alrahuz data transaction.');
+    }
+
+    const encodedId = encodeURIComponent(String(id).trim());
+    const candidates = [`/api/data/${encodedId}/`, `/api/data/${encodedId}`];
+    let lastError = null;
+
+    for (const endpoint of candidates) {
+      try {
+        const payload = await this.request(endpoint, { method: 'GET' });
+        return this.normalizeTransactionStatus(payload);
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    throw lastError || new Error('Unable to query Alrahuz data transaction status.');
   }
 
   static async purchaseAirtime({ network, amount, phoneNumber, customReference, portedNumber = true }) {

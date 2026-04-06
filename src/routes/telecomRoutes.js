@@ -147,6 +147,7 @@ router.post('/data/purchase', protect, requireTransactionPin, telecomController.
 
 router.post('/airtime/purchase', protect, requireTransactionPin, telecomController.purchaseAirtime);
 router.post('/airtime/query', protect, telecomController.queryAirtimeTransaction);
+router.post('/alrahuz/data/query', protect, telecomController.queryAlrahuzDataTransaction);
 router.post('/airtime/cancel', protect, telecomController.cancelAirtimeTransaction);
 
 

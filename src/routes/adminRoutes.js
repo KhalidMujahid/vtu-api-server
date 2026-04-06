@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const adminController = require('../controllers/adminController');
+const notificationController = require('../controllers/notification.controller');
 const vtuConsoleController = require('../controllers/vtuConsoleController');
 const { adminAuth, logAction, superAdminOnly, staffOnly } = require('../middlewares/admin');
 const jwt = require('jsonwebtoken');
@@ -105,6 +106,8 @@ router.post('/settings/2fa/setup', adminController.setupTwoFactor);
 router.post('/settings/2fa/verify', adminController.verifyTwoFactorSetup);
 router.post('/settings/2fa/send-code', adminController.sendDisableTwoFactorCode);
 router.post('/settings/2fa/disable', adminController.disableTwoFactor);
+router.get('/notifications/sent-history', logAction('view', 'notification'), notificationController.getSentNotificationHistory);
+router.post('/notifications/:userId/send', logAction('create', 'notification'), notificationController.sendNotificationToUser);
 
 router.use(superAdminOnly);
 router.get('/pricing', adminController.getPricing);
