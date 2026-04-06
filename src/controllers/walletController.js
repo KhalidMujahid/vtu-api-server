@@ -1,8 +1,11 @@
 const WalletService = require('../services/walletService');
 const TransactionService = require('../services/transactionService');
 const { AppError } = require('../middlewares/errorHandler');
+const mongoose = require("mongoose");
 const Wallet = require("../models/Wallet");
 const User = require("../models/User");
+const Transaction = require("../models/Transaction");
+const { buildSimplePdf } = require("../utils/exportUtils");
 const logger = require('../utils/logger');
 
 exports.getWalletBalance = async (req, res, next) => {
@@ -13,6 +16,8 @@ exports.getWalletBalance = async (req, res, next) => {
       status: 'success',
       data: {
         balance: wallet.balance,
+        referralBonus: wallet.referralBonus || 0,
+        referral_bonus: wallet.referralBonus || 0,
         currency: wallet.currency,
         locked: wallet.locked,
         totalFunded: wallet.totalFunded,
@@ -361,6 +366,65 @@ exports.getTransactionHistory = async (req, res, next) => {
     });
   } catch (error) {
     next(error);
+  }
+};
+
+exports.downloadTransactionReceipt = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const query = { user: req.user.id };
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      query._id = id;
+    } else {
+      query.reference = id;
+    }
+
+    const transaction = await Transaction.findOne(query).lean();
+
+    if (!transaction) {
+      return next(new AppError("Transaction not found", 404));
+    }
+
+    const reference = transaction.reference || transaction._id?.toString() || "N-A";
+    const amount = Number(transaction.amount || 0).toFixed(2);
+    const fee = Number(transaction.fee || 0).toFixed(2);
+    const total = Number(transaction.totalAmount || 0).toFixed(2);
+
+    const lines = [
+      "YAREEMA TRANSACTION RECEIPT",
+      "---------------------------",
+      `Reference: ${reference}`,
+      `Transaction ID: ${transaction._id}`,
+      `Status: ${transaction.status || "N/A"}`,
+      `Type: ${transaction.type || "N/A"}`,
+      `Category: ${transaction.category || "N/A"}`,
+      `Network: ${transaction?.service?.network || "N/A"}`,
+      `Plan: ${transaction?.service?.plan || "N/A"}`,
+      `Phone: ${transaction?.service?.phoneNumber || "N/A"}`,
+      `Amount: NGN ${amount}`,
+      `Fee: NGN ${fee}`,
+      `Total: NGN ${total}`,
+      `Previous Balance: NGN ${Number(transaction.previousBalance || 0).toFixed(2)}`,
+      `New Balance: NGN ${Number(transaction.newBalance || 0).toFixed(2)}`,
+      `Description: ${transaction.description || "N/A"}`,
+      `Created At: ${new Date(transaction.createdAt).toISOString()}`,
+      `Completed At: ${transaction.completedAt ? new Date(transaction.completedAt).toISOString() : "N/A"}`,
+      "",
+      "Powered by Yareema",
+    ];
+
+    const pdf = buildSimplePdf(lines);
+    const safeReference = reference.replace(/[^a-zA-Z0-9_-]/g, "_");
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="transaction-receipt-${safeReference}.pdf"`
+    );
+    return res.status(200).send(pdf);
+  } catch (error) {
+    return next(error);
   }
 };
 

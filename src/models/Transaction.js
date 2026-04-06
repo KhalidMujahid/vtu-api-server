@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const ReferralEarningService = require('../services/referralEarningService');
 
 const transactionSchema = new mongoose.Schema({
   reference: {
@@ -176,6 +177,29 @@ transactionSchema.pre('save', function(next) {
     });
   }
   next();
+});
+
+transactionSchema.post('save', async function(doc) {
+  try {
+    const alreadyProcessed = Boolean(doc?.metadata?.referralLedgerProcessed);
+    if (doc.status !== 'successful' || alreadyProcessed) {
+      return;
+    }
+
+    await ReferralEarningService.processSuccessfulTransaction(doc);
+
+    await this.constructor.updateOne(
+      { _id: doc._id },
+      {
+        $set: {
+          'metadata.referralLedgerProcessed': true,
+          'metadata.referralLedgerProcessedAt': new Date().toISOString(),
+        },
+      }
+    );
+  } catch (error) {
+    console.error('Referral ledger post-save hook failed:', error.message);
+  }
 });
 
 transactionSchema.statics.generateReference = function() {

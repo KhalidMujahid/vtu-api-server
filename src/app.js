@@ -17,6 +17,7 @@ const agentRoutes = require('./routes/agentRoutes');
 const paymentRoutes = require("./routes/paymentRoutes");
 const notificationRoutes = require('./routes/notificationRoutes');
 const reportRoutes = require('./routes/reportRoutes');
+const referralRoutes = require('./routes/referralRoutes');
 const vtuConsoleRoutes = require('./routes/vtuConsoleRoutes');
 const smsRoutes = require('./routes/smsRoutes');
 
@@ -55,6 +56,7 @@ app.use("/api/v1/agent", agentRoutes);
 app.use("/api/v1/payments", paymentRoutes);
 app.use("/api/v1/notifications", notificationRoutes);
 app.use("/api/v1/reports", reportRoutes);
+app.use("/api/v1/referral", referralRoutes);
 app.use("/api/v1/console", vtuConsoleRoutes);
 app.use("/api/v1/sms", smsRoutes);
 

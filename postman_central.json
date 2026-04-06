@@ -1607,6 +1607,35 @@
           "response": []
         },
         {
+          "name": "Download Transaction Receipt",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/wallet/transactions/:id/receipt",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "wallet",
+                "transactions",
+                ":id",
+                "receipt"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "transaction_id_here"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "description": "Download a single transaction receipt as PDF"
+        },
+        {
           "name": "Set Wallet PIN",
           "request": {
             "method": "POST",

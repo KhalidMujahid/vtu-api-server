@@ -12,6 +12,7 @@ router.post('/fund', hasWallet, walletController.fundWallet);
 router.post('/transfer', hasWallet, requireTransactionPin, walletController.transferToUser);
 router.post('/withdraw', hasWallet, requireTransactionPin, walletController.withdrawToBank);
 router.get('/transactions', hasWallet, walletController.getTransactionHistory);
+router.get('/transactions/:id/receipt', hasWallet, walletController.downloadTransactionReceipt);
 router.get('/accounts', hasWallet, walletController.getWalletAccounts);
 router.post('/accounts/refresh', hasWallet, walletController.refreshWalletAccounts);
 router.post('/set-pin', walletController.setTransactionPin);

@@ -43,6 +43,18 @@ const walletSchema = new mongoose.Schema(
     default: 0,
   },
 
+  referralBonus: {
+    type: Number,
+    default: 0,
+    min: 0,
+  },
+
+  totalReferralBonusMoved: {
+    type: Number,
+    default: 0,
+    min: 0,
+  },
+
   lastTransaction: Date,
 
   budpayCustomerCode: String,

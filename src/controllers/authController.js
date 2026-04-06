@@ -104,12 +104,21 @@ exports.register = async (req, res, next) => {
       return next(new AppError('User already exists', 400));
     }
 
+    let referringUser = null;
+    if (referralCode) {
+      referringUser = await User.findOne({ referralCode: String(referralCode).trim().toUpperCase() }).select('_id');
+      if (!referringUser) {
+        return next(new AppError('Invalid referral code', 400));
+      }
+    }
+
     const user = await User.create({
       firstName,
       lastName,
       email,
       phoneNumber: normalizedPhone,
       password,
+      referredBy: referringUser?._id || undefined,
     });
 
     await WalletService.createWallet(user);
