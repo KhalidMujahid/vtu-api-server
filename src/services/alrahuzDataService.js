@@ -150,15 +150,19 @@ class AlrahuzDataService {
       }
 
       const planName = String(plan.plan || plan.plan_name || plan.name || '').trim();
+      const validity = String(plan.month_validate || plan.validity || '').trim();
+      const displayPlanName = validity && planName
+        ? `${planName} (${validity})`
+        : (planName || String(plan.plan_type || '').trim());
       result[normalizedNetwork].push({
         id: String(plan.id || plan.plan_id || plan.plan_code || planName || '').trim(),
         planCode: String(plan.dataplan_id || plan.plan_code || plan.plan_id || plan.id || planName || '').trim(),
         providerPlanId: String(plan.dataplan_id || plan.plan_id || plan.id || plan.plan_code || planName || '').trim(),
-        planName: planName || String(plan.plan_type || '').trim(),
+        planName: displayPlanName,
         size: String(plan.plan || plan.volume || plan.size || planName || '').trim(),
         price: Number(plan.plan_amount || plan.amount || plan.price || plan.selling_price || 0),
-        validity: String(plan.month_validate || plan.validity || '').trim(),
-        month_validate: String(plan.month_validate || plan.validity || '').trim(),
+        validity,
+        month_validate: validity,
         network: normalizedNetwork,
         providerPlanType: String(plan.plan_type || '').trim().toLowerCase() || null,
       });

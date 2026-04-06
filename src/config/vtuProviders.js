@@ -679,16 +679,18 @@ module.exports = {
       }
 
       const planName = String(item?.plan || item?.plan_name || item?.name || '').trim();
+      const validity = String(item?.month_validate || item?.validity || '').trim();
+      const displayPlanName = validity && planName ? `${planName} (${validity})` : planName;
       const typeHint = `${item?.plan_type || item?.providerPlanType || ''} ${planName}`.trim();
       result[normalizedNetwork].push({
         id: String(item?.id || item?.dataplan_id || item?.plan_id || item?.plan_code || planName || '').trim(),
         planCode: String(item?.dataplan_id || item?.plan_code || item?.plan_id || item?.id || planName || '').trim(),
         providerPlanId: String(item?.dataplan_id || item?.plan_id || item?.id || item?.plan_code || planName || '').trim(),
-        planName,
+        planName: displayPlanName,
         network: normalizedNetwork,
         size: String(item?.plan || item?.volume || item?.size || planName || '').trim(),
         price: parseFloat(item?.plan_amount || item?.amount || item?.price || item?.selling_price || 0) || 0,
-        validity: String(item?.month_validate || item?.validity || '').trim(),
+        validity,
         providerPlanType: this._extractDataType(typeHint),
       });
     };
