@@ -219,9 +219,44 @@ function buildAvailableDataTypesFromGroupedPlans(groupedPlans = {}) {
 
 function formatAvailableDataTypes(availableTypes = {}, network = null) {
   if (network) {
-    return availableTypes?.byNetwork?.[network] || [];
+    const byNetworkTypes = availableTypes?.byNetwork?.[network];
+    if (Array.isArray(byNetworkTypes) && byNetworkTypes.length) {
+      return byNetworkTypes;
+    }
+    return availableTypes?.all || [];
   }
   return availableTypes?.byNetwork || {};
+}
+
+function hasGroupedPlans(groupedPlans = {}) {
+  if (!groupedPlans || typeof groupedPlans !== 'object') return false;
+  return Object.values(groupedPlans).some((plans) => Array.isArray(plans) && plans.length > 0);
+}
+
+function normalizeGroupedDataPlans(source, rawPlans) {
+  if (!rawPlans) return {};
+
+  if (source === 'alrahuzdata') {
+    if (
+      rawPlans
+      && typeof rawPlans === 'object'
+      && rawPlans.data
+      && typeof rawPlans.data === 'object'
+      && !Array.isArray(rawPlans.data)
+      && hasGroupedPlans(rawPlans.data)
+    ) {
+      return rawPlans.data;
+    }
+
+    if (rawPlans?.raw) {
+      const fromRaw = vtuConfig.transformDataPlans(source, rawPlans.raw) || {};
+      if (hasGroupedPlans(fromRaw)) {
+        return fromRaw;
+      }
+    }
+  }
+
+  return vtuConfig.transformDataPlans(source, rawPlans) || {};
 }
 
 async function getConfiguredDataPlans(providerId, network = null, includeUnavailable = true, dataType = null) {
@@ -233,7 +268,7 @@ async function getConfiguredDataPlans(providerId, network = null, includeUnavail
   if (!DataService || !DataService.getDataPlans) return [];
 
   const rawPlans = await DataService.getDataPlans(normalizeNetwork(network));
-  const groupedPlans = vtuConfig.transformDataPlans(source, rawPlans) || {};
+  const groupedPlans = normalizeGroupedDataPlans(source, rawPlans);
   const flatPlans = [];
 
   for (const [networkKey, plans] of Object.entries(groupedPlans)) {
@@ -528,7 +563,7 @@ exports.getDataPlans = async (req, res, next) => {
     
     if (DataService && DataService.getDataPlans) {
       const rawPlans = await DataService.getDataPlans(normalizedNetwork);
-      const unifiedPlans = vtuConfig.transformDataPlans(selectedSource, rawPlans);
+      const unifiedPlans = normalizeGroupedDataPlans(selectedSource, rawPlans);
       const availableTypes = buildAvailableDataTypesFromGroupedPlans(unifiedPlans);
       let responseData = applyDataTypeOnUnifiedPlans(unifiedPlans, normalizedDataType);
       responseData = await applyProviderMarkupToGroupedPlans(responseData, selectedProviderId, 'data_recharge');
@@ -548,14 +583,14 @@ exports.getDataPlans = async (req, res, next) => {
           provider: selectedProviderId,
         });
       }
-      
+
       return res.status(200).json({
         status: 'success',
         data: responseData,
         availableDataTypes: formatAvailableDataTypes(availableTypes, normalizedNetwork),
         filters: {
           network: normalizedNetwork || null,
-          dataType: normalizedDataType || 'all',
+          dataType: normalizedDataType || null,
         },
         source: selectedSource,
         provider: selectedProviderId,

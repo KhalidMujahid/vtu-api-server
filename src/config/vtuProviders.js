@@ -751,6 +751,7 @@ module.exports = {
     if (normalized.includes('sme')) return 'sme';
     if (normalized.includes('corporate')) return 'corporate';
     if (normalized.includes('gifting') || normalized.includes('gift')) return 'gifting';
+    if (normalized.includes('coupon') || normalized.includes('share')) return 'gifting';
     if (normalized.includes('night')) return 'night';
     if (normalized.includes('daily')) return 'daily';
     if (normalized.includes('weekly')) return 'weekly';
