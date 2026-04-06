@@ -279,6 +279,7 @@ async function getConfiguredDataPlans(providerId, network = null, includeUnavail
         network: normalizeNetwork(plan.network || normalizedNetwork),
         provider: providerId,
         providerMeta: plan.providerMeta || null,
+        validity: plan.validity || plan.month_validate || '',
         sellingPrice: Number(plan.sellingPrice ?? plan.price ?? 0),
         isAvailable: plan.isAvailable !== false,
       });
@@ -393,6 +394,7 @@ async function applyProviderMarkupToGroupedPlans(groupedPlans = {}, providerId, 
 
       return {
         ...plan,
+        validity: plan?.validity || plan?.month_validate || '',
         providerPrice: markup.baseAmount,
         price: markup.chargedAmount,
         sellingPrice: markup.chargedAmount,

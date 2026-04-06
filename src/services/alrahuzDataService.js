@@ -158,6 +158,7 @@ class AlrahuzDataService {
         size: String(plan.plan || plan.volume || plan.size || planName || '').trim(),
         price: Number(plan.plan_amount || plan.amount || plan.price || plan.selling_price || 0),
         validity: String(plan.month_validate || plan.validity || '').trim(),
+        month_validate: String(plan.month_validate || plan.validity || '').trim(),
         network: normalizedNetwork,
         providerPlanType: String(plan.plan_type || '').trim().toLowerCase() || null,
       });

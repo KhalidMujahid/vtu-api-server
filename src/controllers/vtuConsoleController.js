@@ -314,6 +314,20 @@ exports.getServiceConfig = async (req, res, next) => {
       supportedServices: toConsoleServiceList(p.supportedServices),
     }));
 
+    const balanceEntries = await Promise.all(
+      providers.map(async (provider) => [
+        provider.id,
+        await VtuProviderService.getProviderBalance(provider.id),
+      ])
+    );
+    const balanceMap = Object.fromEntries(balanceEntries);
+    providers = providers.map((provider) => ({
+      ...provider,
+      balance: balanceMap[provider.id] || null,
+      balanceAmount: Number(balanceMap[provider.id]?.balance ?? 0),
+      balanceAvailable: Boolean(balanceMap[provider.id]?.available),
+    }));
+
     if (requestedProviderId) {
       providers = providers.filter((provider) => provider.id === requestedProviderId);
 

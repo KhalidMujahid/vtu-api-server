@@ -108,6 +108,7 @@ class PluginngService {
 
     const candidates = [
       payload.balance,
+      payload.wallet,
       payload.wallet_balance,
       payload.walletBalance,
       payload.available_balance,
@@ -116,6 +117,9 @@ class PluginngService {
     ];
 
     for (const value of candidates) {
+      if (value === null || value === undefined || value === '') {
+        continue;
+      }
       const numeric = Number(value);
       if (!Number.isNaN(numeric)) {
         return numeric;
