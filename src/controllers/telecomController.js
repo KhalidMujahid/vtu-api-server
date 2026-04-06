@@ -112,6 +112,18 @@ function buildDataPlansResponse(plans) {
 function normalizeDataType(dataType) {
   if (!dataType) return null;
   const key = String(dataType).trim().toLowerCase();
+  if (!key) return null;
+
+  if (key.includes('corporate')) return 'corporate';
+  if (key.includes('sme')) return 'sme';
+  if (key.includes('direct')) return 'direct';
+  if (key.includes('awoof')) return 'awoof';
+  if (key.includes('night')) return 'night';
+  if (key.includes('daily')) return 'daily';
+  if (key.includes('weekly')) return 'weekly';
+  if (key.includes('monthly')) return 'monthly';
+  if (key.includes('gift') || key.includes('coupon') || key.includes('share')) return 'gifting';
+
   return DATA_TYPE_ALIASES[key] || key;
 }
 

@@ -644,7 +644,7 @@ module.exports = {
   },
 
   _normalizeAlrahuzData(data) {
-    const payload = data?.data || data?.plans || data;
+    const payload = data?.Dataplans || data?.data?.Dataplans || data?.data || data?.plans || data;
     const result = {};
     const aliases = {
       mtn: 'mtn',
@@ -661,6 +661,13 @@ module.exports = {
       '03': '9mobile',
       '04': 'airtel',
     };
+    const dataplansNetworkBuckets = {
+      MTN_PLAN: 'mtn',
+      GLO_PLAN: 'glo',
+      AIRTEL_PLAN: 'airtel',
+      '9MOBILE_PLAN': '9mobile',
+      ETISALAT_PLAN: '9mobile',
+    };
 
     const normalizeKey = (value) => aliases[String(value || '').trim().toLowerCase()] || String(value || '').trim().toLowerCase();
 
@@ -672,16 +679,17 @@ module.exports = {
       }
 
       const planName = String(item?.plan || item?.plan_name || item?.name || '').trim();
+      const typeHint = `${item?.plan_type || item?.providerPlanType || ''} ${planName}`.trim();
       result[normalizedNetwork].push({
-        id: String(item?.id || item?.plan_id || item?.plan_code || planName || '').trim(),
-        planCode: String(item?.plan_code || item?.plan_id || item?.id || planName || '').trim(),
-        providerPlanId: String(item?.plan_id || item?.id || item?.plan_code || planName || '').trim(),
+        id: String(item?.id || item?.dataplan_id || item?.plan_id || item?.plan_code || planName || '').trim(),
+        planCode: String(item?.dataplan_id || item?.plan_code || item?.plan_id || item?.id || planName || '').trim(),
+        providerPlanId: String(item?.dataplan_id || item?.plan_id || item?.id || item?.plan_code || planName || '').trim(),
         planName,
         network: normalizedNetwork,
-        size: String(item?.volume || item?.size || planName || '').trim(),
-        price: parseFloat(item?.amount || item?.price || item?.selling_price || 0) || 0,
-        validity: String(item?.validity || '').trim(),
-        providerPlanType: this._extractDataType(planName),
+        size: String(item?.plan || item?.volume || item?.size || planName || '').trim(),
+        price: parseFloat(item?.plan_amount || item?.amount || item?.price || item?.selling_price || 0) || 0,
+        validity: String(item?.month_validate || item?.validity || '').trim(),
+        providerPlanType: this._extractDataType(typeHint),
       });
     };
 
@@ -696,6 +704,22 @@ module.exports = {
     }
 
     if (payload && typeof payload === 'object') {
+      const isDataplansShape = Object.keys(payload).some((key) => Object.prototype.hasOwnProperty.call(dataplansNetworkBuckets, key));
+      if (isDataplansShape) {
+        for (const [bucketKey, categories] of Object.entries(payload)) {
+          const normalizedNetwork = dataplansNetworkBuckets[bucketKey];
+          if (!normalizedNetwork || !categories || typeof categories !== 'object') continue;
+
+          for (const plans of Object.values(categories)) {
+            if (!Array.isArray(plans)) continue;
+            for (const item of plans) {
+              pushPlan(normalizedNetwork, item);
+            }
+          }
+        }
+        return result;
+      }
+
       for (const [network, plans] of Object.entries(payload)) {
         if (!Array.isArray(plans)) continue;
         for (const item of plans) {
