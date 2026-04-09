@@ -4,7 +4,16 @@ const logger = require("../utils/logger");
 
 exports.broadcastNotification = async (req, res, next) => {
   try {
-    const { title, message, type = 'broadcast', targetUsers = 'all', userIds = [] } = req.body;
+    const {
+      title,
+      message,
+      type = 'broadcast',
+      targetUsers = 'all',
+      userIds = [],
+      bannerImageUrl = null,
+      sendEmail = false,
+      sendSMS = false,
+    } = req.body;
     
     if (!title || !message) {
       return res.status(400).json({
@@ -14,11 +23,22 @@ exports.broadcastNotification = async (req, res, next) => {
     }
     
     const query = { isActive: true };
-    if (targetUsers === 'agents' || targetUsers === 'agents_only') {
+    const resolvedUserIds = Array.isArray(userIds)
+      ? userIds
+      : Array.isArray(targetUsers)
+        ? targetUsers
+        : [];
+
+    if (targetUsers === 'all' || targetUsers === 'active') {
+      query.isActive = true;
+    } else if (targetUsers === 'agents' || targetUsers === 'agents_only') {
       query.role = 'agent';
-    }
-    if (targetUsers === 'individual') {
-      query._id = { $in: userIds };
+    } else if (
+      targetUsers === 'individual' ||
+      Array.isArray(targetUsers) ||
+      resolvedUserIds.length > 0
+    ) {
+      query._id = { $in: resolvedUserIds };
     }
 
     const users = await User.find(query).select('_id');
@@ -39,6 +59,11 @@ exports.broadcastNotification = async (req, res, next) => {
       type,
       isBroadcast: true,
       isRead: false,
+      metadata: {
+        bannerImageUrl,
+        sendEmail: Boolean(sendEmail),
+        sendSMS: Boolean(sendSMS),
+      },
     }));
     
     
@@ -48,7 +73,7 @@ exports.broadcastNotification = async (req, res, next) => {
       await Notification.insertMany(batch);
     }
     
-    logger.info(`Broadcast notification sent to ${recipientIds.length} users by admin: ${req.user?.id}`);
+    logger.info(`Broadcast notification sent to ${recipientIds.length} users by admin: ${req.admin?._id}`);
     
     res.status(200).json({
       status: 'success',
@@ -58,6 +83,9 @@ exports.broadcastNotification = async (req, res, next) => {
         title,
         message,
         targetUsers,
+        sendEmail: Boolean(sendEmail),
+        sendSMS: Boolean(sendSMS),
+        bannerImageUrl,
       }
     });
     

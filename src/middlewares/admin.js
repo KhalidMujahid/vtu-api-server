@@ -1,7 +1,10 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const Staff = require('../models/Staff');
 const AdminLog = require('../models/AdminLog');
 const logger = require('../utils/logger');
+
+const ADMIN_ROLES = ['admin', 'superadmin', 'staff', 'super_admin', 'support'];
 
 module.exports = {
   adminAuth: async (req, res, next) => {
@@ -21,29 +24,32 @@ module.exports = {
       
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       const user = await User.findById(decoded.id);
-      
-      if (!user) {
+      const staff = user ? null : await Staff.findById(decoded.id);
+      const adminPrincipal = user || staff;
+
+      if (!adminPrincipal) {
         return res.status(401).json({
           status: 'error',
           message: 'Admin user not found.',
         });
       }
       
-      if (!['admin', 'superadmin', 'staff', 'super_admin','support'].includes(user.role)) {
+      if (!ADMIN_ROLES.includes(adminPrincipal.role)) {
         return res.status(403).json({
           status: 'error',
           message: 'Admin access required.',
         });
       }
       
-      if (!user.isActive) {
+      if (!adminPrincipal.isActive) {
         return res.status(401).json({
           status: 'error',
           message: 'Admin account is deactivated.',
         });
       }
       
-      req.admin = user;
+      req.admin = adminPrincipal;
+      req.adminSource = staff ? 'staff' : 'user';
       next();
     } catch (error) {
       logger.error('Admin auth error:', error);
@@ -111,7 +117,7 @@ module.exports = {
   },
   
   staffOnly: (req, res, next) => {
-    if (!['staff', 'admin', 'super_admin'].includes(req.admin.role)) {
+    if (!['staff', 'support', 'admin', 'superadmin', 'super_admin'].includes(req.admin.role)) {
       return res.status(403).json({
         status: 'error',
         message: 'Staff access required.',

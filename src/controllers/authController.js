@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const Staff = require('../models/Staff');
 const WalletService = require('../services/walletService');
 const { sendOTPEmail, sendOTPSMS,sendWelcomeEmail,sendPasswordResetEmail } = require('../utils/emailService');
 const NotificationService = require('../services/NotificationService');
@@ -150,8 +151,12 @@ exports.login = async (req, res, next) => {
       return next(new AppError('Please provide email and password', 400));
     }
 
-    const user = await User.findOne({ email })
-      .select('+password +failedLoginAttempts +lockUntil');
+    let user = await User.findOne({ email }).select('+password +failedLoginAttempts +lockUntil');
+    let authSource = 'user';
+    if (!user) {
+      user = await Staff.findOne({ email }).select('+password +failedLoginAttempts +lockUntil');
+      authSource = 'staff';
+    }
 
     if (!user || !(await user.comparePassword(password))) {
       if (user) {
@@ -255,8 +260,10 @@ exports.login = async (req, res, next) => {
     let wallet = null;
 
     try {
-      await NotificationService.login(user._id);
-      wallet = await WalletService.getWalletWithAccounts(user._id);
+      if (authSource === 'user') {
+        await NotificationService.login(user._id);
+        wallet = await WalletService.getWalletWithAccounts(user._id);
+      }
     } catch (err) {
       logger.warn('Wallet fetch failed during login:', err);
     }

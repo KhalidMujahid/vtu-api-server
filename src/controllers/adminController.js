@@ -1,4 +1,5 @@
 const User = require('../models/User');
+const Staff = require('../models/Staff');
 const Wallet = require('../models/Wallet');
 const Transaction = require('../models/Transaction');
 const KYC = require('../models/KYC');
@@ -38,6 +39,9 @@ const sendTwoFactorEmailCode = async (adminUser) => {
 
   await emailService.sendOTPEmail(adminUser.email, otp);
 };
+
+const STAFF_ROLES = ['superadmin', 'super_admin', 'admin', 'staff', 'support'];
+const getAdminPrincipalModel = (req) => (req.adminSource === 'staff' ? Staff : User);
 
 class AdminController {
   static async getDashboardStats(req, res, next) {
@@ -174,7 +178,7 @@ class AdminController {
       const { page = 1, limit = 20, search, role, sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
       const skip = (parseInt(page) - 1) * parseInt(limit);
       
-      const query = { role: { $in: ['superadmin', 'admin', 'support'] } };
+      const query = { role: { $in: STAFF_ROLES } };
       
       if (search) {
         query.$or = [
@@ -184,7 +188,7 @@ class AdminController {
         ];
       }
       
-      if (role && ['superadmin', 'admin', 'support'].includes(role)) {
+      if (role && STAFF_ROLES.includes(role)) {
         query.role = role;
       }
       
@@ -192,22 +196,24 @@ class AdminController {
       sort[sortBy] = sortOrder === 'asc' ? 1 : -1;
       
       const [staff, total] = await Promise.all([
-        User.find(query)
+        Staff.find(query)
           .select('-password -transactionPin -resetPasswordToken')
           .sort(sort)
           .skip(skip)
           .limit(parseInt(limit)),
-        User.countDocuments(query)
+        Staff.countDocuments(query)
       ]);
       
-      const roleCounts = await User.aggregate([
-        { $match: { role: { $in: ['superadmin', 'admin', 'support'] } } },
+      const roleCounts = await Staff.aggregate([
+        { $match: { role: { $in: STAFF_ROLES } } },
         { $group: { _id: '$role', count: { $sum: 1 } } }
       ]);
       
       const roleCountObj = {
         superadmin: 0,
+        super_admin: 0,
         admin: 0,
+        staff: 0,
         support: 0
       };
       roleCounts.forEach(r => {
@@ -246,17 +252,25 @@ class AdminController {
       }
       
       
-      const validRoles = ['superadmin', 'admin', 'support'];
+      const validRoles = STAFF_ROLES;
       if (!validRoles.includes(role)) {
         return res.status(400).json({
           status: 'error',
-          message: 'Invalid role. Must be superadmin, admin, or support'
+          message: 'Invalid role. Must be one of: superadmin, super_admin, admin, staff, support'
         });
       }
       
       
-      const existingEmail = await User.findOne({ email: email.toLowerCase() });
+      const existingEmail = await Staff.findOne({ email: email.toLowerCase() });
       if (existingEmail) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'A staff with this email already exists'
+        });
+      }
+
+      const existingUserEmail = await User.findOne({ email: email.toLowerCase() });
+      if (existingUserEmail) {
         return res.status(400).json({
           status: 'error',
           message: 'A user with this email already exists'
@@ -264,8 +278,16 @@ class AdminController {
       }
       
       if (phoneNumber) {
-        const existingPhone = await User.findOne({ phoneNumber });
+        const existingPhone = await Staff.findOne({ phoneNumber });
         if (existingPhone) {
+          return res.status(400).json({
+            status: 'error',
+            message: 'A staff with this phone number already exists'
+          });
+        }
+
+        const existingUserPhone = await User.findOne({ phoneNumber });
+        if (existingUserPhone) {
           return res.status(400).json({
             status: 'error',
             message: 'A user with this phone number already exists'
@@ -277,7 +299,7 @@ class AdminController {
       
       let staff;
       try {
-        staff = await User.create({
+        staff = await Staff.create({
           firstName,
           lastName,
           email: email.toLowerCase(),
@@ -313,8 +335,8 @@ class AdminController {
       }
       
       await AdminLog.create({
-        admin: req.user?.id,
-        adminEmail: req.user?.email,
+        admin: req.admin?._id,
+        adminEmail: req.admin?.email,
         action: 'create_staff',
         entity: 'user',
         entityId: staff._id,
@@ -351,18 +373,18 @@ class AdminController {
       const { role } = req.body;
       
       
-      const validRoles = ['superadmin', 'admin', 'support'];
+      const validRoles = STAFF_ROLES;
       if (!role || !validRoles.includes(role)) {
         return res.status(400).json({
           status: 'error',
-          message: 'Invalid role. Must be superadmin, admin, or support'
+          message: 'Invalid role. Must be one of: superadmin, super_admin, admin, staff, support'
         });
       }
       
       
-      const staff = await User.findOne({
+      const staff = await Staff.findOne({
         _id: staffId,
-        role: { $in: ['superadmin', 'admin', 'support'] }
+        role: { $in: STAFF_ROLES }
       });
       
       if (!staff) {
@@ -373,7 +395,7 @@ class AdminController {
       }
       
       
-      if (req.user?.id === staffId.toString() && staff.role === 'superadmin' && role !== 'superadmin') {
+      if (req.admin?._id?.toString() === staffId.toString() && staff.role === 'superadmin' && role !== 'superadmin') {
         return res.status(400).json({
           status: 'error',
           message: 'Cannot change your own superadmin role'
@@ -386,8 +408,8 @@ class AdminController {
       
       
       await AdminLog.create({
-        admin: req.user?.id,
-        adminEmail: req.user?.email,
+        admin: req.admin?._id,
+        adminEmail: req.admin?.email,
         action: 'update_staff_role',
         entity: 'user',
         entityId: staff._id,
@@ -420,9 +442,9 @@ class AdminController {
       const { staffId } = req.params;
       
       
-      const staff = await User.findOne({
+      const staff = await Staff.findOne({
         _id: staffId,
-        role: { $in: ['superadmin', 'admin', 'support'] }
+        role: { $in: STAFF_ROLES }
       });
       
       if (!staff) {
@@ -433,7 +455,7 @@ class AdminController {
       }
       
       
-      if (req.user?.id === staffId.toString()) {
+      if (req.admin?._id?.toString() === staffId.toString()) {
         return res.status(400).json({
           status: 'error',
           message: 'Cannot remove yourself from staff'
@@ -442,7 +464,10 @@ class AdminController {
       
       
       if (staff.role === 'superadmin') {
-        const superadminCount = await User.countDocuments({ role: 'superadmin' });
+        const superadminCount = await Promise.all([
+          User.countDocuments({ role: { $in: ['superadmin', 'super_admin'] } }),
+          Staff.countDocuments({ role: { $in: ['superadmin', 'super_admin'] } }),
+        ]).then(([userCount, staffCount]) => userCount + staffCount);
         if (superadminCount <= 1) {
           return res.status(400).json({
             status: 'error',
@@ -455,12 +480,12 @@ class AdminController {
       const staffEmail = staff.email;
       
       
-      await User.findByIdAndDelete(staffId);
+      await Staff.findByIdAndDelete(staffId);
       
       
       await AdminLog.create({
-        admin: req.user?.id,
-        adminEmail: req.user?.email,
+        admin: req.admin?._id,
+        adminEmail: req.admin?.email,
         action: 'remove_staff',
         entity: 'user',
         entityId: staffId,
@@ -2598,7 +2623,8 @@ class AdminController {
 
   static async getMyProfile(req, res, next) {
     try {
-      const admin = await User.findById(req.admin._id)
+      const AdminModel = getAdminPrincipalModel(req);
+      const admin = await AdminModel.findById(req.admin._id)
         .select('-password -transactionPin -resetPasswordToken -verificationToken')
         .lean();
 
@@ -2624,7 +2650,8 @@ class AdminController {
         return next(new AppError('Provide at least firstName or lastName to update', 400));
       }
 
-      const admin = await User.findById(req.admin._id);
+      const AdminModel = getAdminPrincipalModel(req);
+      const admin = await AdminModel.findById(req.admin._id);
       if (!admin) {
         return next(new AppError('Admin user not found', 404));
       }
@@ -2667,7 +2694,8 @@ class AdminController {
         return next(new AppError('New password must be different from current password', 400));
       }
 
-      const admin = await User.findById(req.admin._id).select('+password');
+      const AdminModel = getAdminPrincipalModel(req);
+      const admin = await AdminModel.findById(req.admin._id).select('+password');
       if (!admin) {
         return next(new AppError('Admin user not found', 404));
       }
@@ -2692,7 +2720,8 @@ class AdminController {
 
   static async getTwoFactorSettings(req, res, next) {
     try {
-      const admin = await User.findById(req.admin._id).select('twoFactor email');
+      const AdminModel = getAdminPrincipalModel(req);
+      const admin = await AdminModel.findById(req.admin._id).select('twoFactor email');
 
       if (!admin) {
         return next(new AppError('Admin user not found', 404));
@@ -2725,7 +2754,8 @@ class AdminController {
         return next(new AppError('2FA method must be either email or authenticator', 400));
       }
 
-      const admin = await User.findById(req.admin._id).select('email twoFactor');
+      const AdminModel = getAdminPrincipalModel(req);
+      const admin = await AdminModel.findById(req.admin._id).select('email twoFactor');
 
       if (!admin) {
         return next(new AppError('Admin user not found', 404));
@@ -2786,7 +2816,8 @@ class AdminController {
         return next(new AppError('Verification code is required', 400));
       }
 
-      const admin = await User.findById(req.admin._id).select('twoFactor');
+      const AdminModel = getAdminPrincipalModel(req);
+      const admin = await AdminModel.findById(req.admin._id).select('twoFactor');
 
       if (!admin) {
         return next(new AppError('Admin user not found', 404));
@@ -2854,7 +2885,8 @@ class AdminController {
 
   static async sendDisableTwoFactorCode(req, res, next) {
     try {
-      const admin = await User.findById(req.admin._id).select('email twoFactor');
+      const AdminModel = getAdminPrincipalModel(req);
+      const admin = await AdminModel.findById(req.admin._id).select('email twoFactor');
 
       if (!admin) {
         return next(new AppError('Admin user not found', 404));
@@ -2885,7 +2917,8 @@ class AdminController {
         return next(new AppError('Verification code is required', 400));
       }
 
-      const admin = await User.findById(req.admin._id).select('twoFactor');
+      const AdminModel = getAdminPrincipalModel(req);
+      const admin = await AdminModel.findById(req.admin._id).select('twoFactor');
 
       if (!admin) {
         return next(new AppError('Admin user not found', 404));

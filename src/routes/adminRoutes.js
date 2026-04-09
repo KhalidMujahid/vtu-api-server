@@ -6,6 +6,7 @@ const vtuConsoleController = require('../controllers/vtuConsoleController');
 const { adminAuth, logAction, superAdminOnly, staffOnly } = require('../middlewares/admin');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const Staff = require('../models/Staff');
 
 router.get('/check-auth', async (req, res) => {
   try {
@@ -21,8 +22,10 @@ router.get('/check-auth', async (req, res) => {
     
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const user = await User.findById(decoded.id);
+    const staff = user ? null : await Staff.findById(decoded.id);
+    const principal = user || staff;
     
-    if (!user) {
+    if (!principal) {
       return res.status(200).json({
         status: 'success',
         authenticated: false,
@@ -30,7 +33,7 @@ router.get('/check-auth', async (req, res) => {
       });
     }
     
-    if (!['admin', 'superadmin', 'staff', 'super_admin'].includes(user.role)) {
+    if (!['admin', 'superadmin', 'staff', 'super_admin', 'support'].includes(principal.role)) {
       return res.status(200).json({
         status: 'success',
         authenticated: false,
@@ -38,7 +41,7 @@ router.get('/check-auth', async (req, res) => {
       });
     }
     
-    if (!user.isActive) {
+    if (!principal.isActive) {
       return res.status(200).json({
         status: 'success',
         authenticated: false,
@@ -50,10 +53,10 @@ router.get('/check-auth', async (req, res) => {
       status: 'success',
       authenticated: true,
       user: {
-        id: user._id,
-        email: user.email,
-        name: user.name,
-        role: user.role
+        id: principal._id,
+        email: principal.email,
+        name: principal.name || `${principal.firstName || ''} ${principal.lastName || ''}`.trim(),
+        role: principal.role
       }
     });
   } catch (error) {
@@ -108,6 +111,7 @@ router.post('/settings/2fa/send-code', adminController.sendDisableTwoFactorCode)
 router.post('/settings/2fa/disable', adminController.disableTwoFactor);
 router.get('/notifications/sent-history', logAction('view', 'notification'), notificationController.getSentNotificationHistory);
 router.post('/notifications/:userId/send', logAction('create', 'notification'), notificationController.sendNotificationToUser);
+router.post('/broadcast', logAction('create', 'notification'), notificationController.broadcastNotification);
 
 router.use(superAdminOnly);
 router.get('/pricing', adminController.getPricing);
@@ -124,7 +128,6 @@ router.get('/logs', adminController.getAdminLogs);
 
 router.get('/check-provider/:providerId', vtuConsoleController.getProvider);
 
-router.post('/broadcast', adminAuth, adminController.broadcastNotification);
 router.get('/settings', adminAuth, adminController.getSystemSettings);
 router.put('/settings', adminAuth, adminController.updateSystemSettings);
 
