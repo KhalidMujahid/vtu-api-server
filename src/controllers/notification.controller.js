@@ -2,6 +2,47 @@ const Notification = require("../models/Notification");
 const User = require("../models/User");
 const logger = require("../utils/logger");
 
+const normalizeBannerFields = (payload = {}) => {
+  const banner =
+    payload.bannerImageUrl ||
+    payload.bannerImage ||
+    payload.imageUrl ||
+    payload.image ||
+    '';
+
+  return {
+    bannerImageUrl: banner,
+    bannerImage: banner,
+    imageUrl: banner,
+    image: banner,
+  };
+};
+
+const shapeNotificationForClient = (doc) => {
+  if (!doc) return doc;
+  const plain = typeof doc.toObject === 'function' ? doc.toObject() : doc;
+  const meta = plain.metadata || {};
+
+  const banner =
+    plain.bannerImageUrl ||
+    plain.bannerImage ||
+    plain.imageUrl ||
+    plain.image ||
+    meta.bannerImageUrl ||
+    meta.bannerImage ||
+    meta.imageUrl ||
+    meta.image ||
+    '';
+
+  return {
+    ...plain,
+    bannerImageUrl: banner,
+    bannerImage: banner,
+    imageUrl: banner,
+    image: banner,
+  };
+};
+
 exports.broadcastNotification = async (req, res, next) => {
   try {
     const {
@@ -10,10 +51,10 @@ exports.broadcastNotification = async (req, res, next) => {
       type = 'broadcast',
       targetUsers = 'all',
       userIds = [],
-      bannerImageUrl = null,
       sendEmail = false,
       sendSMS = false,
     } = req.body;
+    const bannerFields = normalizeBannerFields(req.body);
     
     if (!title || !message) {
       return res.status(400).json({
@@ -60,10 +101,11 @@ exports.broadcastNotification = async (req, res, next) => {
       isBroadcast: true,
       isRead: false,
       metadata: {
-        bannerImageUrl,
+        ...bannerFields,
         sendEmail: Boolean(sendEmail),
         sendSMS: Boolean(sendSMS),
       },
+      ...bannerFields,
     }));
     
     
@@ -85,7 +127,7 @@ exports.broadcastNotification = async (req, res, next) => {
         targetUsers,
         sendEmail: Boolean(sendEmail),
         sendSMS: Boolean(sendSMS),
-        bannerImageUrl,
+        ...bannerFields,
       }
     });
     
@@ -100,6 +142,7 @@ exports.sendNotificationToUser = async (req, res, next) => {
   try {
     const { title, message, type = 'system' } = req.body;
     const userId = req.params.userId || req.body.userId;
+    const bannerFields = normalizeBannerFields(req.body);
     
     if (!userId || !title || !message) {
       return res.status(400).json({
@@ -122,6 +165,10 @@ exports.sendNotificationToUser = async (req, res, next) => {
       message,
       type,
       isBroadcast: false,
+      metadata: {
+        ...bannerFields,
+      },
+      ...bannerFields,
     });
     
     logger.info(`Notification sent to user ${userId} by admin: ${req.user?.id}`);
@@ -129,7 +176,7 @@ exports.sendNotificationToUser = async (req, res, next) => {
     res.status(200).json({
       status: 'success',
       message: 'Notification sent successfully',
-      data: notification
+      data: shapeNotificationForClient(notification)
     });
     
   } catch (error) {
@@ -201,7 +248,7 @@ exports.getSentNotificationHistory = async (req, res, next) => {
         total,
         totalPages: Math.ceil(total / limit),
       },
-      data: notifications,
+      data: notifications.map(shapeNotificationForClient),
     });
   } catch (error) {
     logger.error('Get sent notification history error:', error);
@@ -220,7 +267,7 @@ exports.getNotifications = async (req, res, next) => {
       res.status(200).json({
         status: 'success',
         results: notifications.length,
-        data: notifications,
+        data: notifications.map(shapeNotificationForClient),
       });
   
     } catch (error) {
