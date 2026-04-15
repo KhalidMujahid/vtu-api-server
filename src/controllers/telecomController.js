@@ -1465,6 +1465,453 @@ exports.cancelAirtimeTransaction = async (req, res, next) => {
   }
 };
 
+exports.getSpectranetPackages = async (req, res, next) => {
+  try {
+    const result = await NelloBytesService.getSpectranetPackages();
+    return res.status(200).json({
+      status: 'success',
+      data: {
+        provider: 'nellobytes',
+        network: 'spectranet',
+        packages: result.packages || [],
+      },
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+exports.purchaseSpectranetData = async (req, res, next) => {
+  try {
+    const { mobileNumber, dataPlan, transactionPin, requestId } = req.body;
+
+    if (!mobileNumber || !dataPlan) {
+      return next(new AppError('Mobile number and data plan are required', 400));
+    }
+
+    if (!transactionPin) {
+      return next(new AppError('Transaction PIN is required', 400));
+    }
+
+    const user = await User.findById(req.user.id).select('+transactionPin');
+    if (!user) return next(new AppError('User not found', 404));
+
+    const isPinValid = await user.compareTransactionPin(transactionPin);
+    if (!isPinValid) {
+      return next(new AppError('Invalid transaction PIN', 401));
+    }
+
+    const wallet = await Wallet.findOne({ user: user._id });
+    if (!wallet) return next(new AppError('Wallet not found', 404));
+
+    const packagesResult = await NelloBytesService.getSpectranetPackages();
+    const selectedPackage = (packagesResult.packages || []).find(
+      (pkg) => String(pkg.planId) === String(dataPlan)
+    );
+
+    if (!selectedPackage) {
+      return next(new AppError('Selected Spectranet plan was not found', 404));
+    }
+
+    const providerAmount = Number(selectedPackage.amount || 0);
+    if (!providerAmount || Number.isNaN(providerAmount) || providerAmount <= 0) {
+      return next(new AppError('Unable to resolve Spectranet plan amount', 400));
+    }
+
+    const chargePricing = await ProviderMarkupService.applyMarkup({
+      providerId: 'clubkonnect',
+      serviceType: 'data_recharge',
+      baseAmount: providerAmount,
+    });
+    const chargedAmount = chargePricing.chargedAmount;
+
+    if (wallet.balance < chargedAmount) {
+      return next(new AppError('Insufficient wallet balance', 400));
+    }
+
+    await ProviderPurchaseGuardService.assertSufficientProviderBalance(
+      'clubkonnect',
+      providerAmount,
+      { serviceType: 'data_recharge', network: 'spectranet', phoneNumber: mobileNumber }
+    );
+
+    await wallet.debit(chargedAmount, `Spectranet Data: ${dataPlan}`);
+
+    const reference = requestId || `SPN-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+    const callbackUrl = `${SERVER_URL}/api/v1/telecom/webhook/nellobytes`;
+
+    const transaction = await Transaction.create({
+      reference,
+      user: user._id,
+      type: 'data_recharge',
+      category: 'telecom',
+      amount: chargedAmount,
+      totalAmount: chargedAmount,
+      previousBalance: wallet.balance + chargedAmount,
+      newBalance: wallet.balance,
+      status: 'pending',
+      description: `SPECTRANET data for ${mobileNumber}`,
+      service: {
+        provider: 'nellobytes',
+        network: 'spectranet',
+        plan: String(dataPlan),
+        phoneNumber: mobileNumber,
+      },
+      metadata: {
+        providerAmount,
+        chargedAmount,
+        markupPercentage: chargePricing.percentage,
+        markupAmount: chargePricing.markupAmount,
+        packageName: selectedPackage.planName || null,
+        validity: selectedPackage.validity || null,
+      },
+      statusHistory: [{ status: 'pending', note: 'Spectranet purchase initiated', timestamp: new Date() }],
+    });
+
+    try {
+      const apiResponse = await NelloBytesService.purchaseSpectranetData({
+        dataPlan: String(dataPlan),
+        mobileNumber,
+        requestId: reference,
+        callBackURL: callbackUrl,
+      });
+
+      transaction.status = 'pending';
+      transaction.service.orderId = apiResponse.orderId || reference;
+      transaction.service.requestId = apiResponse.requestId || reference;
+      transaction.providerResponse = apiResponse.response;
+      transaction.statusHistory.push({
+        status: 'pending',
+        note: `Order received: ${apiResponse.orderId || reference}`,
+        timestamp: new Date(),
+      });
+      await transaction.save();
+
+      return res.status(200).json({
+        status: 'success',
+        message: 'Spectranet data purchase initiated successfully',
+        data: {
+          reference,
+          orderId: apiResponse.orderId || null,
+          requestId: apiResponse.requestId || reference,
+          mobileNumber,
+          network: 'spectranet',
+          dataPlan: String(dataPlan),
+          planName: selectedPackage.planName || null,
+          validity: selectedPackage.validity || null,
+          amount: chargedAmount,
+          providerAmount,
+          markup: {
+            percentage: chargePricing.percentage,
+            amount: chargePricing.markupAmount,
+          },
+          providerStatus: apiResponse.status,
+          providerStatusCode: apiResponse.statusCode,
+          provider: 'nellobytes',
+        },
+      });
+    } catch (error) {
+      await refundTransactionToWallet(transaction, 'Spectranet data purchase refund', chargedAmount);
+      transaction.status = 'failed';
+      transaction.failureReason = error.message;
+      transaction.statusHistory.push({ status: 'failed', note: error.message, timestamp: new Date() });
+      await transaction.save();
+      return next(new AppError('Spectranet purchase failed. Please try again shortly.', 500));
+    }
+  } catch (error) {
+    return next(error);
+  }
+};
+
+exports.querySpectranetTransaction = async (req, res, next) => {
+  try {
+    const { orderId, requestId } = req.body;
+    if (!orderId && !requestId) {
+      return next(new AppError('Please provide orderId or requestId', 400));
+    }
+
+    const result = await NelloBytesService.queryDataTransaction({ orderId, requestId });
+    return res.status(200).json({
+      status: 'success',
+      data: {
+        provider: 'nellobytes',
+        network: 'spectranet',
+        orderId: result.orderId || orderId || null,
+        requestId: result.requestId || requestId || null,
+        providerStatusCode: result.statusCode,
+        providerStatus: result.status,
+        providerRemark: result.remark,
+        providerDate: result.date,
+        raw: result.response,
+      },
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+exports.cancelSpectranetTransaction = async (req, res, next) => {
+  try {
+    const { orderId } = req.body;
+    if (!orderId) {
+      return next(new AppError('Please provide orderId', 400));
+    }
+
+    const result = await NelloBytesService.cancelDataTransaction(orderId);
+    return res.status(200).json({
+      status: result.success ? 'success' : 'error',
+      data: {
+        provider: 'nellobytes',
+        network: 'spectranet',
+        orderId: result.orderId || orderId,
+        providerStatus: result.status,
+        raw: result.response,
+      },
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+exports.getSmilePackages = async (req, res, next) => {
+  try {
+    const result = await NelloBytesService.getSmilePackages();
+    return res.status(200).json({
+      status: 'success',
+      data: {
+        provider: 'nellobytes',
+        network: 'smile-direct',
+        packages: result.packages || [],
+      },
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+exports.verifySmileAccount = async (req, res, next) => {
+  try {
+    const { mobileNumber } = req.body;
+    if (!mobileNumber) {
+      return next(new AppError('Mobile number is required', 400));
+    }
+
+    const result = await NelloBytesService.verifySmileAccount({ mobileNumber });
+    return res.status(result.valid ? 200 : 400).json({
+      status: result.valid ? 'success' : 'error',
+      data: {
+        provider: 'nellobytes',
+        network: 'smile-direct',
+        mobileNumber,
+        valid: result.valid,
+        customerName: result.customerName,
+        raw: result.response,
+      },
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+exports.purchaseSmileData = async (req, res, next) => {
+  try {
+    const { mobileNumber, dataPlan, transactionPin, requestId } = req.body;
+
+    if (!mobileNumber || !dataPlan) {
+      return next(new AppError('Mobile number and data plan are required', 400));
+    }
+
+    if (!transactionPin) {
+      return next(new AppError('Transaction PIN is required', 400));
+    }
+
+    const user = await User.findById(req.user.id).select('+transactionPin');
+    if (!user) return next(new AppError('User not found', 404));
+
+    const isPinValid = await user.compareTransactionPin(transactionPin);
+    if (!isPinValid) {
+      return next(new AppError('Invalid transaction PIN', 401));
+    }
+
+    const verification = await NelloBytesService.verifySmileAccount({ mobileNumber });
+    if (!verification.valid) {
+      return next(new AppError('Invalid Smile account number', 400));
+    }
+
+    const wallet = await Wallet.findOne({ user: user._id });
+    if (!wallet) return next(new AppError('Wallet not found', 404));
+
+    const packagesResult = await NelloBytesService.getSmilePackages();
+    const selectedPackage = (packagesResult.packages || []).find(
+      (pkg) => String(pkg.planId) === String(dataPlan)
+    );
+
+    if (!selectedPackage) {
+      return next(new AppError('Selected Smile plan was not found', 404));
+    }
+
+    const providerAmount = Number(selectedPackage.amount || 0);
+    if (!providerAmount || Number.isNaN(providerAmount) || providerAmount <= 0) {
+      return next(new AppError('Unable to resolve Smile plan amount', 400));
+    }
+
+    const chargePricing = await ProviderMarkupService.applyMarkup({
+      providerId: 'clubkonnect',
+      serviceType: 'data_recharge',
+      baseAmount: providerAmount,
+    });
+    const chargedAmount = chargePricing.chargedAmount;
+
+    if (wallet.balance < chargedAmount) {
+      return next(new AppError('Insufficient wallet balance', 400));
+    }
+
+    await ProviderPurchaseGuardService.assertSufficientProviderBalance(
+      'clubkonnect',
+      providerAmount,
+      { serviceType: 'data_recharge', network: 'smile-direct', phoneNumber: mobileNumber }
+    );
+
+    await wallet.debit(chargedAmount, `Smile Data: ${dataPlan}`);
+
+    const reference = requestId || `SML-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+    const callbackUrl = `${SERVER_URL}/api/v1/telecom/webhook/nellobytes`;
+
+    const transaction = await Transaction.create({
+      reference,
+      user: user._id,
+      type: 'data_recharge',
+      category: 'telecom',
+      amount: chargedAmount,
+      totalAmount: chargedAmount,
+      previousBalance: wallet.balance + chargedAmount,
+      newBalance: wallet.balance,
+      status: 'pending',
+      description: `SMILE data for ${mobileNumber}`,
+      service: {
+        provider: 'nellobytes',
+        network: 'smile-direct',
+        plan: String(dataPlan),
+        phoneNumber: mobileNumber,
+      },
+      metadata: {
+        providerAmount,
+        chargedAmount,
+        markupPercentage: chargePricing.percentage,
+        markupAmount: chargePricing.markupAmount,
+        packageName: selectedPackage.planName || null,
+        validity: selectedPackage.validity || null,
+        customerName: verification.customerName || null,
+      },
+      statusHistory: [{ status: 'pending', note: 'Smile purchase initiated', timestamp: new Date() }],
+    });
+
+    try {
+      const apiResponse = await NelloBytesService.purchaseSmileData({
+        dataPlan: String(dataPlan),
+        mobileNumber,
+        requestId: reference,
+        callBackURL: callbackUrl,
+      });
+
+      transaction.status = 'pending';
+      transaction.service.orderId = apiResponse.orderId || reference;
+      transaction.service.requestId = apiResponse.requestId || reference;
+      transaction.providerResponse = apiResponse.response;
+      transaction.statusHistory.push({
+        status: 'pending',
+        note: `Order received: ${apiResponse.orderId || reference}`,
+        timestamp: new Date(),
+      });
+      await transaction.save();
+
+      return res.status(200).json({
+        status: 'success',
+        message: 'Smile data purchase initiated successfully',
+        data: {
+          reference,
+          orderId: apiResponse.orderId || null,
+          requestId: apiResponse.requestId || reference,
+          mobileNumber,
+          network: 'smile-direct',
+          dataPlan: String(dataPlan),
+          planName: selectedPackage.planName || null,
+          validity: selectedPackage.validity || null,
+          customerName: verification.customerName || null,
+          amount: chargedAmount,
+          providerAmount,
+          markup: {
+            percentage: chargePricing.percentage,
+            amount: chargePricing.markupAmount,
+          },
+          providerStatus: apiResponse.status,
+          providerStatusCode: apiResponse.statusCode,
+          provider: 'nellobytes',
+        },
+      });
+    } catch (error) {
+      await refundTransactionToWallet(transaction, 'Smile data purchase refund', chargedAmount);
+      transaction.status = 'failed';
+      transaction.failureReason = error.message;
+      transaction.statusHistory.push({ status: 'failed', note: error.message, timestamp: new Date() });
+      await transaction.save();
+      return next(new AppError('Smile purchase failed. Please try again shortly.', 500));
+    }
+  } catch (error) {
+    return next(error);
+  }
+};
+
+exports.querySmileTransaction = async (req, res, next) => {
+  try {
+    const { orderId, requestId } = req.body;
+    if (!orderId && !requestId) {
+      return next(new AppError('Please provide orderId or requestId', 400));
+    }
+
+    const result = await NelloBytesService.queryDataTransaction({ orderId, requestId });
+    return res.status(200).json({
+      status: 'success',
+      data: {
+        provider: 'nellobytes',
+        network: 'smile-direct',
+        orderId: result.orderId || orderId || null,
+        requestId: result.requestId || requestId || null,
+        providerStatusCode: result.statusCode,
+        providerStatus: result.status,
+        providerRemark: result.remark,
+        providerDate: result.date,
+        raw: result.response,
+      },
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+exports.cancelSmileTransaction = async (req, res, next) => {
+  try {
+    const { orderId } = req.body;
+    if (!orderId) {
+      return next(new AppError('Please provide orderId', 400));
+    }
+
+    const result = await NelloBytesService.cancelDataTransaction(orderId);
+    return res.status(200).json({
+      status: result.success ? 'success' : 'error',
+      data: {
+        provider: 'nellobytes',
+        network: 'smile-direct',
+        orderId: result.orderId || orderId,
+        providerStatus: result.status,
+        raw: result.response,
+      },
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 exports.airtimeWebhook = async (req, res) => {
   try {
     const data = { ...(req.body || {}), ...(req.query || {}) };

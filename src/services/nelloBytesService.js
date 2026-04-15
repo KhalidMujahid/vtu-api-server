@@ -375,6 +375,116 @@ class NelloBytesService {
     return response;
   }
 
+  static parseSpectranetPackagesResponse(response) {
+    const raw = response?.SPECTRANET || response?.packages || response?.data || response;
+    const entries = Array.isArray(raw)
+      ? raw
+      : raw && typeof raw === 'object'
+        ? Object.values(raw)
+        : [];
+
+    return entries
+      .map((item = {}) => {
+        const planId = String(
+          item.variation_code ||
+          item.dataplan_id ||
+          item.plan_id ||
+          item.id ||
+          ''
+        ).trim();
+
+        const planName = String(
+          item.name ||
+          item.plan_name ||
+          item.plan ||
+          item.description ||
+          ''
+        ).trim();
+
+        const amountRaw = item.amount ?? item.plan_amount ?? item.price ?? item.cost ?? null;
+        const amount = Number(String(amountRaw ?? '').replace(/[^0-9.]/g, ''));
+
+        return {
+          id: planId,
+          planId,
+          variationCode: planId,
+          planName,
+          amount: Number.isNaN(amount) ? null : amount,
+          validity: item.validity || item.month_validate || null,
+          raw: item,
+        };
+      })
+      .filter((item) => item.planId);
+  }
+
+  static async getSpectranetPackages() {
+    const endpoint = '/APISpectranetPackagesV2.asp';
+    const response = await this.request(endpoint, {
+      UserID: this.config.userId,
+    });
+
+    return {
+      success: true,
+      packages: this.parseSpectranetPackagesResponse(response),
+      response,
+    };
+  }
+
+  static parseSmilePackagesResponse(response) {
+    const raw = response?.SMILE || response?.packages || response?.data || response;
+    const entries = Array.isArray(raw)
+      ? raw
+      : raw && typeof raw === 'object'
+        ? Object.values(raw)
+        : [];
+
+    return entries
+      .map((item = {}) => {
+        const planId = String(
+          item.variation_code ||
+          item.dataplan_id ||
+          item.plan_id ||
+          item.id ||
+          ''
+        ).trim();
+
+        const planName = String(
+          item.name ||
+          item.plan_name ||
+          item.plan ||
+          item.description ||
+          ''
+        ).trim();
+
+        const amountRaw = item.amount ?? item.plan_amount ?? item.price ?? item.cost ?? null;
+        const amount = Number(String(amountRaw ?? '').replace(/[^0-9.]/g, ''));
+
+        return {
+          id: planId,
+          planId,
+          variationCode: planId,
+          planName,
+          amount: Number.isNaN(amount) ? null : amount,
+          validity: item.validity || item.month_validate || null,
+          raw: item,
+        };
+      })
+      .filter((item) => item.planId);
+  }
+
+  static async getSmilePackages() {
+    const endpoint = '/APISmilePackagesV2.asp';
+    const response = await this.request(endpoint, {
+      UserID: this.config.userId,
+    });
+
+    return {
+      success: true,
+      packages: this.parseSmilePackagesResponse(response),
+      response,
+    };
+  }
+
   
 
 
@@ -426,6 +536,72 @@ class NelloBytesService {
       statusCode: response.statuscode,
       orderId: response.orderid,
       requestId: requestId,
+      response,
+    };
+  }
+
+  static async purchaseSpectranetData({ dataPlan, mobileNumber, requestId = null, callBackURL = '' }) {
+    const endpoint = '/APISpectranetV1.asp';
+    const resolvedRequestId = requestId || uuidv4().substring(0, 12).toUpperCase();
+
+    const response = await this.request(endpoint, {
+      MobileNetwork: 'spectranet',
+      DataPlan: dataPlan,
+      MobileNumber: this.normalizeMobileNumber(mobileNumber),
+      RequestID: resolvedRequestId,
+      CallBackURL: callBackURL,
+    });
+
+    const statusCode = String(response?.statuscode || '');
+    const status = String(response?.status || response?.orderstatus || '').toUpperCase();
+
+    return {
+      success: statusCode === '100' || status === 'ORDER_RECEIVED' || status === 'ORDER_ONHOLD',
+      status: response?.status || response?.orderstatus,
+      statusCode,
+      orderId: response?.orderid || response?.orderId || null,
+      requestId: response?.requestid || resolvedRequestId,
+      response,
+    };
+  }
+
+  static async verifySmileAccount({ mobileNumber }) {
+    const endpoint = '/APIVerifySmileV1.asp';
+
+    const response = await this.request(endpoint, {
+      MobileNetwork: 'smile-direct',
+      MobileNumber: this.normalizeMobileNumber(mobileNumber),
+    });
+
+    const customerName = String(response?.customer_name || '').trim();
+    return {
+      valid: Boolean(customerName && customerName.toUpperCase() !== 'INVALID_ACCOUNTNO'),
+      customerName: customerName || null,
+      response,
+    };
+  }
+
+  static async purchaseSmileData({ dataPlan, mobileNumber, requestId = null, callBackURL = '' }) {
+    const endpoint = '/APISmileV1.asp';
+    const resolvedRequestId = requestId || uuidv4().substring(0, 12).toUpperCase();
+
+    const response = await this.request(endpoint, {
+      MobileNetwork: 'smile-direct',
+      DataPlan: dataPlan,
+      MobileNumber: this.normalizeMobileNumber(mobileNumber),
+      RequestID: resolvedRequestId,
+      CallBackURL: callBackURL,
+    });
+
+    const statusCode = String(response?.statuscode || '');
+    const status = String(response?.status || response?.orderstatus || '').toUpperCase();
+
+    return {
+      success: statusCode === '100' || status === 'ORDER_RECEIVED' || status === 'ORDER_ONHOLD',
+      status: response?.status || response?.orderstatus,
+      statusCode,
+      orderId: response?.orderid || response?.orderId || null,
+      requestId: response?.requestid || resolvedRequestId,
       response,
     };
   }

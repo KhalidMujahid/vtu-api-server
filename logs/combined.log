@@ -920,3 +920,7 @@
 {"level":"info","message":"API balance alert worker started (every 900s)","service":"yareema-data-hub","timestamp":"2026-04-09 14:32:31"}
 {"level":"info","message":"Airtime reconciliation worker started (every 300s)","service":"yareema-data-hub","timestamp":"2026-04-09 14:32:31"}
 {"level":"info","message":"Alrahuz data reconciliation worker started (every 120s)","service":"yareema-data-hub","timestamp":"2026-04-09 14:32:31"}
+{"level":"info","message":"VTU Providers initialized","service":"yareema-data-hub","timestamp":"2026-04-15 07:31:42"}
+{"level":"info","message":"API balance alert worker started (every 900s)","service":"yareema-data-hub","timestamp":"2026-04-15 07:31:42"}
+{"level":"info","message":"Airtime reconciliation worker started (every 300s)","service":"yareema-data-hub","timestamp":"2026-04-15 07:31:42"}
+{"level":"info","message":"Alrahuz data reconciliation worker started (every 120s)","service":"yareema-data-hub","timestamp":"2026-04-15 07:31:42"}

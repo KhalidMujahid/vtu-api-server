@@ -21,297 +21,48 @@ router.get('/nellobyte/callback', telecomController.airtimeCallback);
 
 router.use(protect);
 
-
-
-
-
-
-
-
-
-
-
-
-
 router.get('/data/plans', telecomController.getDataPlans);
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 router.get('/data', telecomController.getDataPlans);
 router.post('/data', protect, requireTransactionPin, telecomController.purchaseData);
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 router.post('/data/purchase', protect, requireTransactionPin, telecomController.purchaseData);
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 router.post('/airtime/purchase', protect, requireTransactionPin, telecomController.purchaseAirtime);
 router.post('/airtime/query', protect, telecomController.queryAirtimeTransaction);
 router.post('/alrahuz/data/query', protect, telecomController.queryAlrahuzDataTransaction);
 router.post('/airtime/cancel', protect, telecomController.cancelAirtimeTransaction);
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 router.post('/airtime', protect, requireTransactionPin, telecomController.purchaseAirtime);
-
-
-
-
-
-
-
-
-
-
 
 router.get('/airtime/webhook', telecomController.airtimeWebhook);
 router.post('/airtime/webhook', telecomController.airtimeWebhook);
 
-
-
-
-
-
-
-
-
-
-
-
-
 router.get('/epin/plans', telecomController.getEPINPlans);
 router.get('/recharge-pin/plans', telecomController.getEPINPlans);
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 router.post('/epin/purchase', requireTransactionPin, telecomController.purchaseRechargePin);
 router.post('/recharge-pin/purchase', requireTransactionPin, telecomController.purchaseRechargePin);
 
 
-
-
-
-
-
-
-
-
-
-
-
 router.get('/provider', protect, telecomController.getCurrentProvider);
-
-
-
-
-
-
-
-
-
-
-
-
 
 router.get('/airtimenigeria/plans', protect, telecomController.getAirtimeNigeriaDataPlans);
 router.get('/pluginng/plans', protect, telecomController.getPluginngDataPlans);
-
-
-
-
-
-
-
-
-
-
-
+router.get('/spectranet/packages', protect, telecomController.getSpectranetPackages);
+router.get('/smile/packages', protect, telecomController.getSmilePackages);
 
 
 router.post('/airtimenigeria/data/purchase', protect, requireTransactionPin, telecomController.purchaseAirtimeNigeriaData);
-
-
-
-
-
-
-
-
-
-
-
-
+router.post('/spectranet/purchase', protect, requireTransactionPin, telecomController.purchaseSpectranetData);
+router.post('/spectranet/query', protect, telecomController.querySpectranetTransaction);
+router.post('/spectranet/cancel', protect, telecomController.cancelSpectranetTransaction);
+router.post('/smile/verify', protect, telecomController.verifySmileAccount);
+router.post('/smile/purchase', protect, requireTransactionPin, telecomController.purchaseSmileData);
+router.post('/smile/query', protect, telecomController.querySmileTransaction);
+router.post('/smile/cancel', protect, telecomController.cancelSmileTransaction);
 
 router.post('/airtimenigeria/airtime/purchase', protect, requireTransactionPin, telecomController.purchaseAirtimeNigeriaAirtime);
-
-
-
-
-
-
-
-
-
-
-
-
 
 router.get('/airtimenigeria/balance', protect, telecomController.getAirtimeNigeriaBalance);
 
