@@ -924,3 +924,15 @@
 {"level":"info","message":"API balance alert worker started (every 900s)","service":"yareema-data-hub","timestamp":"2026-04-15 07:31:42"}
 {"level":"info","message":"Airtime reconciliation worker started (every 300s)","service":"yareema-data-hub","timestamp":"2026-04-15 07:31:42"}
 {"level":"info","message":"Alrahuz data reconciliation worker started (every 120s)","service":"yareema-data-hub","timestamp":"2026-04-15 07:31:42"}
+{"level":"info","message":"VTU Providers initialized","service":"yareema-data-hub","timestamp":"2026-04-16 13:38:02"}
+{"level":"info","message":"API balance alert worker started (every 900s)","service":"yareema-data-hub","timestamp":"2026-04-16 13:38:02"}
+{"level":"info","message":"Airtime reconciliation worker started (every 300s)","service":"yareema-data-hub","timestamp":"2026-04-16 13:38:02"}
+{"level":"info","message":"Alrahuz data reconciliation worker started (every 120s)","service":"yareema-data-hub","timestamp":"2026-04-16 13:38:02"}
+{"level":"info","message":"VTU Providers initialized","service":"yareema-data-hub","timestamp":"2026-04-16 13:57:53"}
+{"level":"info","message":"API balance alert worker started (every 900s)","service":"yareema-data-hub","timestamp":"2026-04-16 13:57:53"}
+{"level":"info","message":"Airtime reconciliation worker started (every 300s)","service":"yareema-data-hub","timestamp":"2026-04-16 13:57:53"}
+{"level":"info","message":"Alrahuz data reconciliation worker started (every 120s)","service":"yareema-data-hub","timestamp":"2026-04-16 13:57:53"}
+{"level":"warn","message":"Unable to verify or set Redis eviction policy to noeviction: NOPERM User default has no permissions to run the 'config|get' command","service":"yareema-data-hub","timestamp":"2026-04-16 13:57:58"}
+{"0":"F","1":"a","10":"g","11":"e","12":"t","13":" ","14":"t","15":"r","16":"a","17":"n","18":"s","19":"a","2":"i","20":"c","21":"t","22":"i","23":"o","24":"n","25":"s","3":"l","4":"e","5":"d","6":" ","7":"t","8":"o","9":" ","level":"error","message":"SmePlug getTransactions error:","service":"yareema-data-hub","timestamp":"2026-04-16 13:58:05"}
+{"level":"warn","message":"Scheduled SMEPlug airtime reconciliation skipped (provider feed unavailable): Failed to get transactions","service":"yareema-data-hub","timestamp":"2026-04-16 13:58:05"}
+{"level":"info","message":"Scheduled provider reconciliation cycle completed","providers":{"clubkonnect":{"errors":0,"scanned":0,"skipped":0,"stillPending":0,"updatedFailed":0,"updatedSuccessful":0},"smeplug":{"errors":1,"scanned":19,"skipped":0,"stillPending":19,"updatedFailed":0,"updatedSuccessful":0}},"service":"yareema-data-hub","timestamp":"2026-04-16 13:58:05","totals":{"errors":1,"scanned":19,"skipped":0,"stillPending":19,"updatedFailed":0,"updatedSuccessful":0}}

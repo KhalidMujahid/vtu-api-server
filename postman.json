@@ -1761,68 +1761,6 @@
           "description": "Purchase Spectranet databundle"
         },
         {
-          "name": "Query Spectranet Transaction",
-          "request": {
-            "method": "POST",
-            "header": [],
-            "url": {
-              "raw": "{{base_url}}/api/v1/telecom/spectranet/query",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "telecom",
-                "spectranet",
-                "query"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"orderId\": \"order_id_here\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "response": [],
-          "description": "Query Spectranet transaction by orderId or requestId"
-        },
-        {
-          "name": "Cancel Spectranet Transaction",
-          "request": {
-            "method": "POST",
-            "header": [],
-            "url": {
-              "raw": "{{base_url}}/api/v1/telecom/spectranet/cancel",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "telecom",
-                "spectranet",
-                "cancel"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"orderId\": \"order_id_here\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "response": [],
-          "description": "Cancel Spectranet transaction (ORDER_RECEIVED/ORDER_ONHOLD only)"
-        },
-        {
           "name": "Get Smile Packages",
           "request": {
             "method": "GET",
@@ -1907,12 +1845,12 @@
           "description": "Purchase Smile databundle"
         },
         {
-          "name": "Query Smile Transaction",
+          "name": "Get Alpha Plans",
           "request": {
-            "method": "POST",
+            "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{base_url}}/api/v1/telecom/smile/query",
+              "raw": "{{base_url}}/api/v1/telecom/alpha/plans",
               "host": [
                 "{{base_url}}"
               ],
@@ -1920,30 +1858,21 @@
                 "api",
                 "v1",
                 "telecom",
-                "smile",
-                "query"
+                "alpha",
+                "plans"
               ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"orderId\": \"order_id_here\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
             }
           },
           "response": [],
-          "description": "Query Smile transaction by orderId or requestId"
+          "description": "Fetch available Alpha plans"
         },
         {
-          "name": "Cancel Smile Transaction",
+          "name": "Purchase Alpha",
           "request": {
             "method": "POST",
             "header": [],
             "url": {
-              "raw": "{{base_url}}/api/v1/telecom/smile/cancel",
+              "raw": "{{base_url}}/api/v1/telecom/alpha/purchase",
               "host": [
                 "{{base_url}}"
               ],
@@ -1951,13 +1880,13 @@
                 "api",
                 "v1",
                 "telecom",
-                "smile",
-                "cancel"
+                "alpha",
+                "purchase"
               ]
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"orderId\": \"order_id_here\"\n}",
+              "raw": "{\n  \"phone\": \"2347056525656\",\n  \"planid\": \"9\",\n  \"transactionPin\": \"1234\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1966,7 +1895,499 @@
             }
           },
           "response": [],
-          "description": "Cancel Smile transaction (ORDER_RECEIVED/ORDER_ONHOLD only)"
+          "description": "Purchase Alpha caller credit"
+        },
+        {
+          "name": "Get Kirani Plans",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/telecom/kirani/plans",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "telecom",
+                "kirani",
+                "plans"
+              ]
+            }
+          },
+          "response": [],
+          "description": "Fetch available Kirani plans"
+        },
+        {
+          "name": "Purchase Kirani",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/telecom/kirani/purchase",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "telecom",
+                "kirani",
+                "purchase"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"07000525656\",\n  \"planid\": \"6\",\n  \"transactionPin\": \"1234\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "description": "Purchase Kirani call minutes"
+        },
+        {
+          "name": "Gift Cards (Frontend)",
+          "item": [
+            {
+              "name": "GiftCards: Get Categories",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/telecom/giftcards/categories",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "telecom",
+                    "giftcards",
+                    "categories"
+                  ]
+                }
+              },
+              "response": [],
+              "description": "Frontend: load gift card categories"
+            },
+            {
+              "name": "GiftCards: Get Countries",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/telecom/giftcards/countries",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "telecom",
+                    "giftcards",
+                    "countries"
+                  ]
+                }
+              },
+              "response": [],
+              "description": "Frontend: load available countries"
+            },
+            {
+              "name": "GiftCards: Get Products",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/telecom/giftcards/products?size=20&page=1&countryCode=US&productName=Amazon",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "telecom",
+                    "giftcards",
+                    "products"
+                  ],
+                  "query": [
+                    {
+                      "key": "size",
+                      "value": "20"
+                    },
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "countryCode",
+                      "value": "US"
+                    },
+                    {
+                      "key": "productName",
+                      "value": "Amazon"
+                    }
+                  ]
+                }
+              },
+              "response": [],
+              "description": "Frontend: list/search products"
+            },
+            {
+              "name": "GiftCards: Get Product By ID",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/telecom/giftcards/products/:productId",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "telecom",
+                    "giftcards",
+                    "products",
+                    ":productId"
+                  ],
+                  "variable": [
+                    {
+                      "key": "productId",
+                      "value": "1"
+                    }
+                  ]
+                }
+              },
+              "response": [],
+              "description": "Frontend: fetch product details"
+            },
+            {
+              "name": "GiftCards: Get Product Discount",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/telecom/giftcards/products/:productId/discounts",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "telecom",
+                    "giftcards",
+                    "products",
+                    ":productId",
+                    "discounts"
+                  ],
+                  "variable": [
+                    {
+                      "key": "productId",
+                      "value": "1"
+                    }
+                  ]
+                }
+              },
+              "response": [],
+              "description": "Frontend: fetch discount for selected product"
+            },
+            {
+              "name": "GiftCards: Get Product Redeem Instructions",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/telecom/giftcards/products/:productId/redeem-instructions",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "telecom",
+                    "giftcards",
+                    "products",
+                    ":productId",
+                    "redeem-instructions"
+                  ],
+                  "variable": [
+                    {
+                      "key": "productId",
+                      "value": "1"
+                    }
+                  ]
+                }
+              },
+              "response": [],
+              "description": "Frontend: fetch redeem instructions"
+            },
+            {
+              "name": "GiftCards: Get FX Rate",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/telecom/giftcards/fx-rate?currencyCode=USD&amount=50",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "telecom",
+                    "giftcards",
+                    "fx-rate"
+                  ],
+                  "query": [
+                    {
+                      "key": "currencyCode",
+                      "value": "USD"
+                    },
+                    {
+                      "key": "amount",
+                      "value": "50"
+                    }
+                  ]
+                }
+              },
+              "response": [],
+              "description": "Frontend: estimate sender amount via FX"
+            },
+            {
+              "name": "GiftCards: Order Gift Card",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/telecom/giftcards/orders",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "telecom",
+                    "giftcards",
+                    "orders"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"customIdentifier\": \"gift-order-001\",\n  \"productId\": 1,\n  \"quantity\": 1,\n  \"senderName\": \"John Doe\",\n  \"unitPrice\": 25,\n  \"recipientEmail\": \"anyone@email.com\",\n  \"transactionPin\": \"1234\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": [],
+              "description": "Frontend: create gift card order"
+            },
+            {
+              "name": "GiftCards: Get Transactions",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/telecom/giftcards/transactions?size=20&page=1",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "telecom",
+                    "giftcards",
+                    "transactions"
+                  ],
+                  "query": [
+                    {
+                      "key": "size",
+                      "value": "20"
+                    },
+                    {
+                      "key": "page",
+                      "value": "1"
+                    }
+                  ]
+                }
+              },
+              "response": [],
+              "description": "Frontend: list gift card transaction history"
+            },
+            {
+              "name": "GiftCards: Get Redeem Code",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/telecom/giftcards/orders/transactions/:transactionId/cards?version=v2",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "telecom",
+                    "giftcards",
+                    "orders",
+                    "transactions",
+                    ":transactionId",
+                    "cards"
+                  ],
+                  "query": [
+                    {
+                      "key": "version",
+                      "value": "v2"
+                    }
+                  ],
+                  "variable": [
+                    {
+                      "key": "transactionId",
+                      "value": "1"
+                    }
+                  ]
+                }
+              },
+              "response": [],
+              "description": "Frontend: fetch redeem code for a successful transaction"
+            }
+          ]
+        },
+        {
+          "name": "Telecom Ops (Backend)",
+          "item": [
+            {
+              "name": "Query Spectranet Transaction",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/telecom/spectranet/query",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "telecom",
+                    "spectranet",
+                    "query"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"orderId\": \"order_id_here\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": [],
+              "description": "Query Spectranet transaction by orderId or requestId"
+            },
+            {
+              "name": "Cancel Spectranet Transaction",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/telecom/spectranet/cancel",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "telecom",
+                    "spectranet",
+                    "cancel"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"orderId\": \"order_id_here\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": [],
+              "description": "Cancel Spectranet transaction (ORDER_RECEIVED/ORDER_ONHOLD only)"
+            },
+            {
+              "name": "Query Smile Transaction",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/telecom/smile/query",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "telecom",
+                    "smile",
+                    "query"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"orderId\": \"order_id_here\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": [],
+              "description": "Query Smile transaction by orderId or requestId"
+            },
+            {
+              "name": "Cancel Smile Transaction",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/telecom/smile/cancel",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "telecom",
+                    "smile",
+                    "cancel"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"orderId\": \"order_id_here\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": [],
+              "description": "Cancel Smile transaction (ORDER_RECEIVED/ORDER_ONHOLD only)"
+            }
+          ]
         }
       ]
     },

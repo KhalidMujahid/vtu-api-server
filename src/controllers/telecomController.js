@@ -11,9 +11,12 @@ const AirtimeNigeriaService = require('../services/airtimeNigeriaService');
 const SmePlugService = require('../services/smePlugService');
 const PluginngService = require('../services/pluginngService');
 const AlrahuzDataService = require('../services/alrahuzDataService');
+const ArewaService = require('../services/arewaService');
+const ReloadlyGiftCardService = require('../services/reloadlyGiftCardService');
 const AlrahuzDataReconciliationService = require('../services/alrahuzDataReconciliationService');
 const ProviderPurchaseGuardService = require('../services/providerPurchaseGuardService');
 const ProviderMarkupService = require('../services/providerMarkupService');
+const VtuTransactionLifecycleService = require('../services/vtuTransactionLifecycleService');
 const vtuConfig = require('../config/vtuProviders');
 const crypto = require('crypto');
 
@@ -926,6 +929,35 @@ const profitConfig = {
   "9MOBILE": 7,
 };
 
+const ALPHA_PLANS = [
+  { id: '9', name: 'Alpha N600', price: 600, validity: '30 days' },
+  { id: '10', name: 'Alpha N1100', price: 1100, validity: '30 days' },
+  { id: '11', name: 'Alpha N1600', price: 1600, validity: '30 days' },
+  { id: '12', name: 'Alpha N2100', price: 2100, validity: '30 days' },
+  { id: '13', name: 'Alpha N2600', price: 2600, validity: '30 days' },
+  { id: '14', name: 'Alpha N3120', price: 3120, validity: '30 days' },
+  { id: '15', name: 'Alpha N3620', price: 3620, validity: '30 days' },
+  { id: '16', name: 'Alpha N4150', price: 4150, validity: '30 days' },
+];
+
+const KIRANI_PLANS = [
+  { id: '6', name: '30 Minutes', minutes: 30, price: 520, validity: '30 days' },
+  { id: '12', name: '50 Minutes', minutes: 50, price: 800, validity: '30 days' },
+  { id: '7', name: '70 Minutes', minutes: 70, price: 1090, validity: '30 days' },
+  { id: '1', name: '100 Minutes', minutes: 100, price: 1580, validity: '30 days' },
+  { id: '13', name: '150 Minutes', minutes: 150, price: 2350, validity: '30 days' },
+  { id: '2', name: '200 Minutes', minutes: 200, price: 3100, validity: '30 days' },
+  { id: '14', name: '250 Minutes', minutes: 250, price: 3900, validity: '30 days' },
+  { id: '3', name: '300 Minutes', minutes: 300, price: 4600, validity: '30 days' },
+  { id: '15', name: '350 Minutes', minutes: 350, price: 5350, validity: '30 days' },
+  { id: '4', name: '400 Minutes', minutes: 400, price: 6100, validity: '30 days' },
+  { id: '5', name: '500 Minutes', minutes: 500, price: 7600, validity: '30 days' },
+  { id: '8', name: '600 Minutes', minutes: 600, price: 9250, validity: '30 days' },
+  { id: '9', name: '700 Minutes', minutes: 700, price: 10800, validity: '30 days' },
+  { id: '10', name: '800 Minutes', minutes: 800, price: 12300, validity: '30 days' },
+  { id: '11', name: '900 Minutes', minutes: 900, price: 13850, validity: '30 days' },
+];
+
 exports.purchaseAirtime = async (req, res, next) => {
   try {
     const { phoneNumber, network, amount, transactionPin, bonusType } = req.body;
@@ -1586,6 +1618,14 @@ exports.purchaseSpectranetData = async (req, res, next) => {
         timestamp: new Date(),
       });
       await transaction.save();
+      try {
+        await VtuTransactionLifecycleService.schedulePolling(transaction._id, {
+          attempt: 1,
+          reason: 'spectranet-initial',
+        });
+      } catch (pollError) {
+        logger.warn(`Failed to enqueue Spectranet polling for ${transaction.reference}: ${pollError.message}`);
+      }
 
       return res.status(200).json({
         status: 'success',
@@ -1824,6 +1864,14 @@ exports.purchaseSmileData = async (req, res, next) => {
         timestamp: new Date(),
       });
       await transaction.save();
+      try {
+        await VtuTransactionLifecycleService.schedulePolling(transaction._id, {
+          attempt: 1,
+          reason: 'smile-initial',
+        });
+      } catch (pollError) {
+        logger.warn(`Failed to enqueue Smile polling for ${transaction.reference}: ${pollError.message}`);
+      }
 
       return res.status(200).json({
         status: 'success',
@@ -1907,6 +1955,615 @@ exports.cancelSmileTransaction = async (req, res, next) => {
         raw: result.response,
       },
     });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+exports.getAlphaPlans = async (req, res) => {
+  return res.status(200).json({
+    status: 'success',
+    data: {
+      provider: 'arewa',
+      service: 'alpha',
+      plans: ALPHA_PLANS,
+    },
+  });
+};
+
+exports.getKiraniPlans = async (req, res) => {
+  return res.status(200).json({
+    status: 'success',
+    data: {
+      provider: 'arewa',
+      service: 'kirani',
+      plans: KIRANI_PLANS,
+    },
+  });
+};
+
+exports.purchaseAlpha = async (req, res, next) => {
+  try {
+    const { phone, planid, transactionPin } = req.body;
+
+    if (!phone || !planid) {
+      return next(new AppError('Phone and planid are required', 400));
+    }
+
+    if (!transactionPin) {
+      return next(new AppError('Transaction PIN is required', 400));
+    }
+
+    const user = await User.findById(req.user.id).select('+transactionPin');
+    if (!user) return next(new AppError('User not found', 404));
+
+    const isPinValid = await user.compareTransactionPin(transactionPin);
+    if (!isPinValid) {
+      return next(new AppError('Invalid transaction PIN', 401));
+    }
+
+    const wallet = await Wallet.findOne({ user: user._id });
+    if (!wallet) return next(new AppError('Wallet not found', 404));
+
+    const selectedPlan = ALPHA_PLANS.find((plan) => plan.id === String(planid));
+    if (!selectedPlan) {
+      return next(new AppError('Invalid Alpha plan selected', 400));
+    }
+
+    const providerAmount = Number(selectedPlan.price || 0);
+    const chargePricing = await ProviderMarkupService.applyMarkup({
+      providerId: 'arewa',
+      serviceType: 'airtime_recharge',
+      baseAmount: providerAmount,
+    });
+    const chargedAmount = chargePricing.chargedAmount;
+
+    if (wallet.balance < chargedAmount) {
+      return next(new AppError('Insufficient wallet balance', 400));
+    }
+
+    await wallet.debit(chargedAmount, `Alpha purchase: ${selectedPlan.name}`);
+
+    const reference = `ALP-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+    const transaction = await Transaction.create({
+      reference,
+      user: user._id,
+      type: 'airtime_recharge',
+      category: 'telecom',
+      amount: chargedAmount,
+      totalAmount: chargedAmount,
+      previousBalance: wallet.balance + chargedAmount,
+      newBalance: wallet.balance,
+      status: 'pending',
+      description: `Alpha plan purchase for ${phone}`,
+      service: {
+        provider: 'arewa',
+        network: 'alpha',
+        plan: String(planid),
+        phoneNumber: phone,
+      },
+      metadata: {
+        providerAmount,
+        chargedAmount,
+        markupPercentage: chargePricing.percentage,
+        markupAmount: chargePricing.markupAmount,
+        planName: selectedPlan.name,
+        validity: selectedPlan.validity,
+      },
+      statusHistory: [{ status: 'pending', note: 'Alpha purchase initiated', timestamp: new Date() }],
+    });
+
+    try {
+      const apiResponse = await ArewaService.purchaseAlpha({ phone, planid: String(planid) });
+      const success = String(apiResponse?.status || '').toLowerCase() === 'success';
+
+      transaction.status = success ? 'successful' : 'failed';
+      transaction.providerResponse = apiResponse;
+      transaction.statusHistory.push({
+        status: transaction.status,
+        note: apiResponse?.msg || apiResponse?.message || 'Alpha response received',
+        timestamp: new Date(),
+      });
+
+      if (!success) {
+        await refundTransactionToWallet(transaction, 'Alpha purchase refund', chargedAmount);
+      }
+
+      await transaction.save();
+
+      return res.status(success ? 200 : 400).json({
+        status: success ? 'success' : 'error',
+        message: apiResponse?.msg || (success ? 'Alpha purchased successfully' : 'Alpha purchase failed'),
+        data: {
+          reference,
+          phone,
+          planid: String(planid),
+          planName: selectedPlan.name,
+          validity: selectedPlan.validity,
+          amount: chargedAmount,
+          providerAmount,
+          provider: 'arewa',
+          service: 'alpha',
+          raw: apiResponse,
+        },
+      });
+    } catch (error) {
+      await refundTransactionToWallet(transaction, 'Alpha purchase refund', chargedAmount);
+      transaction.status = 'failed';
+      transaction.failureReason = error.message;
+      transaction.statusHistory.push({ status: 'failed', note: error.message, timestamp: new Date() });
+      await transaction.save();
+      return next(new AppError('Alpha purchase failed. Please try again shortly.', 500));
+    }
+  } catch (error) {
+    return next(error);
+  }
+};
+
+exports.purchaseKirani = async (req, res, next) => {
+  try {
+    const { phone, planid, transactionPin } = req.body;
+
+    if (!phone || !planid) {
+      return next(new AppError('Phone and planid are required', 400));
+    }
+
+    if (!transactionPin) {
+      return next(new AppError('Transaction PIN is required', 400));
+    }
+
+    const user = await User.findById(req.user.id).select('+transactionPin');
+    if (!user) return next(new AppError('User not found', 404));
+
+    const isPinValid = await user.compareTransactionPin(transactionPin);
+    if (!isPinValid) {
+      return next(new AppError('Invalid transaction PIN', 401));
+    }
+
+    const wallet = await Wallet.findOne({ user: user._id });
+    if (!wallet) return next(new AppError('Wallet not found', 404));
+
+    const selectedPlan = KIRANI_PLANS.find((plan) => plan.id === String(planid));
+    if (!selectedPlan) {
+      return next(new AppError('Invalid Kirani plan selected', 400));
+    }
+
+    const providerAmount = Number(selectedPlan.price || 0);
+    const chargePricing = await ProviderMarkupService.applyMarkup({
+      providerId: 'arewa',
+      serviceType: 'airtime_recharge',
+      baseAmount: providerAmount,
+    });
+    const chargedAmount = chargePricing.chargedAmount;
+
+    if (wallet.balance < chargedAmount) {
+      return next(new AppError('Insufficient wallet balance', 400));
+    }
+
+    await wallet.debit(chargedAmount, `Kirani purchase: ${selectedPlan.name}`);
+
+    const reference = `KIR-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+    const transaction = await Transaction.create({
+      reference,
+      user: user._id,
+      type: 'airtime_recharge',
+      category: 'telecom',
+      amount: chargedAmount,
+      totalAmount: chargedAmount,
+      previousBalance: wallet.balance + chargedAmount,
+      newBalance: wallet.balance,
+      status: 'pending',
+      description: `Kirani plan purchase for ${phone}`,
+      service: {
+        provider: 'arewa',
+        network: 'kirani',
+        plan: String(planid),
+        phoneNumber: phone,
+      },
+      metadata: {
+        providerAmount,
+        chargedAmount,
+        markupPercentage: chargePricing.percentage,
+        markupAmount: chargePricing.markupAmount,
+        planName: selectedPlan.name,
+        minutes: selectedPlan.minutes,
+        validity: selectedPlan.validity,
+      },
+      statusHistory: [{ status: 'pending', note: 'Kirani purchase initiated', timestamp: new Date() }],
+    });
+
+    try {
+      const apiResponse = await ArewaService.purchaseKirani({ phone, planid: String(planid) });
+      const success = String(apiResponse?.status || '').toLowerCase() === 'success';
+
+      transaction.status = success ? 'successful' : 'failed';
+      transaction.providerResponse = apiResponse;
+      transaction.statusHistory.push({
+        status: transaction.status,
+        note: apiResponse?.msg || apiResponse?.message || 'Kirani response received',
+        timestamp: new Date(),
+      });
+
+      if (!success) {
+        await refundTransactionToWallet(transaction, 'Kirani purchase refund', chargedAmount);
+      }
+
+      await transaction.save();
+
+      return res.status(success ? 200 : 400).json({
+        status: success ? 'success' : 'error',
+        message: apiResponse?.msg || (success ? 'Kirani purchased successfully' : 'Kirani purchase failed'),
+        data: {
+          reference,
+          phone,
+          planid: String(planid),
+          planName: selectedPlan.name,
+          minutes: selectedPlan.minutes,
+          validity: selectedPlan.validity,
+          amount: chargedAmount,
+          providerAmount,
+          provider: 'arewa',
+          service: 'kirani',
+          raw: apiResponse,
+        },
+      });
+    } catch (error) {
+      await refundTransactionToWallet(transaction, 'Kirani purchase refund', chargedAmount);
+      transaction.status = 'failed';
+      transaction.failureReason = error.message;
+      transaction.statusHistory.push({ status: 'failed', note: error.message, timestamp: new Date() });
+      await transaction.save();
+      return next(new AppError('Kirani purchase failed. Please try again shortly.', 500));
+    }
+  } catch (error) {
+    return next(error);
+  }
+};
+
+exports.getGiftCardBalance = async (req, res, next) => {
+  try {
+    const data = await ReloadlyGiftCardService.getBalance();
+    return res.status(200).json({ status: 'success', data });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+exports.getGiftCardCategories = async (req, res, next) => {
+  try {
+    const data = await ReloadlyGiftCardService.getCategories();
+    return res.status(200).json({ status: 'success', data });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+exports.getGiftCardCountries = async (req, res, next) => {
+  try {
+    const data = await ReloadlyGiftCardService.getCountries();
+    return res.status(200).json({ status: 'success', data });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+exports.getGiftCardCountryByCode = async (req, res, next) => {
+  try {
+    const { countryCode } = req.params;
+    if (!countryCode) {
+      return next(new AppError('countryCode is required', 400));
+    }
+    const data = await ReloadlyGiftCardService.getCountryByCode(countryCode);
+    return res.status(200).json({ status: 'success', data });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+exports.getGiftCardProducts = async (req, res, next) => {
+  try {
+    const params = { ...req.query };
+    if (params.size) params.size = Number(params.size);
+    if (params.page) params.page = Number(params.page);
+    if (params.includeRange !== undefined) params.includeRange = String(params.includeRange).toLowerCase() === 'true';
+    if (params.includeFixed !== undefined) params.includeFixed = String(params.includeFixed).toLowerCase() === 'true';
+    const data = await ReloadlyGiftCardService.getProducts(params);
+    return res.status(200).json({ status: 'success', data });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+exports.getGiftCardProductsByCountry = async (req, res, next) => {
+  try {
+    const { countryCode } = req.params;
+    if (!countryCode) {
+      return next(new AppError('countryCode is required', 400));
+    }
+    const data = await ReloadlyGiftCardService.getProductsByCountry(countryCode);
+    return res.status(200).json({ status: 'success', data });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+exports.getGiftCardProductById = async (req, res, next) => {
+  try {
+    const { productId } = req.params;
+    if (!productId) {
+      return next(new AppError('productId is required', 400));
+    }
+    const data = await ReloadlyGiftCardService.getProductById(productId);
+    return res.status(200).json({ status: 'success', data });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+exports.getGiftCardRedeemInstructions = async (req, res, next) => {
+  try {
+    const data = await ReloadlyGiftCardService.getRedeemInstructions();
+    return res.status(200).json({ status: 'success', data });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+exports.getGiftCardProductRedeemInstructions = async (req, res, next) => {
+  try {
+    const { productId } = req.params;
+    if (!productId) {
+      return next(new AppError('productId is required', 400));
+    }
+    const data = await ReloadlyGiftCardService.getProductRedeemInstructions(productId);
+    return res.status(200).json({ status: 'success', data });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+exports.getGiftCardFxRate = async (req, res, next) => {
+  try {
+    const { currencyCode, amount } = req.query;
+    if (!currencyCode || !amount) {
+      return next(new AppError('currencyCode and amount are required', 400));
+    }
+    const data = await ReloadlyGiftCardService.getFxRate({ currencyCode, amount });
+    return res.status(200).json({ status: 'success', data });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+exports.getGiftCardDiscounts = async (req, res, next) => {
+  try {
+    const params = { ...req.query };
+    if (params.size) params.size = Number(params.size);
+    if (params.page) params.page = Number(params.page);
+    const data = await ReloadlyGiftCardService.getDiscounts(params);
+    return res.status(200).json({ status: 'success', data });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+exports.getGiftCardProductDiscount = async (req, res, next) => {
+  try {
+    const { productId } = req.params;
+    if (!productId) {
+      return next(new AppError('productId is required', 400));
+    }
+    const data = await ReloadlyGiftCardService.getProductDiscount(productId);
+    return res.status(200).json({ status: 'success', data });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+exports.getGiftCardTransactions = async (req, res, next) => {
+  try {
+    const params = { ...req.query };
+    if (params.size) params.size = Number(params.size);
+    if (params.page) params.page = Number(params.page);
+    const data = await ReloadlyGiftCardService.getTransactions(params);
+    return res.status(200).json({ status: 'success', data });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+exports.getGiftCardTransactionById = async (req, res, next) => {
+  try {
+    const { transactionId } = req.params;
+    if (!transactionId) {
+      return next(new AppError('transactionId is required', 400));
+    }
+    const data = await ReloadlyGiftCardService.getTransactionById(transactionId);
+    return res.status(200).json({ status: 'success', data });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+exports.getGiftCardRedeemCode = async (req, res, next) => {
+  try {
+    const { transactionId } = req.params;
+    const { version = 'v2' } = req.query;
+    if (!transactionId) {
+      return next(new AppError('transactionId is required', 400));
+    }
+    const data = await ReloadlyGiftCardService.getRedeemCode(transactionId, version);
+    return res.status(200).json({ status: 'success', data });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+exports.orderGiftCard = async (req, res, next) => {
+  try {
+    const {
+      customIdentifier,
+      preOrder = false,
+      productAdditionalRequirements,
+      productId,
+      quantity,
+      recipientEmail,
+      recipientPhoneDetails,
+      senderName,
+      unitPrice,
+      transactionPin,
+      senderAmount,
+    } = req.body;
+
+    if (!productId || !quantity || !senderName || !unitPrice) {
+      return next(new AppError('productId, quantity, senderName, and unitPrice are required', 400));
+    }
+
+    if (!transactionPin) {
+      return next(new AppError('Transaction PIN is required', 400));
+    }
+
+    const user = await User.findById(req.user.id).select('+transactionPin');
+    if (!user) return next(new AppError('User not found', 404));
+
+    const isPinValid = await user.compareTransactionPin(transactionPin);
+    if (!isPinValid) {
+      return next(new AppError('Invalid transaction PIN', 401));
+    }
+
+    const wallet = await Wallet.findOne({ user: user._id });
+    if (!wallet) return next(new AppError('Wallet not found', 404));
+
+    const product = await ReloadlyGiftCardService.getProductById(productId);
+    const quantityNumber = Number(quantity);
+    const unitPriceNumber = Number(unitPrice);
+    if (!Number.isFinite(quantityNumber) || quantityNumber <= 0 || !Number.isFinite(unitPriceNumber) || unitPriceNumber <= 0) {
+      return next(new AppError('quantity and unitPrice must be valid positive numbers', 400));
+    }
+
+    const perUnitSenderAmount =
+      ReloadlyGiftCardService.extractSenderAmountFromProduct(product, unitPriceNumber) ||
+      Number(senderAmount || 0);
+    if (!Number.isFinite(perUnitSenderAmount) || perUnitSenderAmount <= 0) {
+      return next(new AppError('Unable to resolve sender amount for selected product/denomination', 400));
+    }
+
+    const providerAmount = perUnitSenderAmount * quantityNumber;
+    const chargePricing = await ProviderMarkupService.applyMarkup({
+      providerId: 'reloadly',
+      serviceType: 'gift_card',
+      baseAmount: providerAmount,
+    });
+    const chargedAmount = chargePricing.chargedAmount;
+
+    if (wallet.balance < chargedAmount) {
+      return next(new AppError('Insufficient wallet balance', 400));
+    }
+
+    await wallet.debit(chargedAmount, `Gift card order: ${productId}`);
+
+    const reference = customIdentifier || `GFT-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+    const transaction = await Transaction.create({
+      reference,
+      user: user._id,
+      type: 'gift_card',
+      category: 'bills',
+      amount: chargedAmount,
+      totalAmount: chargedAmount,
+      previousBalance: wallet.balance + chargedAmount,
+      newBalance: wallet.balance,
+      status: 'pending',
+      description: `Gift card order for product ${productId}`,
+      service: {
+        provider: 'reloadly',
+        network: 'giftcard',
+        plan: String(productId),
+      },
+      metadata: {
+        providerAmount,
+        perUnitSenderAmount,
+        chargedAmount,
+        markupPercentage: chargePricing.percentage,
+        markupAmount: chargePricing.markupAmount,
+      },
+      statusHistory: [{ status: 'pending', note: 'Gift card order initiated', timestamp: new Date() }],
+    });
+
+    try {
+      const orderPayload = {
+        customIdentifier: reference,
+        preOrder: Boolean(preOrder),
+        productAdditionalRequirements,
+        productId: Number(productId),
+        quantity: quantityNumber,
+        recipientEmail,
+        recipientPhoneDetails,
+        senderName,
+        unitPrice: unitPriceNumber,
+      };
+
+      const apiResponse = await ReloadlyGiftCardService.orderGiftCard(orderPayload);
+      const providerStatus = String(apiResponse?.status || '').toUpperCase();
+
+      let localStatus = 'pending';
+      if (providerStatus === 'SUCCESSFUL') {
+        localStatus = 'successful';
+      } else if (providerStatus === 'FAILED' || providerStatus === 'REFUNDED') {
+        localStatus = 'failed';
+      } else if (providerStatus === 'PENDING' || providerStatus === 'PROCESSING') {
+        localStatus = 'pending';
+      }
+
+      transaction.status = localStatus;
+      transaction.service.orderId = String(apiResponse?.transactionId || '');
+      transaction.providerResponse = apiResponse;
+      transaction.statusHistory.push({
+        status: localStatus,
+        note: `Reloadly status: ${providerStatus || 'UNKNOWN'}`,
+        timestamp: new Date(),
+      });
+
+      if (localStatus === 'failed') {
+        await refundTransactionToWallet(transaction, 'Gift card order refund', chargedAmount);
+      }
+
+      await transaction.save();
+      if (localStatus === 'pending') {
+        try {
+          await VtuTransactionLifecycleService.schedulePolling(transaction._id, {
+            attempt: 1,
+            reason: 'giftcard-initial',
+          });
+        } catch (pollError) {
+          logger.warn(`Failed to enqueue gift card polling for ${transaction.reference}: ${pollError.message}`);
+        }
+      }
+
+      return res.status(localStatus === 'failed' ? 400 : 200).json({
+        status: localStatus === 'failed' ? 'error' : 'success',
+        message: localStatus === 'failed' ? 'Gift card order failed' : 'Gift card order processed',
+        data: {
+          reference,
+          localStatus,
+          providerStatus: apiResponse?.status,
+          transactionId: apiResponse?.transactionId || null,
+          amount: chargedAmount,
+          providerAmount,
+          markup: {
+            percentage: chargePricing.percentage,
+            amount: chargePricing.markupAmount,
+          },
+          raw: apiResponse,
+        },
+      });
+    } catch (error) {
+      await refundTransactionToWallet(transaction, 'Gift card order refund', chargedAmount);
+      transaction.status = 'failed';
+      transaction.failureReason = error.message;
+      transaction.statusHistory.push({ status: 'failed', note: error.message, timestamp: new Date() });
+      await transaction.save();
+      return next(new AppError('Gift card order failed. Please try again shortly.', 500));
+    }
   } catch (error) {
     return next(error);
   }

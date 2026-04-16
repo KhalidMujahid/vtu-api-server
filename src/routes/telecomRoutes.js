@@ -61,6 +61,26 @@ router.post('/smile/verify', protect, telecomController.verifySmileAccount);
 router.post('/smile/purchase', protect, requireTransactionPin, telecomController.purchaseSmileData);
 router.post('/smile/query', protect, telecomController.querySmileTransaction);
 router.post('/smile/cancel', protect, telecomController.cancelSmileTransaction);
+router.get('/alpha/plans', protect, telecomController.getAlphaPlans);
+router.get('/kirani/plans', protect, telecomController.getKiraniPlans);
+router.post('/alpha/purchase', protect, requireTransactionPin, telecomController.purchaseAlpha);
+router.post('/kirani/purchase', protect, requireTransactionPin, telecomController.purchaseKirani);
+router.get('/giftcards/balance', protect, telecomController.getGiftCardBalance);
+router.get('/giftcards/categories', protect, telecomController.getGiftCardCategories);
+router.get('/giftcards/countries', protect, telecomController.getGiftCardCountries);
+router.get('/giftcards/countries/:countryCode', protect, telecomController.getGiftCardCountryByCode);
+router.get('/giftcards/products', protect, telecomController.getGiftCardProducts);
+router.get('/giftcards/countries/:countryCode/products', protect, telecomController.getGiftCardProductsByCountry);
+router.get('/giftcards/products/:productId', protect, telecomController.getGiftCardProductById);
+router.get('/giftcards/redeem-instructions', protect, telecomController.getGiftCardRedeemInstructions);
+router.get('/giftcards/products/:productId/redeem-instructions', protect, telecomController.getGiftCardProductRedeemInstructions);
+router.get('/giftcards/fx-rate', protect, telecomController.getGiftCardFxRate);
+router.get('/giftcards/discounts', protect, telecomController.getGiftCardDiscounts);
+router.get('/giftcards/products/:productId/discounts', protect, telecomController.getGiftCardProductDiscount);
+router.get('/giftcards/transactions', protect, telecomController.getGiftCardTransactions);
+router.get('/giftcards/transactions/:transactionId', protect, telecomController.getGiftCardTransactionById);
+router.get('/giftcards/orders/transactions/:transactionId/cards', protect, telecomController.getGiftCardRedeemCode);
+router.post('/giftcards/orders', protect, requireTransactionPin, telecomController.orderGiftCard);
 
 router.post('/airtimenigeria/airtime/purchase', protect, requireTransactionPin, telecomController.purchaseAirtimeNigeriaAirtime);
 

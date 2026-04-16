@@ -6,6 +6,7 @@ const vtuConfig = require('./src/config/vtuProviders');
 const { startApiBalanceAlertWorker } = require('./src/workers/apiBalanceAlertWorker');
 const { startAirtimeReconciliationWorker } = require('./src/workers/airtimeReconciliationWorker');
 const { startAlrahuzDataReconciliationWorker } = require('./src/workers/alrahuzDataReconciliationWorker');
+const { startVtuPollingWorker } = require('./src/workers/vtuPollingWorker');
 
 const PORT = process.env.PORT || 5000;
 
@@ -34,6 +35,7 @@ connectDB().then(async () => {
   startApiBalanceAlertWorker();
   startAirtimeReconciliationWorker();
   startAlrahuzDataReconciliationWorker();
+  startVtuPollingWorker();
 
   process.on('unhandledRejection', (err) => {
     console.log(`Error: ${err.message}`);

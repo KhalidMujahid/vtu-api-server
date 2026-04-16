@@ -3,6 +3,7 @@ const vtuConfig = require('../config/vtuProviders');
 const NelloBytesService = require('./nelloBytesService');
 const SmePlugService = require('./smePlugService');
 const PluginngService = require('./pluginngService');
+const ReloadlyGiftCardService = require('./reloadlyGiftCardService');
 const VtuTransactionLifecycleService = require('./vtuTransactionLifecycleService');
 const logger = require('../utils/logger');
 
@@ -131,6 +132,8 @@ class VtuPollingService {
         };
       case 'pluginng':
         return this.fetchPluginngStatus(transaction);
+      case 'reloadly':
+        return this.fetchReloadlyStatus(transaction);
       default:
         return {
           state: 'pending',
@@ -261,6 +264,52 @@ class VtuPollingService {
       providerReference: result.orderId || reference,
       note: result.note || 'Provider reported a failed transaction',
       raw: result.raw,
+    };
+  }
+
+  static async fetchReloadlyStatus(transaction) {
+    const providerReference = transaction.service?.orderId || transaction.reference;
+    let rawResponse;
+    try {
+      rawResponse = await ReloadlyGiftCardService.getTransactionById(providerReference);
+    } catch (error) {
+      return {
+        state: 'pending',
+        provider: 'reloadly',
+        providerReference: String(providerReference),
+        note: error.message || 'Reloadly transaction is not yet queryable',
+        raw: null,
+      };
+    }
+    const raw = Array.isArray(rawResponse) ? rawResponse[0] || {} : rawResponse || {};
+    const status = String(raw.status || '').toUpperCase();
+
+    if (status === 'SUCCESSFUL') {
+      return {
+        state: 'successful',
+        provider: 'reloadly',
+        providerReference: String(raw.transactionId || providerReference),
+        note: 'Reloadly confirmed successful gift card delivery',
+        raw,
+      };
+    }
+
+    if (status === 'FAILED' || status === 'REFUNDED') {
+      return {
+        state: 'failed',
+        provider: 'reloadly',
+        providerReference: String(raw.transactionId || providerReference),
+        note: `Reloadly reported transaction as ${status || 'FAILED'}`,
+        raw,
+      };
+    }
+
+    return {
+      state: 'pending',
+      provider: 'reloadly',
+      providerReference: String(raw.transactionId || providerReference),
+      note: `Reloadly status is ${status || 'PENDING'}`,
+      raw,
     };
   }
 }

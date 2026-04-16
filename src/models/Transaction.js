@@ -37,6 +37,7 @@ const transactionSchema = new mongoose.Schema({
       'education_pin',
       'rrr_payment',
       'bulk_sms',
+      'gift_card',
     ],
   },
   category: {
@@ -76,6 +77,7 @@ const transactionSchema = new mongoose.Schema({
     plan: String,
     network: String,
     orderId: String,   
+    requestId: String,
     phoneNumber: String,
     meterNumber: String,
     smartCardNumber: String,
