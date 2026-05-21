@@ -87,6 +87,15 @@ const userSchema = new mongoose.Schema({
     default: 0,
   },
   lockUntil: Date,
+  pinAttempts: {
+    type: Number,
+    default: 0,
+    select: false,
+  },
+  pinLockedUntil: {
+    type: Date,
+    select: false,
+  },
   lastLogin: Date,
   lastLoginIp: String,
   lastLoginDevice: String,

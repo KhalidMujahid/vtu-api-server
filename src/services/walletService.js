@@ -1,10 +1,21 @@
 const Wallet = require('../models/Wallet');
 const Transaction = require('../models/Transaction');
-const MonnifyService = require('./monnifyService');
+const Settings = require('../models/Settings');
 const { AppError } = require('../middlewares/errorHandler');
 const logger = require('../utils/logger');
-const mongoose = require("mongoose");
 const axios = require("axios");
+
+async function getTransferFeeRate() {
+  try {
+    const setting = await Settings.findOne({ key: 'transfer_fee_rate' }).lean();
+    if (setting && typeof setting.value === 'number') {
+      return setting.value;
+    }
+  } catch (_) {
+    // fall through to default
+  }
+  return 0.02;
+}
 
 class WalletService {
     static async createWallet(user) {
@@ -287,7 +298,8 @@ class WalletService {
         throw new AppError('Insufficient balance', 400);
       }
       
-      const fee = Math.max(10, amount * 0.02);
+      const feeRate = await getTransferFeeRate();
+      const fee = Math.max(10, amount * feeRate);
       const totalDebit = amount + fee;
       
       if (senderWallet.balance < totalDebit) {
@@ -457,49 +469,14 @@ class WalletService {
     }
   }
 
-  static async refreshMonnifyAccounts(userId) {
-    try {
-      const wallet = await Wallet.findOne({ user: userId });
-      
-      if (!wallet) {
-        throw new AppError('Wallet not found', 404);
-      }
-      
-      if (!wallet.accountReference) {
-        throw new AppError('No Monnify account reference found', 400);
-      }
-      
-      const accountDetails = await MonnifyService.getAccountDetails(wallet.accountReference);
-      
-      if (accountDetails && accountDetails.accounts) {
-        wallet.monnifyAccounts = accountDetails.accounts.map((acc, index) => ({
-          bankName: acc.bankName,
-          accountNumber: acc.accountNumber,
-          accountName: acc.accountName,
-          bankCode: acc.bankCode,
-          isDefault: index === 0,
-          accountReference: wallet.accountReference,
-        }));
-        
-        await wallet.save();
-        logger.info(`Refreshed Monnify accounts for user: ${userId}`);
-      }
-      
-      return wallet;
-    } catch (error) {
-      logger.error('Error refreshing Monnify accounts:', error);
-      throw new AppError('Failed to refresh accounts', 500);
-    }
-  }
-
   static async getFundingAccounts(userId) {
     try {
       const wallet = await Wallet.findOne({ user: userId });
-      
+
       if (!wallet) {
         throw new AppError('Wallet not found', 404);
       }
-      
+
       return {
         accounts: wallet.accountNumbers,
         primaryAccount: wallet.primaryAccountNumber,

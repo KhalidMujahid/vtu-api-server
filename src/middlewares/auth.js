@@ -60,11 +60,17 @@ module.exports = {
         }
       }
 
-      user.lastLogin = new Date();
-      user.lastLoginIp = req.ip;
-      user.lastLoginDevice = req.get('user-agent');
-      await user.save();
-      
+      await User.updateOne(
+        { _id: user._id },
+        {
+          $set: {
+            lastLogin: new Date(),
+            lastLoginIp: req.ip,
+            lastLoginDevice: req.get('user-agent'),
+          },
+        }
+      );
+
       req.user = user;
       next();
     } catch (error) {
@@ -93,7 +99,10 @@ module.exports = {
   
   restrictTo: (...roles) => {
     return (req, res, next) => {
-      if (!roles.includes(req.user.role)) {
+      const userRole = req.user.role;
+      const userRoles = Array.isArray(req.user.roles) ? req.user.roles : [];
+      const hasRole = roles.includes(userRole) || userRoles.some((r) => roles.includes(r));
+      if (!hasRole) {
         return res.status(403).json({
           status: 'error',
           message: 'You do not have permission to perform this action.',
@@ -106,34 +115,50 @@ module.exports = {
   requireTransactionPin: async (req, res, next) => {
     try {
       const { transactionPin } = req.body;
-      
+
       if (!transactionPin) {
         return res.status(400).json({
           status: 'error',
           message: 'Transaction PIN is required.',
         });
       }
-      
-      const user = await User.findById(req.user.id).select('+transactionPin');
-      
+
+      const user = await User.findById(req.user.id).select('+transactionPin +pinAttempts +pinLockedUntil');
+
       if (!user.transactionPin) {
         return res.status(400).json({
           status: 'error',
           message: 'Please set your transaction PIN first.',
         });
       }
-      
+
+      if (user.pinLockedUntil && user.pinLockedUntil > Date.now()) {
+        return res.status(429).json({
+          status: 'error',
+          message: 'Too many incorrect PIN attempts. Please try again later.',
+        });
+      }
+
       const isPinValid = await user.compareTransactionPin(transactionPin);
-      
+
       if (!isPinValid) {
-        await user.incrementLoginAttempts();
-        
+        const attempts = (user.pinAttempts || 0) + 1;
+        const update = { pinAttempts: attempts };
+        if (attempts >= 5) {
+          update.pinLockedUntil = new Date(Date.now() + 30 * 60 * 1000); // 30-min PIN lockout
+        }
+        await User.updateOne({ _id: user._id }, { $set: update });
+
         return res.status(401).json({
           status: 'error',
           message: 'Invalid transaction PIN.',
         });
       }
-      
+
+      if (user.pinAttempts > 0) {
+        await User.updateOne({ _id: user._id }, { $set: { pinAttempts: 0 }, $unset: { pinLockedUntil: 1 } });
+      }
+
       next();
     } catch (error) {
       logger.error('Transaction PIN verification error:', error);

@@ -1,3 +1,5 @@
+const logger = require('../utils/logger');
+
 module.exports = {
   providerAliases: {
     clubconnect: 'clubkonnect',
@@ -256,13 +258,13 @@ module.exports = {
           const resolvedProviderId = this.normalizeProviderId(dbConfig.value[serviceType]);
           if (this.providers[resolvedProviderId]) {
             this.serviceRouting[serviceType] = resolvedProviderId;
-            console.log('getProviderIdForService - routing config fetched from DB:', serviceType, '=', resolvedProviderId);
+            logger.info(`getProviderIdForService - routing config fetched from DB: ${serviceType} = ${resolvedProviderId}`);
             return resolvedProviderId;
           }
         }
       }
     } catch (error) {
-      console.error('getProviderIdForService - DB fetch error:', error.message);
+      logger.error(`getProviderIdForService - DB fetch error: ${error.message}`);
     }
     
     const fallbackProviderId = this.normalizeProviderId(this.serviceRouting[serviceType] || this.defaults.primaryProvider);
@@ -326,15 +328,15 @@ module.exports = {
     try {
       VtuConfig = require('../models/VtuConfig');
       
-      console.log('Loading VTU config from database...');
+      logger.info('Loading VTU config from database...');
       
       if (!VtuConfig.db || !VtuConfig.db.collection) {
-        console.log('Database not ready yet, using default config');
+        logger.warn('Database not ready yet, using default config');
         return this.serviceRouting;
       }
       
       const dbConfig = await VtuConfig.findOne({ key: 'serviceRouting' }).lean();
-      console.log('Database query result:', dbConfig);
+      logger.debug('Database query result: %o', dbConfig);
       
       if (dbConfig && dbConfig.value) {
         const normalizedRouting = {};
@@ -345,15 +347,13 @@ module.exports = {
           }
         }
         this.serviceRouting = { ...this.serviceRouting, ...normalizedRouting };
-        console.log('✓ VTU service routing loaded from database:', JSON.stringify(normalizedRouting));
+        logger.info('VTU service routing loaded from database: %o', normalizedRouting);
       } else {
-        console.log('⚠ No VTU service routing found in database. Using default config.');
-        console.log('   Save a config using API Console to persist settings.');
+        logger.warn('No VTU service routing found in database. Using default config.');
       }
       return this.serviceRouting;
     } catch (error) {
-      console.error('Error loading VTU config from database:', error.message);
-      console.error(error.stack);
+      logger.error('Error loading VTU config from database:', error);
       return this.serviceRouting;
     }
   },
@@ -363,7 +363,7 @@ module.exports = {
       const VtuConfig = require('../models/VtuConfig');
       
       const normalizedRouting = this.updateServiceRouting(serviceRouting);
-      console.log('Saving VTU config to database:', normalizedRouting);
+      logger.info('Saving VTU config to database: %o', normalizedRouting);
       
       const result = await VtuConfig.findOneAndUpdate(
         { key: 'serviceRouting' },
@@ -377,11 +377,10 @@ module.exports = {
         { upsert: true, new: true }
       );
       
-      console.log('✓ VTU service routing saved to database:', result);
+      logger.info('VTU service routing saved to database: %o', result);
       return true;
     } catch (error) {
-      console.error('Error saving VTU config to database:', error.message);
-      console.error(error.stack);
+      logger.error('Error saving VTU config to database:', error);
       return false;
     }
   },
@@ -395,7 +394,7 @@ module.exports = {
 
 
   transformDataPlans(source, data) {
-    console.log('transformDataPlans - source:', source, 'data keys:', data ? Object.keys(data) : 'no data');
+    logger.debug(`transformDataPlans - source: ${source}, data keys: ${data ? Object.keys(data) : 'no data'}`);
     
     if (!data) return {};
     
@@ -422,10 +421,10 @@ module.exports = {
           return data;
       }
 
-      console.log('transformDataPlans - normalized keys:', Object.keys(normalizedData));
+      logger.debug(`transformDataPlans - normalized keys: ${Object.keys(normalizedData)}`);
       return normalizedData;
     } catch (error) {
-      console.error('Error transforming data plans:', error.message);
+      logger.error(`Error transforming data plans: ${error.message}`);
       return data;
     }
   },

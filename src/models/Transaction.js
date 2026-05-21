@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { v4: uuidv4 } = require('uuid');
 const ReferralEarningService = require('../services/referralEarningService');
 
 const transactionSchema = new mongoose.Schema({
@@ -183,15 +184,12 @@ transactionSchema.pre('save', function(next) {
 
 transactionSchema.post('save', async function(doc) {
   try {
-    const alreadyProcessed = Boolean(doc?.metadata?.referralLedgerProcessed);
-    if (doc.status !== 'successful' || alreadyProcessed) {
-      return;
-    }
+    if (doc.status !== 'successful') return;
 
-    await ReferralEarningService.processSuccessfulTransaction(doc);
-
-    await this.constructor.updateOne(
-      { _id: doc._id },
+    // Atomically claim referral processing — prevents double-award if save is called
+    // multiple times on the same document (e.g. status polling loop).
+    const claimed = await this.constructor.findOneAndUpdate(
+      { _id: doc._id, 'metadata.referralLedgerProcessed': { $ne: true } },
       {
         $set: {
           'metadata.referralLedgerProcessed': true,
@@ -199,15 +197,17 @@ transactionSchema.post('save', async function(doc) {
         },
       }
     );
+
+    if (!claimed) return;
+
+    await ReferralEarningService.processSuccessfulTransaction(doc);
   } catch (error) {
     console.error('Referral ledger post-save hook failed:', error.message);
   }
 });
 
 transactionSchema.statics.generateReference = function() {
-  const timestamp = Date.now();
-  const random = Math.floor(Math.random() * 10000);
-  return `YAREEMA${timestamp}${random}`;
+  return `YAREEMA${uuidv4().replace(/-/g, '').substring(0, 16).toUpperCase()}`;
 };
 
 const Transaction = mongoose.model('Transaction', transactionSchema);
