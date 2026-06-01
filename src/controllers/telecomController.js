@@ -13,6 +13,7 @@ const PluginngService = require('../services/pluginngService');
 const AlrahuzDataService = require('../services/alrahuzDataService');
 const ArewaService = require('../services/arewaService');
 const ReloadlyGiftCardService = require('../services/reloadlyGiftCardService');
+const ReloadlyAirtimeService = require('../services/reloadlyAirtimeService');
 const AlrahuzDataReconciliationService = require('../services/alrahuzDataReconciliationService');
 const ProviderPurchaseGuardService = require('../services/providerPurchaseGuardService');
 const ProviderMarkupService = require('../services/providerMarkupService');
@@ -4212,5 +4213,183 @@ exports.purchasePluginngAirtime = async (req, res, next) => {
     }
   } catch (error) {
     next(error);
+  }
+};
+
+// ─── International Airtime Top-Up (Reloadly) ─────────────────────────────────
+
+exports.getInternationalCountries = async (req, res, next) => {
+  try {
+    const countries = await ReloadlyAirtimeService.getCountries();
+    return res.status(200).json({
+      status: 'success',
+      provider: 'reloadly',
+      data: countries,
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+exports.getInternationalOperators = async (req, res, next) => {
+  try {
+    const { countryCode } = req.params;
+    if (!countryCode) return next(new AppError('countryCode is required', 400));
+    const { page = 1, size = 100 } = req.query;
+    const operators = await ReloadlyAirtimeService.getOperators(countryCode, { page, size });
+    return res.status(200).json({
+      status: 'success',
+      provider: 'reloadly',
+      countryCode: countryCode.toUpperCase(),
+      data: operators,
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+exports.purchaseInternationalAirtime = async (req, res, next) => {
+  try {
+    const {
+      operatorId, amount, useLocalAmount = false,
+      recipientCountryCode, recipientNumber,
+      senderCountryCode, senderNumber,
+      amountNgn, transactionPin,
+    } = req.body;
+
+    if (!operatorId || !amount || !recipientCountryCode || !recipientNumber) {
+      return next(new AppError('operatorId, amount, recipientCountryCode, and recipientNumber are required', 400));
+    }
+
+    const user = req.user;
+    const wallet = await Wallet.findOne({ user: user._id });
+    if (!wallet) return next(new AppError('Wallet not found', 404));
+
+    const chargedAmount = Number(amountNgn);
+    if (!chargedAmount || chargedAmount <= 0) {
+      return next(new AppError('amountNgn (NGN equivalent to charge) is required', 400));
+    }
+
+    if (wallet.balance < chargedAmount) {
+      return next(new AppError('Insufficient wallet balance', 400));
+    }
+
+    await wallet.debit(chargedAmount, `International airtime: ${recipientCountryCode} ${recipientNumber}`);
+
+    const reference = `INTL-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+    const transaction = await Transaction.create({
+      reference,
+      user: user._id,
+      type: 'airtime_recharge',
+      category: 'telecom',
+      amount: chargedAmount,
+      totalAmount: chargedAmount,
+      previousBalance: wallet.balance + chargedAmount,
+      newBalance: wallet.balance,
+      status: 'pending',
+      description: `International airtime for +${recipientCountryCode} ${recipientNumber}`,
+      service: {
+        provider: 'reloadly',
+        network: 'international',
+        phoneNumber: recipientNumber,
+      },
+      metadata: {
+        operatorId,
+        amount: Number(amount),
+        useLocalAmount,
+        recipientCountryCode,
+        chargedNgn: chargedAmount,
+      },
+      statusHistory: [{ status: 'pending', note: 'International airtime initiated', timestamp: new Date() }],
+    });
+
+    try {
+      const apiResponse = await ReloadlyAirtimeService.sendTopup({
+        operatorId,
+        amount,
+        useLocalAmount,
+        recipientCountryCode,
+        recipientNumber,
+        customIdentifier: reference,
+        senderCountryCode,
+        senderNumber,
+      });
+
+      const success = String(apiResponse?.status || '').toUpperCase() === 'SUCCESSFUL';
+      transaction.status = success ? 'successful' : apiResponse?.status === 'PROCESSING' ? 'pending' : 'failed';
+      transaction.service.orderId = String(apiResponse?.transactionId || '');
+      transaction.statusHistory.push({
+        status: transaction.status,
+        note: `Reloadly: ${apiResponse?.status || 'unknown'} — delivered ${apiResponse?.deliveredAmount} ${apiResponse?.deliveredAmountCurrencyCode || ''}`,
+        timestamp: new Date(),
+      });
+      if (success) transaction.completedAt = new Date();
+
+      if (transaction.status === 'failed') {
+        await refundTransactionToWallet(transaction, 'International airtime refund', chargedAmount);
+      }
+
+      await transaction.save();
+
+      return res.status(success ? 200 : 202).json({
+        status: 'success',
+        message: success ? 'International airtime sent successfully' : 'Top-up is processing',
+        data: {
+          reference,
+          transactionId: apiResponse?.transactionId,
+          operatorName: apiResponse?.operatorName,
+          recipientPhone: apiResponse?.recipientPhone,
+          requestedAmount: apiResponse?.requestedAmount,
+          requestedCurrency: apiResponse?.requestedAmountCurrencyCode,
+          deliveredAmount: apiResponse?.deliveredAmount,
+          deliveredCurrency: apiResponse?.deliveredAmountCurrencyCode,
+          status: apiResponse?.status,
+          chargedNgn: chargedAmount,
+          discount: apiResponse?.discount,
+          balanceInfo: apiResponse?.balanceInfo,
+          pinDetail: apiResponse?.pinDetail || null,
+          provider: 'reloadly',
+        },
+      });
+    } catch (error) {
+      await refundTransactionToWallet(transaction, 'International airtime refund', chargedAmount);
+      transaction.status = 'failed';
+      transaction.failureReason = error.message;
+      transaction.statusHistory.push({ status: 'failed', note: error.message, timestamp: new Date() });
+      await transaction.save();
+      return next(new AppError('International airtime purchase failed. Please try again.', 500));
+    }
+  } catch (error) {
+    return next(error);
+  }
+};
+
+exports.getInternationalAirtimeTransactions = async (req, res, next) => {
+  try {
+    const { page = 0, size = 20, startDate, endDate } = req.query;
+    const data = await ReloadlyAirtimeService.getTransactions({ page, size, startDate, endDate });
+    return res.status(200).json({ status: 'success', provider: 'reloadly', data });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+exports.getInternationalAirtimeTransactionByRef = async (req, res, next) => {
+  try {
+    const { reference } = req.params;
+    const data = await ReloadlyAirtimeService.getTransactionByReference(reference);
+    if (!data) return next(new AppError('Transaction not found', 404));
+    return res.status(200).json({ status: 'success', provider: 'reloadly', data });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+exports.getReloadlyBalance = async (req, res, next) => {
+  try {
+    const data = await ReloadlyAirtimeService.getBalance();
+    return res.status(200).json({ status: 'success', provider: 'reloadly', data });
+  } catch (error) {
+    return next(error);
   }
 };

@@ -1069,6 +1069,34 @@
           "name": "Internet Services",
           "item": [
             {
+              "name": "Get Spectranet Packages",
+              "response": [],
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/telecom/spectranet/packages",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "telecom",
+                    "spectranet",
+                    "packages"
+                  ]
+                },
+                "description": "Fetch all available Spectranet data bundle plans from ClubKonnect. Use the planId from the response as the dataPlan field when purchasing."
+              }
+            },
+            {
               "name": "Spectranet — Purchase",
               "request": {
                 "method": "POST",
@@ -1103,6 +1131,34 @@
               "response": []
             },
             {
+              "name": "Get Smile Packages",
+              "response": [],
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/telecom/smile/packages",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "telecom",
+                    "smile",
+                    "packages"
+                  ]
+                },
+                "description": "Fetch all available Smile data bundle plans from ClubKonnect. Use the planId from the response as the dataPlan field when purchasing."
+              }
+            },
+            {
               "name": "Smile — Purchase",
               "request": {
                 "method": "POST",
@@ -1135,6 +1191,215 @@
                 }
               },
               "response": []
+            }
+          ]
+        },
+        {
+          "name": "International Airtime (Reloadly)",
+          "item": [
+            {
+              "name": "Get Supported Countries",
+              "response": [],
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/telecom/international/countries",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "telecom",
+                    "international",
+                    "countries"
+                  ]
+                },
+                "description": "List all 170+ countries supported for international airtime top-up. Returns isoName, currencyCode, callingCodes."
+              }
+            },
+            {
+              "name": "Get Operators by Country",
+              "response": [],
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/telecom/international/operators/:countryCode?page=1&size=100",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "telecom",
+                    "international",
+                    "operators",
+                    ":countryCode"
+                  ]
+                },
+                "description": "Get all mobile operators for a country. Use the returned operatorId when sending a top-up. countryCode = ISO 2-letter code (e.g. GH, US, GB, KE, ZA)."
+              }
+            },
+            {
+              "name": "Send International Top-Up",
+              "response": [],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"operatorId\": 341,\n  \"amount\": 5,\n  \"useLocalAmount\": false,\n  \"recipientCountryCode\": \"GH\",\n  \"recipientNumber\": \"0241234567\",\n  \"amountNgn\": 8500,\n  \"transactionPin\": \"1234\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/api/v1/telecom/international/topup",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "telecom",
+                    "international",
+                    "topup"
+                  ]
+                },
+                "description": "Send airtime to any international number.\n\n- operatorId: from Get Operators endpoint\n- amount: in USD (useLocalAmount=false) or local currency (useLocalAmount=true)\n- recipientNumber: WITHOUT country code prefix (e.g. \"0241234567\" not \"+2330241234567\")\n- amountNgn: NGN amount to charge from wallet (you calculate based on FX rate shown in operator details)\n- useLocalAmount=true lets you send in the recipient country's currency"
+              }
+            },
+            {
+              "name": "List My Transactions",
+              "response": [],
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/telecom/international/transactions?page=0&size=20",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "telecom",
+                    "international",
+                    "transactions"
+                  ]
+                },
+                "description": "List international airtime transactions. Supports date range filtering."
+              }
+            },
+            {
+              "name": "Get Transaction by Reference",
+              "response": [],
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/telecom/international/transactions/:reference",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "telecom",
+                    "international",
+                    "transactions",
+                    ":reference"
+                  ]
+                },
+                "description": "Look up an international airtime transaction by your customIdentifier (reference)"
+              }
+            },
+            {
+              "name": "Get Reloadly Balance (Admin)",
+              "response": [],
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{admin_token}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/telecom/international/balance",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "telecom",
+                    "international",
+                    "balance"
+                  ]
+                },
+                "description": "Check your Reloadly account balance."
+              }
             }
           ]
         },
