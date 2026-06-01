@@ -39,11 +39,13 @@ const transactionSchema = new mongoose.Schema({
       'rrr_payment',
       'bulk_sms',
       'gift_card',
+      'flight_booking',
+      'flight_cancellation',
     ],
   },
   category: {
     type: String,
-    enum: ['telecom', 'bills', 'education', 'transfer', 'funding'],
+    enum: ['telecom', 'bills', 'education', 'transfer', 'funding', 'travel', 'giftcards'],
     required: true,
   },
   

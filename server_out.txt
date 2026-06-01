@@ -1,0 +1,36 @@
+SRV DNS addresses: [
+  {
+    name: 'cluster0-shard-00-00.idmj2.mongodb.net',
+    port: 27017,
+    priority: 0,
+    weight: 0,
+    type: 'SRV'
+  },
+  {
+    name: 'cluster0-shard-00-01.idmj2.mongodb.net',
+    port: 27017,
+    priority: 0,
+    weight: 0,
+    type: 'SRV'
+  },
+  {
+    name: 'cluster0-shard-00-02.idmj2.mongodb.net',
+    port: 27017,
+    priority: 0,
+    weight: 0,
+    type: 'SRV'
+  }
+]
+DB connected successfully
+VTU Providers initialized
+Initializing VTU config...
+VTU config initialized, current routing: {
+  data: 'alrahuzdata',
+  airtime: 'pluginng',
+  airtimepin: 'clubkonnect',
+  education: 'clubkonnect',
+  electricity: 'pluginng',
+  cable: 'clubkonnect',
+  airtime2cash: 'clubkonnect'
+}
+API running on port 1000

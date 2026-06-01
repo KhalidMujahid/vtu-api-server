@@ -20,6 +20,8 @@ const reportRoutes = require('./routes/reportRoutes');
 const referralRoutes = require('./routes/referralRoutes');
 const vtuConsoleRoutes = require('./routes/vtuConsoleRoutes');
 const smsRoutes = require('./routes/smsRoutes');
+const giftCardRoutes = require('./routes/giftCardRoutes');
+const flightRoutes = require('./routes/flightRoutes');
 
 const { errorHandler } = require('./middlewares/errorHandler');
 const logger = require('./utils/logger');
@@ -59,6 +61,8 @@ app.use("/api/v1/reports", reportRoutes);
 app.use("/api/v1/referral", referralRoutes);
 app.use("/api/v1/console", vtuConsoleRoutes);
 app.use("/api/v1/sms", smsRoutes);
+app.use("/api/v1/giftcards", giftCardRoutes);
+app.use("/api/v1/flights", flightRoutes);
 
 app.get('/api/v1/health', (req, res) => {
   res.status(200).json({

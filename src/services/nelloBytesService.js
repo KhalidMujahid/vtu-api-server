@@ -11,6 +11,13 @@ class NelloBytesService {
     timeout: 45000,
   };
 
+  static clubkonnectConfig = {
+    baseUrl: 'https://www.clubkonnect.com',
+    userId: process.env.CLUBKONNECT_USER_ID || process.env.NELLO_USER_ID || 'CK101269269',
+    apiKey: process.env.CLUBKONNECT_API_KEY || process.env.NELLO_API_KEY || '',
+    timeout: 45000,
+  };
+
   static networkCodes = {
     mtn: '01',
     glo: '02',
@@ -311,6 +318,106 @@ class NelloBytesService {
 
   
 
+
+  // ── ClubKonnect direct request (same auth pattern, different base URL) ────────
+  static async clubkonnectRequest(endpoint, params = {}) {
+    const fullParams = {
+      UserID: this.clubkonnectConfig.userId,
+      APIKey: this.clubkonnectConfig.apiKey,
+      ...params,
+    };
+    try {
+      const url = `${this.clubkonnectConfig.baseUrl}${endpoint}`;
+      logger.info(`ClubKonnect API Request: ${endpoint}`, { params: fullParams });
+      const response = await axios.get(url, {
+        params: fullParams,
+        timeout: this.clubkonnectConfig.timeout,
+      });
+      const payload = this.normalizeResponsePayload(response.data);
+      logger.info(`ClubKonnect API Response: ${endpoint}`, { response: payload });
+      return payload;
+    } catch (error) {
+      logger.error(`ClubKonnect API Error: ${endpoint}`, {
+        message: error.message,
+        response: error.response?.data,
+      });
+      throw new AppError(`ClubKonnect API error: ${error.message}`, error.response?.status || 500);
+    }
+  }
+
+  // ── ClubKonnect: Smile Data ────────────────────────────────────────────────
+
+  static async getClubKonnectSmilePackages() {
+    const response = await this.clubkonnectRequest('/APIParaGetSmileV1.asp');
+    return {
+      success: true,
+      packages: this.parseSmilePackagesResponse(response),
+      response,
+    };
+  }
+
+  static async verifyClubKonnectSmileAccount({ mobileNumber }) {
+    const response = await this.clubkonnectRequest('/APIVerifySmileV1.asp', {
+      MobileNumber: this.normalizeMobileNumber(mobileNumber),
+    });
+    const customerName = String(response?.customer_name || '').trim();
+    return {
+      valid: Boolean(customerName && customerName.toUpperCase() !== 'INVALID_ACCOUNTNO'),
+      customerName: customerName || null,
+      response,
+    };
+  }
+
+  static async purchaseClubKonnectSmileData({ dataPlan, mobileNumber, requestId = null, callBackURL = '' }) {
+    const resolvedRequestId = requestId || uuidv4().substring(0, 12).toUpperCase();
+    const response = await this.clubkonnectRequest('/APIGetSmileV1.asp', {
+      MobileNumber: this.normalizeMobileNumber(mobileNumber),
+      DataPlan: dataPlan,
+      RequestID: resolvedRequestId,
+      CallBackURL: callBackURL,
+    });
+    const statusCode = String(response?.statuscode || '');
+    const status = String(response?.status || response?.orderstatus || '').toUpperCase();
+    return {
+      success: statusCode === '100' || status === 'ORDER_RECEIVED' || status === 'ORDER_ONHOLD',
+      status: response?.status || response?.orderstatus,
+      statusCode,
+      orderId: response?.orderid || response?.orderId || null,
+      requestId: response?.requestid || resolvedRequestId,
+      response,
+    };
+  }
+
+  // ── ClubKonnect: Spectranet Data ───────────────────────────────────────────
+
+  static async getClubKonnectSpectranetPackages() {
+    const response = await this.clubkonnectRequest('/APIParaGetSpectranetV1.asp');
+    return {
+      success: true,
+      packages: this.parseSpectranetPackagesResponse(response),
+      response,
+    };
+  }
+
+  static async purchaseClubKonnectSpectranetData({ dataPlan, mobileNumber, requestId = null, callBackURL = '' }) {
+    const resolvedRequestId = requestId || uuidv4().substring(0, 12).toUpperCase();
+    const response = await this.clubkonnectRequest('/APIGetSpectranetV1.asp', {
+      MobileNumber: this.normalizeMobileNumber(mobileNumber),
+      DataPlan: dataPlan,
+      RequestID: resolvedRequestId,
+      CallBackURL: callBackURL,
+    });
+    const statusCode = String(response?.statuscode || '');
+    const status = String(response?.status || response?.orderstatus || '').toUpperCase();
+    return {
+      success: statusCode === '100' || status === 'ORDER_RECEIVED' || status === 'ORDER_ONHOLD',
+      status: response?.status || response?.orderstatus,
+      statusCode,
+      orderId: response?.orderid || response?.orderId || null,
+      requestId: response?.requestid || resolvedRequestId,
+      response,
+    };
+  }
 
   static async getWalletBalance() {
     const endpoint = '/APIWalletBalanceV1.asp';

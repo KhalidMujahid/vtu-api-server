@@ -334,15 +334,15 @@ userSchema.virtual('fullName').get(function() {
 });
 
 userSchema.virtual('isAgent').get(function() {
-  return this.role === 'agent' || this.roles.includes('agent');
+  return this.role === 'agent' || (Array.isArray(this.roles) && this.roles.includes('agent'));
 });
 
 userSchema.virtual('isClient').get(function() {
-  return this.role === 'user' || this.roles.includes('client');
+  return this.role === 'user' || (Array.isArray(this.roles) && this.roles.includes('client'));
 });
 
 userSchema.virtual('isApprovedAgent').get(function() {
-  return (this.role === 'agent' || this.roles.includes('agent')) && this.isApproved;
+  return (this.role === 'agent' || (Array.isArray(this.roles) && this.roles.includes('agent'))) && this.isApproved;
 });
 
 

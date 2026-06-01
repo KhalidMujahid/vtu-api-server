@@ -1,0 +1,85 @@
+IMPORTANT! Eviction policy is allkeys-lru. It should be "noeviction"
+IMPORTANT! Eviction policy is allkeys-lru. It should be "noeviction"
+IMPORTANT! Eviction policy is allkeys-lru. It should be "noeviction"
+IMPORTANT! Eviction policy is allkeys-lru. It should be "noeviction"
+IMPORTANT! Eviction policy is allkeys-lru. It should be "noeviction"
+Failed to log admin action: Error: AdminLog validation failed: action: `register` is not a valid enum value for path `action`.
+    at ValidationError.inspect (C:\Users\Khalid\Documents\vtu-api-server-main\node_modules\mongoose\lib\error\validation.js:50:26)
+    at formatValue (node:internal/util/inspect:897:19)
+    at inspect (node:internal/util/inspect:409:10)
+    at formatWithOptionsInternal (node:internal/util/inspect:2645:40)
+    at formatWithOptions (node:internal/util/inspect:2507:10)
+    at console.value (node:internal/console/constructor:377:14)
+    at console.error (node:internal/console/constructor:444:61)
+    at adminLogSchema.statics.log (C:\Users\Khalid\Documents\vtu-api-server-main\src\models\AdminLog.js:83:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async register (C:\Users\Khalid\Documents\vtu-api-server-main\src\controllers\agentController.js:1192:11) {
+  errors: {
+    action: ValidatorError: `register` is not a valid enum value for path `action`.
+        at validate (C:\Users\Khalid\Documents\vtu-api-server-main\node_modules\mongoose\lib\schematype.js:1365:13)
+        at SchemaType.doValidate (C:\Users\Khalid\Documents\vtu-api-server-main\node_modules\mongoose\lib\schematype.js:1349:7)
+        at C:\Users\Khalid\Documents\vtu-api-server-main\node_modules\mongoose\lib\document.js:3006:18
+        at process.processTicksAndRejections (node:internal/process/task_queues:85:11) {
+      properties: [Object],
+      kind: 'enum',
+      path: 'action',
+      value: 'register',
+      reason: undefined,
+      Symbol(mongoose:validatorError): true
+    }
+  },
+  _message: 'AdminLog validation failed'
+}
+Failed to log admin action: Error: AdminLog validation failed: action: `approve_agent` is not a valid enum value for path `action`.
+    at ValidationError.inspect (C:\Users\Khalid\Documents\vtu-api-server-main\node_modules\mongoose\lib\error\validation.js:50:26)
+    at formatValue (node:internal/util/inspect:897:19)
+    at inspect (node:internal/util/inspect:409:10)
+    at formatWithOptionsInternal (node:internal/util/inspect:2645:40)
+    at formatWithOptions (node:internal/util/inspect:2507:10)
+    at console.value (node:internal/console/constructor:377:14)
+    at console.error (node:internal/console/constructor:444:61)
+    at adminLogSchema.statics.log (C:\Users\Khalid\Documents\vtu-api-server-main\src\models\AdminLog.js:83:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async approveAgent (C:\Users\Khalid\Documents\vtu-api-server-main\src\controllers\adminController.js:925:7) {
+  errors: {
+    action: ValidatorError: `approve_agent` is not a valid enum value for path `action`.
+        at validate (C:\Users\Khalid\Documents\vtu-api-server-main\node_modules\mongoose\lib\schematype.js:1365:13)
+        at SchemaType.doValidate (C:\Users\Khalid\Documents\vtu-api-server-main\node_modules\mongoose\lib\schematype.js:1349:7)
+        at C:\Users\Khalid\Documents\vtu-api-server-main\node_modules\mongoose\lib\document.js:3006:18
+        at process.processTicksAndRejections (node:internal/process/task_queues:85:11) {
+      properties: [Object],
+      kind: 'enum',
+      path: 'action',
+      value: 'approve_agent',
+      reason: undefined,
+      Symbol(mongoose:validatorError): true
+    }
+  },
+  _message: 'AdminLog validation failed'
+}
+Failed to log admin action: Error: AdminLog validation failed: action: `approve_agent` is not a valid enum value for path `action`.
+    at ValidationError.inspect (C:\Users\Khalid\Documents\vtu-api-server-main\node_modules\mongoose\lib\error\validation.js:50:26)
+    at formatValue (node:internal/util/inspect:897:19)
+    at inspect (node:internal/util/inspect:409:10)
+    at formatWithOptionsInternal (node:internal/util/inspect:2645:40)
+    at formatWithOptions (node:internal/util/inspect:2507:10)
+    at console.value (node:internal/console/constructor:377:14)
+    at console.error (node:internal/console/constructor:444:61)
+    at adminLogSchema.statics.log (C:\Users\Khalid\Documents\vtu-api-server-main\src\models\AdminLog.js:83:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5) {
+  errors: {
+    action: ValidatorError: `approve_agent` is not a valid enum value for path `action`.
+        at validate (C:\Users\Khalid\Documents\vtu-api-server-main\node_modules\mongoose\lib\schematype.js:1365:13)
+        at SchemaType.doValidate (C:\Users\Khalid\Documents\vtu-api-server-main\node_modules\mongoose\lib\schematype.js:1349:7)
+        at C:\Users\Khalid\Documents\vtu-api-server-main\node_modules\mongoose\lib\document.js:3006:18
+        at process.processTicksAndRejections (node:internal/process/task_queues:85:11) {
+      properties: [Object],
+      kind: 'enum',
+      path: 'action',
+      value: 'approve_agent',
+      reason: undefined,
+      Symbol(mongoose:validatorError): true
+    }
+  },
+  _message: 'AdminLog validation failed'
+}
