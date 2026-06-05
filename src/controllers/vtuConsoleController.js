@@ -117,6 +117,44 @@ function extractPhoneNumberValue(payload) {
   );
 }
 
+function redactSensitiveFields(value) {
+  if (Array.isArray(value)) {
+    return value.map(redactSensitiveFields);
+  }
+
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+
+  const sensitiveKeys = new Set([
+    'apikey',
+    'api_key',
+    'api-secret',
+    'api_secret',
+    'apisecret',
+    'clientsecret',
+    'client_secret',
+    'secret',
+    'password',
+    'token',
+    'accesstoken',
+    'access_token',
+    'authorization',
+    'auth',
+    'bearer',
+  ]);
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, nestedValue]) => {
+      const normalizedKey = String(key).replace(/[^a-z0-9]/gi, '').toLowerCase();
+      if (sensitiveKeys.has(normalizedKey)) {
+        return [key, '[REDACTED]'];
+      }
+      return [key, redactSensitiveFields(nestedValue)];
+    })
+  );
+}
+
 function normalizeBalanceRecord(record = {}) {
   return {
     providerId: record.providerId || record.id || null,
@@ -126,15 +164,15 @@ function normalizeBalanceRecord(record = {}) {
     currency: record.currency || 'NGN',
     accountId: record.accountId ?? extractAccountIdValue(record.raw || record),
     phoneNumber: record.phoneNumber ?? extractPhoneNumberValue(record.raw || record),
-    raw: record.raw ?? null,
+    raw: redactSensitiveFields(record.raw ?? null),
     lastUpdated: record.lastUpdated || new Date(),
   };
 }
 
 async function fetchConsoleBalance({
-  providerId,
-  providerName,
-  category,
+    providerId,
+    providerName,
+    category,
   service,
   sourceProviderId,
   sourceProviderName,
@@ -154,7 +192,7 @@ async function fetchConsoleBalance({
       available,
       balance,
       currency: extractCurrencyValue(payload),
-      raw: payload?.raw || payload,
+      raw: redactSensitiveFields(payload?.raw || payload),
       lastUpdated: payload?.lastUpdated || new Date(),
     });
   } catch (error) {
@@ -164,7 +202,7 @@ async function fetchConsoleBalance({
       available: false,
       balance: null,
       currency: 'NGN',
-      raw: { message: error.message || fallbackMessage || 'Failed to fetch balance' },
+      raw: redactSensitiveFields({ message: error.message || fallbackMessage || 'Failed to fetch balance' }),
       lastUpdated: new Date(),
     });
   }
