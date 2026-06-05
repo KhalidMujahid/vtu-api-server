@@ -81,11 +81,17 @@ class ArewaService {
   static async getBalance() {
     const details = await this.getUserDetails();
     const balance = this.extractBalance(details);
+    const accountId = details?.id || details?.data?.id || null;
+    const phoneNumber = details?.phoneno || details?.phoneNumber || details?.data?.phoneno || details?.data?.phoneNumber || null;
 
     return {
+      providerId: 'arewa',
+      providerName: 'Arewa',
       available: balance !== null,
       balance,
       currency: details?.currency || details?.data?.currency || 'NGN',
+      accountId,
+      phoneNumber,
       raw: details,
       lastUpdated: new Date(),
     };

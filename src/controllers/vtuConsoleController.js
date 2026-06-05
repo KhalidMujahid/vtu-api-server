@@ -93,6 +93,30 @@ function extractCurrencyValue(payload, fallbackCurrency = 'NGN') {
   );
 }
 
+function extractAccountIdValue(payload) {
+  return (
+    payload?.accountId ||
+    payload?.id ||
+    payload?.data?.accountId ||
+    payload?.data?.id ||
+    payload?.data?.walletId ||
+    payload?.walletId ||
+    null
+  );
+}
+
+function extractPhoneNumberValue(payload) {
+  return (
+    payload?.phoneNumber ||
+    payload?.phoneno ||
+    payload?.data?.phoneNumber ||
+    payload?.data?.phoneno ||
+    payload?.data?.phone_number ||
+    payload?.phone_number ||
+    null
+  );
+}
+
 async function fetchConsoleBalance({
   providerId,
   providerName,
@@ -120,6 +144,9 @@ async function fetchConsoleBalance({
       available,
       balance,
       currency: extractCurrencyValue(payload),
+      accountId: extractAccountIdValue(payload),
+      phoneNumber: extractPhoneNumberValue(payload),
+      raw: payload?.raw || payload,
       message: payload?.message || (available ? null : fallbackMessage || 'Balance not available'),
       lastUpdated: payload?.lastUpdated || new Date(),
     };
@@ -134,6 +161,9 @@ async function fetchConsoleBalance({
       available: false,
       balance: null,
       currency: 'NGN',
+      accountId: null,
+      phoneNumber: null,
+      raw: null,
       message: error.message || fallbackMessage || 'Failed to fetch balance',
       lastUpdated: new Date(),
     };
