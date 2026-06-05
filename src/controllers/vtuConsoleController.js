@@ -117,6 +117,20 @@ function extractPhoneNumberValue(payload) {
   );
 }
 
+function normalizeBalanceRecord(record = {}) {
+  return {
+    providerId: record.providerId || record.id || null,
+    providerName: record.providerName || record.displayName || record.name || null,
+    available: Boolean(record.available),
+    balance: record.balance === undefined ? null : record.balance,
+    currency: record.currency || 'NGN',
+    accountId: record.accountId ?? extractAccountIdValue(record.raw || record),
+    phoneNumber: record.phoneNumber ?? extractPhoneNumberValue(record.raw || record),
+    raw: record.raw ?? null,
+    lastUpdated: record.lastUpdated || new Date(),
+  };
+}
+
 async function fetchConsoleBalance({
   providerId,
   providerName,
@@ -134,39 +148,25 @@ async function fetchConsoleBalance({
       : extractBalanceValue(payload);
     const available = Boolean(payload?.available ?? (balance !== null));
 
-    return {
+    return normalizeBalanceRecord({
       providerId,
       providerName,
-      category,
-      service,
-      sourceProviderId,
-      sourceProviderName,
       available,
       balance,
       currency: extractCurrencyValue(payload),
-      accountId: extractAccountIdValue(payload),
-      phoneNumber: extractPhoneNumberValue(payload),
       raw: payload?.raw || payload,
-      message: payload?.message || (available ? null : fallbackMessage || 'Balance not available'),
       lastUpdated: payload?.lastUpdated || new Date(),
-    };
+    });
   } catch (error) {
-    return {
+    return normalizeBalanceRecord({
       providerId,
       providerName,
-      category,
-      service,
-      sourceProviderId,
-      sourceProviderName,
       available: false,
       balance: null,
       currency: 'NGN',
-      accountId: null,
-      phoneNumber: null,
-      raw: null,
-      message: error.message || fallbackMessage || 'Failed to fetch balance',
+      raw: { message: error.message || fallbackMessage || 'Failed to fetch balance' },
       lastUpdated: new Date(),
-    };
+    });
   }
 }
 
@@ -343,11 +343,13 @@ exports.getProviderBalances = async (req, res, next) => {
       VtuProviderService.getAllProviderBalances(),
       getConsoleServiceBalances(),
     ]);
+
+    const balances = [...providerBalances, ...consoleBalances].map(normalizeBalanceRecord);
     
     res.status(200).json({
       status: 'success',
       data: {
-        balances: [...providerBalances, ...consoleBalances],
+        balances,
         timestamp: new Date(),
       }
     });
@@ -366,7 +368,7 @@ exports.getProviderBalance = async (req, res, next) => {
     
     res.status(200).json({
       status: 'success',
-      data: balance
+      data: normalizeBalanceRecord(balance)
     });
   } catch (error) {
     next(error);

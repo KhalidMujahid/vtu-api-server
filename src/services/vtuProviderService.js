@@ -472,7 +472,9 @@ class VtuProviderService {
             available: true,
             balance: primaryBalance,
             currency: 'NGN',
-            breakdown: wallets,
+            accountId: result?.accountId || result?.id || null,
+            phoneNumber: result?.phoneNumber || result?.phoneno || null,
+            raw: result?.raw || result,
             lastUpdated: new Date(),
           };
         }
@@ -485,6 +487,8 @@ class VtuProviderService {
             available: true,
             balance: Number(result?.balance || 0),
             currency: result?.currency || 'NGN',
+            accountId: result?.accountId || result?.id || null,
+            phoneNumber: result?.phoneNumber || result?.phoneno || null,
             raw: result,
             lastUpdated: new Date(),
           };
@@ -514,6 +518,8 @@ class VtuProviderService {
             available: true,
             balance: Number(result?.balance || 0),
             currency: result?.currency || 'NGN',
+            accountId: result?.accountId || result?.id || null,
+            phoneNumber: result?.phoneNumber || result?.phoneno || null,
             raw: result?.raw || result,
             lastUpdated: new Date(),
           };
@@ -526,6 +532,8 @@ class VtuProviderService {
             available: true,
             balance: Number(result?.balance || 0),
             currency: result?.currency || 'NGN',
+            accountId: result?.accountId || result?.id || null,
+            phoneNumber: result?.phoneNumber || result?.phoneno || null,
             raw: result?.raw || result,
             lastUpdated: new Date(),
           };
@@ -550,7 +558,9 @@ class VtuProviderService {
         available: false,
         balance: null,
         currency: 'NGN',
-        message: error.message || 'Failed to fetch provider balance',
+        accountId: null,
+        phoneNumber: null,
+        raw: { message: error.message || 'Failed to fetch provider balance' },
         lastUpdated: new Date(),
       };
     }
@@ -646,4 +656,3 @@ class VtuProviderService {
 }
 
 module.exports = VtuProviderService;
-
