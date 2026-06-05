@@ -3,6 +3,8 @@ const VtuProviderService = require('../services/vtuProviderService');
 const ProviderMarkupService = require('../services/providerMarkupService');
 const ProviderStatus = require('../models/ProviderStatus');
 const Transaction = require('../models/Transaction');
+const PrestmitService = require('../services/prestmitService');
+const ArewaService = require('../services/arewaService');
 const logger = require('../utils/logger');
 const vtuConfig = require('../config/vtuProviders');
 
@@ -30,6 +32,159 @@ function normalizeProviderId(providerId = '') {
     return vtuConfig.normalizeProviderId(providerId);
   }
   return String(providerId || '').trim().toLowerCase();
+}
+
+function extractBalanceValue(payload) {
+  if (payload === null || payload === undefined) {
+    return null;
+  }
+
+  if (typeof payload === 'number' && Number.isFinite(payload)) {
+    return payload;
+  }
+
+  if (typeof payload === 'string' && payload.trim() !== '') {
+    const numericValue = Number(payload);
+    return Number.isFinite(numericValue) ? numericValue : null;
+  }
+
+  const candidates = [
+    payload?.balance,
+    payload?.available_balance,
+    payload?.availableBalance,
+    payload?.wallet_balance,
+    payload?.walletBalance,
+    payload?.current_balance,
+    payload?.currentBalance,
+    payload?.credit_balance,
+    payload?.creditBalance,
+    payload?.data?.balance,
+    payload?.data?.available_balance,
+    payload?.data?.availableBalance,
+    payload?.data?.wallet_balance,
+    payload?.data?.walletBalance,
+    payload?.data?.current_balance,
+    payload?.data?.currentBalance,
+    payload?.data?.credit_balance,
+    payload?.data?.creditBalance,
+  ];
+
+  for (const candidate of candidates) {
+    if (candidate === null || candidate === undefined || candidate === '') {
+      continue;
+    }
+
+    const numericValue = Number(candidate);
+    if (Number.isFinite(numericValue)) {
+      return numericValue;
+    }
+  }
+
+  return null;
+}
+
+function extractCurrencyValue(payload, fallbackCurrency = 'NGN') {
+  return (
+    payload?.currency ||
+    payload?.data?.currency ||
+    payload?.data?.walletCurrency ||
+    payload?.walletCurrency ||
+    fallbackCurrency
+  );
+}
+
+async function fetchConsoleBalance({
+  providerId,
+  providerName,
+  category,
+  service,
+  sourceProviderId,
+  sourceProviderName,
+  fetcher,
+  fallbackMessage,
+}) {
+  try {
+    const payload = await fetcher();
+    const balance = Object.prototype.hasOwnProperty.call(payload || {}, 'balance')
+      ? payload.balance
+      : extractBalanceValue(payload);
+    const available = Boolean(payload?.available ?? (balance !== null));
+
+    return {
+      providerId,
+      providerName,
+      category,
+      service,
+      sourceProviderId,
+      sourceProviderName,
+      available,
+      balance,
+      currency: extractCurrencyValue(payload),
+      message: payload?.message || (available ? null : fallbackMessage || 'Balance not available'),
+      lastUpdated: payload?.lastUpdated || new Date(),
+    };
+  } catch (error) {
+    return {
+      providerId,
+      providerName,
+      category,
+      service,
+      sourceProviderId,
+      sourceProviderName,
+      available: false,
+      balance: null,
+      currency: 'NGN',
+      message: error.message || fallbackMessage || 'Failed to fetch balance',
+      lastUpdated: new Date(),
+    };
+  }
+}
+
+async function getConsoleServiceBalances() {
+  return Promise.all([
+    fetchConsoleBalance({
+      providerId: 'giftcards_prestmit',
+      providerName: 'Gift Card Balance',
+      category: 'giftcards',
+      service: 'gift_card',
+      sourceProviderId: 'prestmit',
+      sourceProviderName: 'Prestmit',
+      fetcher: () => PrestmitService.getBalance(),
+    }),
+    fetchConsoleBalance({
+      providerId: 'flight_ticket',
+      providerName: 'Flight Ticket Balance',
+      category: 'flights',
+      service: 'flight_ticket',
+      sourceProviderId: 'duffel',
+      sourceProviderName: 'Duffel',
+      fetcher: async () => ({
+        available: false,
+        balance: null,
+        currency: 'NGN',
+        message: 'Flight provider balance endpoint is not implemented yet',
+      }),
+      fallbackMessage: 'Flight provider balance endpoint is not implemented yet',
+    }),
+    fetchConsoleBalance({
+      providerId: 'alpha_arewa',
+      providerName: 'Alpha Balance',
+      category: 'telecom',
+      service: 'alpha',
+      sourceProviderId: 'arewa',
+      sourceProviderName: 'Arewa',
+      fetcher: () => ArewaService.getBalance(),
+    }),
+    fetchConsoleBalance({
+      providerId: 'kirani_arewa',
+      providerName: 'Kirani Balance',
+      category: 'telecom',
+      service: 'kirani',
+      sourceProviderId: 'arewa',
+      sourceProviderName: 'Arewa',
+      fetcher: () => ArewaService.getBalance(),
+    }),
+  ]);
 }
 
 
@@ -154,12 +309,15 @@ exports.runProviderHealthCheck = async (req, res, next) => {
 
 exports.getProviderBalances = async (req, res, next) => {
   try {
-    const balances = await VtuProviderService.getAllProviderBalances();
+    const [providerBalances, consoleBalances] = await Promise.all([
+      VtuProviderService.getAllProviderBalances(),
+      getConsoleServiceBalances(),
+    ]);
     
     res.status(200).json({
       status: 'success',
       data: {
-        balances,
+        balances: [...providerBalances, ...consoleBalances],
         timestamp: new Date(),
       }
     });

@@ -42,6 +42,55 @@ class ArewaService {
     return this.request('/api/user/', {});
   }
 
+  static extractBalance(payload) {
+    const candidates = [
+      payload?.balance,
+      payload?.available_balance,
+      payload?.availableBalance,
+      payload?.wallet_balance,
+      payload?.walletBalance,
+      payload?.user_balance,
+      payload?.userBalance,
+      payload?.credit_balance,
+      payload?.creditBalance,
+      payload?.data?.balance,
+      payload?.data?.available_balance,
+      payload?.data?.availableBalance,
+      payload?.data?.wallet_balance,
+      payload?.data?.walletBalance,
+      payload?.data?.user_balance,
+      payload?.data?.userBalance,
+      payload?.data?.credit_balance,
+      payload?.data?.creditBalance,
+    ];
+
+    for (const candidate of candidates) {
+      if (candidate === null || candidate === undefined || candidate === '') {
+        continue;
+      }
+
+      const numericValue = Number(candidate);
+      if (Number.isFinite(numericValue)) {
+        return numericValue;
+      }
+    }
+
+    return null;
+  }
+
+  static async getBalance() {
+    const details = await this.getUserDetails();
+    const balance = this.extractBalance(details);
+
+    return {
+      available: balance !== null,
+      balance,
+      currency: details?.currency || details?.data?.currency || 'NGN',
+      raw: details,
+      lastUpdated: new Date(),
+    };
+  }
+
   static async purchaseAlpha({ phone, planid }) {
     return this.request('/api/alpha/', { phone, planid: String(planid) });
   }
