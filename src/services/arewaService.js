@@ -4,8 +4,8 @@ const { AppError } = require('../middlewares/errorHandler');
 
 class ArewaService {
   static config = {
-    baseUrl: process.env.AREWA_BASE_URL || 'https://arewaglobal.co',
-    apiKey: process.env.AREWA_API_KEY || '',
+    baseUrl: String(process.env.AREWA_BASE_URL || 'https://arewaglobal.co').trim(),
+    apiKey: String(process.env.AREWA_API_KEY || '').trim(),
     timeout: 45000,
   };
 
