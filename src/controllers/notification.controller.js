@@ -1,5 +1,7 @@
 const Notification = require("../models/Notification");
 const User = require("../models/User");
+const NotificationService = require('../services/NotificationService');
+const ExpoPushService = require('../services/expoPushService');
 const logger = require("../utils/logger");
 
 const normalizeBannerFields = (payload = {}) => {
@@ -114,6 +116,18 @@ exports.broadcastNotification = async (req, res, next) => {
       const batch = notifications.slice(i, i + batchSize);
       await Notification.insertMany(batch);
     }
+
+    await ExpoPushService.sendToUsers(recipientIds, {
+      title,
+      message,
+      type,
+      metadata: {
+        ...bannerFields,
+        sendEmail: Boolean(sendEmail),
+        sendSMS: Boolean(sendSMS),
+        isBroadcast: true,
+      },
+    });
     
     logger.info(`Broadcast notification sent to ${recipientIds.length} users by admin: ${req.admin?._id}`);
     
@@ -159,7 +173,7 @@ exports.sendNotificationToUser = async (req, res, next) => {
       });
     }
     
-    const notification = await Notification.create({
+    const notification = await NotificationService.create({
       user: userId,
       title,
       message,
@@ -171,7 +185,8 @@ exports.sendNotificationToUser = async (req, res, next) => {
       ...bannerFields,
     });
     
-    logger.info(`Notification sent to user ${userId} by admin: ${req.user?.id}`);
+    const actorId = req.admin?._id || req.user?.id || 'system';
+    logger.info(`Notification sent to user ${userId} by admin: ${actorId}`);
     
     res.status(200).json({
       status: 'success',
@@ -181,6 +196,78 @@ exports.sendNotificationToUser = async (req, res, next) => {
     
   } catch (error) {
     logger.error('Send notification error:', error);
+    next(error);
+  }
+};
+
+exports.registerPushToken = async (req, res, next) => {
+  try {
+    const expoPushToken = String(req.body.expoPushToken || '').trim();
+
+    if (!expoPushToken) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'expoPushToken is required',
+      });
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(
+      req.user.id,
+      { $addToSet: { expoPushTokens: expoPushToken } },
+      { new: true }
+    ).select('expoPushTokens');
+
+    if (!updatedUser) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'User not found',
+      });
+    }
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Push token saved successfully',
+      data: {
+        expoPushTokens: updatedUser.expoPushTokens || [],
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.removePushToken = async (req, res, next) => {
+  try {
+    const expoPushToken = String(req.body.expoPushToken || '').trim();
+
+    if (!expoPushToken) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'expoPushToken is required',
+      });
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(
+      req.user.id,
+      { $pull: { expoPushTokens: expoPushToken } },
+      { new: true }
+    ).select('expoPushTokens');
+
+    if (!updatedUser) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'User not found',
+      });
+    }
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Push token removed successfully',
+      data: {
+        expoPushTokens: updatedUser.expoPushTokens || [],
+      },
+    });
+  } catch (error) {
     next(error);
   }
 };
@@ -258,15 +345,39 @@ exports.getSentNotificationHistory = async (req, res, next) => {
 
 exports.getNotifications = async (req, res, next) => {
     try {
-  
-      const notifications = await Notification
-        .find({ user: req.user.id })
-        .sort({ createdAt: -1 })
-        .limit(50);
+      const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+      const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
+      const skip = (page - 1) * limit;
+
+      const query = { user: req.user.id };
+      if (String(req.query.unreadOnly).toLowerCase() === 'true') {
+        query.isRead = false;
+      }
+      if (req.query.type) {
+        query.type = String(req.query.type).trim().toLowerCase();
+      }
+
+      const [notifications, total, unreadCount] = await Promise.all([
+        Notification.find(query)
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limit),
+        Notification.countDocuments(query),
+        Notification.countDocuments({ user: req.user.id, isRead: false }),
+      ]);
   
       res.status(200).json({
         status: 'success',
         results: notifications.length,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+        meta: {
+          unreadCount,
+        },
         data: notifications.map(shapeNotificationForClient),
       });
   
@@ -295,17 +406,30 @@ exports.getUnreadCount = async (req, res, next) => {
 exports.markAsRead = async (req, res, next) => {
     try {
   
-      const notification = await Notification.findByIdAndUpdate(
-        req.params.id,
-        { isRead: true },
+      const notification = await Notification.findOneAndUpdate(
+        {
+          _id: req.params.id,
+          user: req.user.id,
+        },
+        {
+          isRead: true,
+          readAt: new Date(),
+        },
         { new: true }
       );
-  
+
+      if (!notification) {
+        return res.status(404).json({
+          status: 'error',
+          message: 'Notification not found',
+        });
+      }
+
       res.status(200).json({
         status: 'success',
-        data: notification,
+        data: shapeNotificationForClient(notification),
       });
-  
+
     } catch (error) {
       next(error);
     }
@@ -315,7 +439,7 @@ exports.markAllAsRead = async (req, res, next) => {
     try {
       await Notification.updateMany(
         { user: req.user.id, isRead: false },
-        { isRead: true }
+        { isRead: true, readAt: new Date() }
       );
 
       res.status(200).json({

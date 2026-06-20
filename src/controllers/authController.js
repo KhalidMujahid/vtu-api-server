@@ -61,6 +61,18 @@ const sendTwoFactorEmailCode = async (user) => {
   await sendOTPEmail(user.email, otp);
 };
 
+const applyPasswordResetOtp = (user, otp, expiresInMs = 10 * 60 * 1000) => {
+  const hashedOTP = crypto.createHash('sha256').update(otp).digest('hex');
+  const expiresAt = new Date(Date.now() + expiresInMs);
+
+  user.resetPasswordToken = hashedOTP;
+  user.resetPasswordExpires = expiresAt;
+  user.verificationToken = hashedOTP;
+  user.verificationTokenExpires = expiresAt;
+  user.otpAttempts = 0;
+  user.otpBlockedUntil = undefined;
+};
+
 const verifyTwoFactorCode = async (user, code) => {
   const method = user?.twoFactor?.method;
   if (!method) return false;
@@ -371,9 +383,11 @@ exports.verifyOTP = async (req, res, next) => {
 
 exports.resendOTP = async (req, res, next) => {
   try {
-    const { email, verificationType = "email" } = req.body;
+    const { email, verificationType = "email", purpose = "verification" } = req.body;
+    const normalizedEmail = String(email || '').toLowerCase().trim();
+    const normalizedPurpose = String(purpose || '').toLowerCase().trim();
 
-    const user = await User.findOne({ email: email.toLowerCase().trim() });
+    const user = await User.findOne({ email: normalizedEmail });
 
     if (!user) {
       return next(new AppError("User not found", 404));
@@ -392,10 +406,16 @@ exports.resendOTP = async (req, res, next) => {
       .update(otp)
       .digest("hex");
 
-    user.verificationToken = verificationToken;
-    user.verificationTokenExpires = Date.now() + 5 * 60 * 1000;
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
-    user.otpResendAfter = Date.now() + 60 * 1000;
+    if (normalizedPurpose === 'password_reset') {
+      user.resetPasswordToken = verificationToken;
+      user.resetPasswordExpires = expiresAt;
+    }
+
+    user.verificationToken = verificationToken;
+    user.verificationTokenExpires = expiresAt;
+    user.otpResendAfter = new Date(Date.now() + 60 * 1000);
 
     await user.save();
 
@@ -421,22 +441,36 @@ exports.resendOTP = async (req, res, next) => {
 exports.resetPassword = async (req, res, next) => {
   try {
     const { email, otp, password } = req.body;
+    const normalizedEmail = String(email || '').toLowerCase().trim();
+    const normalizedOtp = String(otp || '').trim();
 
-    const hashedOTP = crypto.createHash("sha256").update(otp.trim()).digest("hex");
+    if (!normalizedEmail || !normalizedOtp || !password) {
+      return next(new AppError("Please provide email, OTP and password", 400));
+    }
 
-    const user = await User.findOne({
-      email,
-      resetPasswordToken: hashedOTP,
-      resetPasswordExpires: { $gt: Date.now() },
-    });
+    const user = await User.findOne({ email: normalizedEmail });
 
     if (!user) {
+      return next(new AppError("User not found", 404));
+    }
+
+    const hashedOTP = crypto.createHash("sha256").update(normalizedOtp).digest("hex");
+    const tokenMatches =
+      user.resetPasswordToken === hashedOTP ||
+      user.verificationToken === hashedOTP;
+    const resetExpiry = user.resetPasswordExpires ? new Date(user.resetPasswordExpires).getTime() : 0;
+    const verificationExpiry = user.verificationTokenExpires ? new Date(user.verificationTokenExpires).getTime() : 0;
+    const expiryTime = Math.max(resetExpiry, verificationExpiry);
+
+    if (!tokenMatches || !expiryTime || expiryTime <= Date.now()) {
       return next(new AppError("Invalid or expired OTP", 400));
     }
 
     user.password = password;
     user.resetPasswordToken = undefined;
     user.resetPasswordExpires = undefined;
+    user.verificationToken = undefined;
+    user.verificationTokenExpires = undefined;
 
     await user.save();
 
@@ -490,19 +524,16 @@ exports.getProfile = async (req, res, next) => {
 exports.forgotPassword = async (req, res, next) => {
   try {
     const { email } = req.body;
+    const normalizedEmail = String(email || '').toLowerCase().trim();
 
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email: normalizedEmail });
 
     if (!user) {
       return next(new AppError("User not found", 404));
     }
 
     const otp = generateOTP();
-
-    const hashedOTP = crypto.createHash("sha256").update(otp).digest("hex");
-
-    user.resetPasswordToken = hashedOTP;
-    user.resetPasswordExpires = Date.now() + 5 * 60 * 1000;
+    applyPasswordResetOtp(user, otp);
 
     await user.save();
 

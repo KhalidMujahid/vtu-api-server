@@ -8,6 +8,8 @@ router.post('/admin/broadcast', adminAuth, notificationController.broadcastNotif
 router.post('/admin/send', adminAuth, notificationController.sendNotificationToUser);
 
 router.use(protect);
+router.post('/push-token', notificationController.registerPushToken);
+router.delete('/push-token', notificationController.removePushToken);
 router.get('/', notificationController.getNotifications);
 router.get('/unread-count', notificationController.getUnreadCount);
 router.put('/:id/read', notificationController.markAsRead);

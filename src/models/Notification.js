@@ -51,6 +51,10 @@ const notificationSchema = new mongoose.Schema(
       default: false,
     },
 
+    readAt: {
+      type: Date,
+    },
+
     metadata: {
       type: Object,
       default: {},

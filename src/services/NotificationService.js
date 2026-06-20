@@ -1,14 +1,31 @@
 const Notification = require('../models/Notification');
+const User = require('../models/User');
+const ExpoPushService = require('./expoPushService');
 const logger = require('../utils/logger');
 
 class NotificationService {
 
   static async create(data) {
     try {
-      const notification = await Notification.create(data);
+      const { skipPush = false, ...payload } = data || {};
+      const notification = await Notification.create(payload);
+
+      if (!skipPush && notification?.user) {
+        try {
+          const user = await User.findById(notification.user).select('expoPushTokens');
+          await ExpoPushService.sendToTokens(user?.expoPushTokens || [], notification);
+        } catch (pushError) {
+          logger.warn('Expo push notification failed:', {
+            message: pushError.message,
+            notificationId: notification?._id?.toString?.(),
+          });
+        }
+      }
+
       return notification;
     } catch (error) {
       logger.error('Notification creation failed:', error);
+      return null;
     }
   }
 

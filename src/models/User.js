@@ -99,6 +99,13 @@ const userSchema = new mongoose.Schema({
   lastLogin: Date,
   lastLoginIp: String,
   lastLoginDevice: String,
+  expoPushTokens: {
+    type: [{
+      type: String,
+      trim: true,
+    }],
+    default: [],
+  },
   nin: String,
   bvn: String,
   
