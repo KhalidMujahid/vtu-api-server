@@ -1716,12 +1716,12 @@ exports.cancelSpectranetTransaction = async (req, res, next) => {
 
 exports.getSmilePackages = async (req, res, next) => {
   try {
-    const result = await NelloBytesService.getClubKonnectSmilePackages();
+    const result = await ArewaService.getSmilePackages();
     return res.status(200).json({
       status: 'success',
       data: {
-        provider: 'clubkonnect',
-        network: 'smile-direct',
+        provider: 'arewa',
+        network: 'smile',
         packages: result.packages || [],
       },
     });
@@ -1732,20 +1732,23 @@ exports.getSmilePackages = async (req, res, next) => {
 
 exports.verifySmileAccount = async (req, res, next) => {
   try {
-    const { mobileNumber } = req.body;
-    if (!mobileNumber) {
+    const { mobileNumber, phoneNumber } = req.body;
+    const accountNumber = mobileNumber || phoneNumber;
+    if (!accountNumber) {
       return next(new AppError('Mobile number is required', 400));
     }
 
-    const result = await NelloBytesService.verifyClubKonnectSmileAccount({ mobileNumber });
+    const result = await ArewaService.verifySmileAccount({ phoneNumber: accountNumber });
     return res.status(result.valid ? 200 : 400).json({
       status: result.valid ? 'success' : 'error',
       data: {
-        provider: 'clubkonnect',
-        network: 'smile-direct',
-        mobileNumber,
+        provider: 'arewa',
+        network: 'smile',
+        mobileNumber: accountNumber,
         valid: result.valid,
         customerName: result.customerName,
+        verificationMethod: result.verificationMethod,
+        normalizedPhoneNumber: result.phoneNumber,
         raw: result.response,
       },
     });
@@ -1756,9 +1759,11 @@ exports.verifySmileAccount = async (req, res, next) => {
 
 exports.purchaseSmileData = async (req, res, next) => {
   try {
-    const { mobileNumber, dataPlan, transactionPin, requestId } = req.body;
+    const { mobileNumber, phoneNumber, dataPlan, bundleTypeCode, transactionPin, requestId, actype } = req.body;
+    const accountNumber = mobileNumber || phoneNumber;
+    const resolvedBundleTypeCode = dataPlan || bundleTypeCode;
 
-    if (!mobileNumber || !dataPlan) {
+    if (!accountNumber || !resolvedBundleTypeCode) {
       return next(new AppError('Mobile number and data plan are required', 400));
     }
 
@@ -1774,7 +1779,7 @@ exports.purchaseSmileData = async (req, res, next) => {
       return next(new AppError('Invalid transaction PIN', 401));
     }
 
-    const verification = await NelloBytesService.verifyClubKonnectSmileAccount({ mobileNumber });
+    const verification = await ArewaService.verifySmileAccount({ phoneNumber: accountNumber });
     if (!verification.valid) {
       return next(new AppError('Invalid Smile account number', 400));
     }
@@ -1782,23 +1787,23 @@ exports.purchaseSmileData = async (req, res, next) => {
     const wallet = await Wallet.findOne({ user: user._id });
     if (!wallet) return next(new AppError('Wallet not found', 404));
 
-    const packagesResult = await NelloBytesService.getClubKonnectSmilePackages();
+    const packagesResult = await ArewaService.getSmilePackages();
     const selectedPackage = (packagesResult.packages || []).find(
-      (pkg) => String(pkg.planId) === String(dataPlan)
+      (pkg) => String(pkg.planId) === String(resolvedBundleTypeCode)
     );
 
     if (!selectedPackage) {
       return next(new AppError('Selected Smile plan was not found', 404));
     }
 
-    const providerAmount = Number(selectedPackage.amount || 0);
+    const providerAmount = Number(selectedPackage.price || 0);
     if (!providerAmount || Number.isNaN(providerAmount) || providerAmount <= 0) {
       return next(new AppError('Unable to resolve Smile plan amount', 400));
     }
 
     const chargePricing = await ProviderMarkupService.applyMarkup({
-      providerId: 'clubkonnect',
-      serviceType: 'data_recharge',
+      providerId: 'arewa',
+      serviceType: 'smile_data',
       baseAmount: providerAmount,
     });
     const chargedAmount = chargePricing.chargedAmount;
@@ -1808,15 +1813,14 @@ exports.purchaseSmileData = async (req, res, next) => {
     }
 
     await ProviderPurchaseGuardService.assertSufficientProviderBalance(
-      'clubkonnect',
+      'arewa',
       providerAmount,
-      { serviceType: 'data_recharge', network: 'smile-direct', phoneNumber: mobileNumber }
+      { serviceType: 'smile_data', network: 'smile', phoneNumber: accountNumber }
     );
 
-    await wallet.debit(chargedAmount, `Smile Data: ${dataPlan}`);
+    await wallet.debit(chargedAmount, `Smile Data: ${resolvedBundleTypeCode}`);
 
     const reference = requestId || `SML-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
-    const callbackUrl = `${SERVER_URL}/api/v1/telecom/webhook/nellobytes`;
 
     const transaction = await Transaction.create({
       reference,
@@ -1828,12 +1832,12 @@ exports.purchaseSmileData = async (req, res, next) => {
       previousBalance: wallet.balance + chargedAmount,
       newBalance: wallet.balance,
       status: 'pending',
-      description: `SMILE data for ${mobileNumber}`,
+      description: `SMILE data for ${accountNumber}`,
       service: {
-        provider: 'clubkonnect',
-        network: 'smile-direct',
-        plan: String(dataPlan),
-        phoneNumber: mobileNumber,
+        provider: 'arewa',
+        network: 'smile',
+        plan: String(resolvedBundleTypeCode),
+        phoneNumber: accountNumber,
       },
       metadata: {
         providerAmount,
@@ -1843,47 +1847,40 @@ exports.purchaseSmileData = async (req, res, next) => {
         packageName: selectedPackage.planName || null,
         validity: selectedPackage.validity || null,
         customerName: verification.customerName || null,
+        verificationMethod: verification.verificationMethod || null,
       },
       statusHistory: [{ status: 'pending', note: 'Smile purchase initiated', timestamp: new Date() }],
     });
 
     try {
-      const apiResponse = await NelloBytesService.purchaseClubKonnectSmileData({
-        dataPlan: String(dataPlan),
-        mobileNumber,
-        requestId: reference,
-        callBackURL: callbackUrl,
+      const apiResponse = await ArewaService.purchaseSmileData({
+        phoneNumber: accountNumber,
+        bundleTypeCode: String(resolvedBundleTypeCode),
+        actype: actype || 'AccountNumber',
       });
 
-      transaction.status = 'pending';
-      transaction.service.orderId = apiResponse.orderId || reference;
-      transaction.service.requestId = apiResponse.requestId || reference;
+      transaction.status = apiResponse.success ? 'successful' : 'failed';
       transaction.providerResponse = apiResponse.response;
       transaction.statusHistory.push({
-        status: 'pending',
-        note: `Order received: ${apiResponse.orderId || reference}`,
+        status: apiResponse.success ? 'successful' : 'failed',
+        note: apiResponse.msg || 'Smile purchase completed',
         timestamp: new Date(),
       });
       await transaction.save();
-      try {
-        await VtuTransactionLifecycleService.schedulePolling(transaction._id, {
-          attempt: 1,
-          reason: 'smile-initial',
-        });
-      } catch (pollError) {
-        logger.warn(`Failed to enqueue Smile polling for ${transaction.reference}: ${pollError.message}`);
+
+      if (!apiResponse.success) {
+        await refundTransactionToWallet(transaction, 'Smile data purchase refund', chargedAmount);
+        return next(new AppError(apiResponse.msg || 'Smile purchase failed', 500));
       }
 
       return res.status(200).json({
         status: 'success',
-        message: 'Smile data purchase initiated successfully',
+        message: apiResponse.msg || 'Smile data purchase successful',
         data: {
           reference,
-          orderId: apiResponse.orderId || null,
-          requestId: apiResponse.requestId || reference,
-          mobileNumber,
-          network: 'smile-direct',
-          dataPlan: String(dataPlan),
+          mobileNumber: accountNumber,
+          network: 'smile',
+          dataPlan: String(resolvedBundleTypeCode),
           planName: selectedPackage.planName || null,
           validity: selectedPackage.validity || null,
           customerName: verification.customerName || null,
@@ -1893,9 +1890,9 @@ exports.purchaseSmileData = async (req, res, next) => {
             percentage: chargePricing.percentage,
             amount: chargePricing.markupAmount,
           },
-          providerStatus: apiResponse.status,
-          providerStatusCode: apiResponse.statusCode,
-          provider: 'clubkonnect',
+          providerStatus: apiResponse.response?.status || apiResponse.response?.service || 'success',
+          provider: 'arewa',
+          raw: apiResponse.response,
         },
       });
     } catch (error) {
@@ -1904,7 +1901,7 @@ exports.purchaseSmileData = async (req, res, next) => {
       transaction.failureReason = error.message;
       transaction.statusHistory.push({ status: 'failed', note: error.message, timestamp: new Date() });
       await transaction.save();
-      return next(new AppError('Smile purchase failed. Please try again shortly.', 500));
+      return next(error);
     }
   } catch (error) {
     return next(error);
@@ -1913,26 +1910,7 @@ exports.purchaseSmileData = async (req, res, next) => {
 
 exports.querySmileTransaction = async (req, res, next) => {
   try {
-    const { orderId, requestId } = req.body;
-    if (!orderId && !requestId) {
-      return next(new AppError('Please provide orderId or requestId', 400));
-    }
-
-    const result = await NelloBytesService.queryDataTransaction({ orderId, requestId });
-    return res.status(200).json({
-      status: 'success',
-      data: {
-        provider: 'clubkonnect',
-        network: 'smile-direct',
-        orderId: result.orderId || orderId || null,
-        requestId: result.requestId || requestId || null,
-        providerStatusCode: result.statusCode,
-        providerStatus: result.status,
-        providerRemark: result.remark,
-        providerDate: result.date,
-        raw: result.response,
-      },
-    });
+    return next(new AppError('Arewa Smile API does not support transaction queries', 501));
   } catch (error) {
     return next(error);
   }
@@ -1940,22 +1918,7 @@ exports.querySmileTransaction = async (req, res, next) => {
 
 exports.cancelSmileTransaction = async (req, res, next) => {
   try {
-    const { orderId } = req.body;
-    if (!orderId) {
-      return next(new AppError('Please provide orderId', 400));
-    }
-
-    const result = await NelloBytesService.cancelDataTransaction(orderId);
-    return res.status(200).json({
-      status: result.success ? 'success' : 'error',
-      data: {
-        provider: 'nellobytes',
-        network: 'smile-direct',
-        orderId: result.orderId || orderId,
-        providerStatus: result.status,
-        raw: result.response,
-      },
-    });
+    return next(new AppError('Arewa Smile API does not support transaction cancellations', 501));
   } catch (error) {
     return next(error);
   }

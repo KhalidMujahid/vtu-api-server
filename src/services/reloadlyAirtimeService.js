@@ -39,15 +39,17 @@ class ReloadlyAirtimeService {
     }
 
     try {
+      const formBody = new URLSearchParams({
+        client_id: cfg.clientId,
+        client_secret: cfg.clientSecret,
+        grant_type: 'client_credentials',
+        audience: cfg.audience,
+      });
+
       const response = await axios.post(
         `${cfg.authBaseUrl}/oauth/token`,
-        {
-          client_id: cfg.clientId,
-          client_secret: cfg.clientSecret,
-          grant_type: 'client_credentials',
-          audience: cfg.audience,
-        },
-        { timeout: cfg.timeout, headers: { 'Content-Type': 'application/json' } }
+        formBody,
+        { timeout: cfg.timeout, headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
       );
 
       const token = response.data?.access_token;

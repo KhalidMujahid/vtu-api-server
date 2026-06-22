@@ -7,6 +7,8 @@ const SmePlugService = require('./smePlugService');
 const NelloBytesService = require('./nelloBytesService');
 const PluginngService = require('./pluginngService');
 const AlrahuzDataService = require('./alrahuzDataService');
+const ArewaService = require('./arewaService');
+const ReloadlyGiftCardService = require('./reloadlyGiftCardService');
 
 class VtuProviderService {
   static AUTO_FAILOVER_THRESHOLD = 40;
@@ -534,6 +536,36 @@ class VtuProviderService {
             currency: result?.currency || 'NGN',
             accountId: result?.accountId || result?.id || null,
             phoneNumber: result?.phoneNumber || result?.phoneno || null,
+            raw: result?.raw || result,
+            lastUpdated: new Date(),
+          };
+        }
+
+        case 'arewa': {
+          const result = await ArewaService.getBalance();
+          return {
+            providerId: resolvedProviderId,
+            providerName: provider.name,
+            available: true,
+            balance: Number(result?.balance || 0),
+            currency: result?.currency || 'NGN',
+            accountId: result?.accountId || null,
+            phoneNumber: result?.phoneNumber || null,
+            raw: result?.raw || result,
+            lastUpdated: new Date(),
+          };
+        }
+
+        case 'reloadly': {
+          const result = await ReloadlyGiftCardService.getBalance();
+          return {
+            providerId: resolvedProviderId,
+            providerName: provider.name,
+            available: true,
+            balance: Number(result?.balance || 0),
+            currency: result?.currency || 'USD',
+            accountId: result?.accountId || null,
+            phoneNumber: result?.phoneNumber || null,
             raw: result?.raw || result,
             lastUpdated: new Date(),
           };

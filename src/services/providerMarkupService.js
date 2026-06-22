@@ -15,6 +15,8 @@ const SERVICE_TYPE_ALIASES = {
   cable_tv: 'cable_tv',
   education: 'education_pin',
   education_pin: 'education_pin',
+  smile: 'smile_data',
+  smile_data: 'smile_data',
 };
 
 function round2(value) {

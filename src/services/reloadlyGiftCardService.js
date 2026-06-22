@@ -43,18 +43,20 @@ class ReloadlyGiftCardService {
     }
 
     try {
+      const formBody = new URLSearchParams({
+        audience: this.config.audience,
+        client_id: this.config.clientId,
+        client_secret: this.config.clientSecret,
+        grant_type: 'client_credentials',
+      });
+
       const response = await axios.post(
         `${this.config.authBaseUrl}/oauth/token`,
-        {
-          audience: this.config.audience,
-          client_id: this.config.clientId,
-          client_secret: this.config.clientSecret,
-          grant_type: 'client_credentials',
-        },
+        formBody,
         {
           timeout: this.config.timeout,
           headers: {
-            'Content-Type': 'application/json',
+            'Content-Type': 'application/x-www-form-urlencoded',
           },
         }
       );
@@ -92,10 +94,11 @@ class ReloadlyGiftCardService {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
+          Accept: 'application/com.reloadly.giftcards-v2+json',
           ...headers,
         },
       });
-      return response.data;
+      return response.data ?? {};
     } catch (error) {
       logger.error('Reloadly API error', {
         method,
@@ -167,7 +170,7 @@ class ReloadlyGiftCardService {
   }
 
   static orderGiftCard(payload = {}) {
-    return this.request('POST', '/orders', { data: payload });
+    return this.request('POST', '/orders', { data: payload, headers: { Accept: 'application/com.reloadly.giftcards-v2+json' } });
   }
 
   static getRedeemCode(transactionId, version = 'v2') {

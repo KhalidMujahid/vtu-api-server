@@ -165,6 +165,66 @@ module.exports = {
         requestsPerHour: 500,
       },
     },
+    reloadly: {
+      id: 'reloadly',
+      name: 'Reloadly',
+      displayName: 'Reloadly Gift Cards',
+      description: 'Gift cards and international airtime',
+      color: '#2563eb',
+      icon: 'gift',
+      baseUrl: process.env.RELOADLY_GIFTCARD_BASE_URL || 'https://giftcards.reloadly.com',
+      apiKey: process.env.RELOADLY_CLIENT_ID || '',
+      apiSecret: process.env.RELOADLY_CLIENT_SECRET || '',
+      timeout: 45000,
+      retryCount: 2,
+      supportedServices: ['gift_card'],
+      supportedNetworks: ['giftcard'],
+      status: 'active',
+      priority: 6,
+      isDefault: false,
+      source: 'reloadly',
+      features: {
+        dataBundle: false,
+        airtime: false,
+        cableTv: false,
+        electricity: false,
+        smeData: false,
+      },
+      rateLimit: {
+        requestsPerMinute: 30,
+        requestsPerHour: 200,
+      },
+    },
+    arewa: {
+      id: 'arewa',
+      name: 'Arewa Global Ventures',
+      displayName: 'Arewa Global Ventures',
+      description: 'Smile bundles, Alpha caller credit, and Kirani minutes',
+      color: '#0f172a',
+      icon: 'wifi',
+      baseUrl: process.env.AREWA_BASE_URL || 'https://arewaglobal.co',
+      apiKey: process.env.AREWA_API_KEY || '',
+      apiSecret: process.env.AREWA_API_KEY || '',
+      timeout: 45000,
+      retryCount: 2,
+      supportedServices: ['smile_data', 'alpha', 'kirani'],
+      supportedNetworks: ['smile'],
+      status: 'active',
+      priority: 6,
+      isDefault: false,
+      source: 'arewa',
+      features: {
+        dataBundle: true,
+        airtime: false,
+        cableTv: false,
+        electricity: false,
+        smeData: false,
+      },
+      rateLimit: {
+        requestsPerMinute: 40,
+        requestsPerHour: 300,
+      },
+    },
   },
 
   networkProviders: {
@@ -202,6 +262,10 @@ module.exports = {
       endpoint: '/electricity',
       method: 'POST',
     },
+    smile_data: {
+      endpoint: '/api/smile-data/',
+      method: 'POST',
+    },
   },
 
   billPaymentServices: {
@@ -223,6 +287,7 @@ module.exports = {
     electricity: 'clubkonnect',
     cable: 'clubkonnect',
     airtime2cash: 'smeplug',
+    smile: 'arewa',
   },
 
   normalizeProviderId(providerId) {
@@ -286,7 +351,7 @@ module.exports = {
   },
 
   updateServiceRouting(config) {
-    const validServices = ['data', 'airtime', 'airtimepin', 'education', 'electricity', 'cable', 'airtime2cash'];
+    const validServices = ['data', 'airtime', 'airtimepin', 'education', 'electricity', 'cable', 'airtime2cash', 'smile'];
     
     for (const [service, provider] of Object.entries(config)) {
       const resolvedProviderId = this.normalizeProviderId(provider);
