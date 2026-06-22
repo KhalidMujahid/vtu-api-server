@@ -8,22 +8,23 @@ class ReloadlyGiftCardService {
     expiresAt: 0,
   };
 
-  static config = {
-    authBaseUrl: process.env.RELOADLY_AUTH_BASE_URL || 'https://auth.reloadly.com',
-    apiBaseUrl:
-      process.env.RELOADLY_GIFTCARD_BASE_URL ||
-      (String(process.env.RELOADLY_GIFTCARD_SANDBOX || '').toLowerCase() === 'true'
-        ? 'https://giftcards-sandbox.reloadly.com'
-        : 'https://giftcards.reloadly.com'),
-    audience:
-      process.env.RELOADLY_GIFTCARD_AUDIENCE ||
-      (String(process.env.RELOADLY_GIFTCARD_SANDBOX || '').toLowerCase() === 'true'
-        ? 'https://giftcards-sandbox.reloadly.com'
-        : 'https://giftcards.reloadly.com'),
-    clientId: process.env.RELOADLY_CLIENT_ID || '',
-    clientSecret: process.env.RELOADLY_CLIENT_SECRET || '',
-    timeout: Number(process.env.RELOADLY_TIMEOUT_MS || 45000),
-  };
+  static get config() {
+    const sandbox = String(process.env.RELOADLY_GIFTCARD_SANDBOX || 'false').toLowerCase() === 'true';
+    const defaultApiBaseUrl = sandbox
+      ? 'https://giftcards-sandbox.reloadly.com'
+      : 'https://giftcards.reloadly.com';
+
+    return {
+      authBaseUrl: process.env.RELOADLY_AUTH_BASE_URL || 'https://auth.reloadly.com',
+      apiBaseUrl: sandbox ? defaultApiBaseUrl : (process.env.RELOADLY_GIFTCARD_BASE_URL || defaultApiBaseUrl),
+      audience: sandbox
+        ? defaultApiBaseUrl
+        : (process.env.RELOADLY_GIFTCARD_AUDIENCE || defaultApiBaseUrl),
+      clientId: process.env.RELOADLY_CLIENT_ID || '',
+      clientSecret: process.env.RELOADLY_CLIENT_SECRET || '',
+      timeout: Number(process.env.RELOADLY_TIMEOUT_MS || 45000),
+    };
+  }
 
   static assertConfig() {
     if (!this.config.clientId || !this.config.clientSecret) {
@@ -75,8 +76,12 @@ class ReloadlyGiftCardService {
         message: error.message,
         response: error.response?.data,
       });
+      const responseMessage = String(error.response?.data?.message || error.response?.data?.error || '').trim();
+      const authHint = responseMessage.toLowerCase().includes('access denied')
+        ? 'Check RELOADLY_CLIENT_ID, RELOADLY_CLIENT_SECRET, and the sandbox audience/base URL.'
+        : '';
       throw new AppError(
-        `Reloadly auth failed: ${error.response?.data?.message || error.message}`,
+        `Reloadly auth failed: ${responseMessage || error.message}${authHint ? ` (${authHint})` : ''}`,
         error.response?.status || 500
       );
     }
