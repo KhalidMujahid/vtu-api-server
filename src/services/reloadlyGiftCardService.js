@@ -87,7 +87,7 @@ class ReloadlyGiftCardService {
     }
   }
 
-  static async request(method, path, { params = {}, data = null, headers = {} } = {}) {
+  static async request(method, path, { params = {}, data = null, headers = {}, accept = 'application/com.reloadly.giftcards-v1+json' } = {}) {
     const token = await this.getAccessToken();
     try {
       const response = await axios({
@@ -99,7 +99,7 @@ class ReloadlyGiftCardService {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
-          Accept: 'application/com.reloadly.giftcards-v2+json',
+          Accept: accept,
           ...headers,
         },
       });
@@ -175,7 +175,10 @@ class ReloadlyGiftCardService {
   }
 
   static orderGiftCard(payload = {}) {
-    return this.request('POST', '/orders', { data: payload, headers: { Accept: 'application/com.reloadly.giftcards-v2+json' } });
+    return this.request('POST', '/orders', {
+      data: payload,
+      accept: 'application/com.reloadly.giftcards-v2+json',
+    });
   }
 
   static getRedeemCode(transactionId, version = 'v2') {
