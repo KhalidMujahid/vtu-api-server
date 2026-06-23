@@ -2,6 +2,21 @@ const axios = require('axios');
 const logger = require('../utils/logger');
 const { AppError } = require('../middlewares/errorHandler');
 
+function parseBoolean(value, defaultValue = false) {
+  if (value === undefined || value === null || value === '') {
+    return defaultValue;
+  }
+
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  const normalized = String(value).trim().toLowerCase();
+  if (['true', '1', 'yes', 'y', 'on'].includes(normalized)) return true;
+  if (['false', '0', 'no', 'n', 'off'].includes(normalized)) return false;
+  return defaultValue;
+}
+
 // Reloadly — International Airtime Top-Up
 // Docs: https://docs.reloadly.com/airtime
 // Sign up: https://www.reloadly.com  |  Same client_id/secret as gift cards, different audience
@@ -102,7 +117,7 @@ class ReloadlyAirtimeService {
     return this.request('GET', `/operators/countries/${countryCode.toUpperCase()}`, null, {
       page,
       size,
-      AddBundles: includeBundles,
+      AddBundles: parseBoolean(includeBundles, true),
     });
   }
 
@@ -118,7 +133,7 @@ class ReloadlyAirtimeService {
     const body = {
       operatorId: Number(operatorId),
       amount: Number(amount),
-      useLocalAmount: Boolean(useLocalAmount),
+      useLocalAmount: parseBoolean(useLocalAmount, false),
       recipientPhone: {
         countryCode: String(recipientCountryCode).toUpperCase(),
         number: String(recipientNumber),

@@ -4198,8 +4198,12 @@ exports.getInternationalOperators = async (req, res, next) => {
   try {
     const { countryCode } = req.params;
     if (!countryCode) return next(new AppError('countryCode is required', 400));
-    const { page = 1, size = 100 } = req.query;
-    const operators = await ReloadlyAirtimeService.getOperators(countryCode, { page, size });
+    const { page = 1, size = 100, includeBundles = true } = req.query;
+    const operators = await ReloadlyAirtimeService.getOperators(countryCode, {
+      page: Number(page),
+      size: Number(size),
+      includeBundles,
+    });
     return res.status(200).json({
       status: 'success',
       provider: 'reloadly',

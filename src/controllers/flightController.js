@@ -403,3 +403,26 @@ exports.cancelDomesticBooking = async (req, res, next) => {
     return next(error);
   }
 };
+
+exports.redirectWakanowAffiliate = async (req, res, next) => {
+  try {
+    const affiliateUrl = String(
+      process.env.WAKANOW_AFFILIATE_URL ||
+      process.env.WAKANOW_AFFILIATE_LINK ||
+      ''
+    ).trim();
+
+    if (!affiliateUrl) {
+      throw new AppError('Wakanow affiliate URL is not configured', 500);
+    }
+
+    const parsedUrl = new URL(affiliateUrl);
+    if (parsedUrl.hostname !== 'affiliate.wakanow.com') {
+      throw new AppError('Wakanow affiliate URL must point to affiliate.wakanow.com', 500);
+    }
+
+    return res.redirect(302, parsedUrl.toString());
+  } catch (error) {
+    return next(error);
+  }
+};

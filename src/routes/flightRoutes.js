@@ -7,6 +7,7 @@ router.use(protect);
 
 // ── Shared ─────────────────────────────────────────────────────────────────────
 router.get('/airports', flightController.searchAirports);
+router.get('/wakanow/redirect', flightController.redirectWakanowAffiliate);
 
 // ── International Flights (Duffel) ────────────────────────────────────────────
 router.post('/international/search', flightController.searchInternational);
