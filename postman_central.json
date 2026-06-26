@@ -182,6 +182,34 @@
           "response": []
         },
         {
+          "name": "Agent Verify Email",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/agents/verify-email/:token",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agents",
+                "verify-email",
+                ":token"
+              ],
+              "variable": [
+                {
+                  "key": "token",
+                  "value": "your-verification-token"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "description": "Verify an agent email address"
+        },
+        {
           "name": "Verify OTP",
           "request": {
             "method": "POST",
