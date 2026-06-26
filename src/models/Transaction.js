@@ -41,11 +41,14 @@ const transactionSchema = new mongoose.Schema({
       'gift_card',
       'flight_booking',
       'flight_cancellation',
+      'commission_earned',
+      'commission_transfer',
+      'commission_withdrawal',
     ],
   },
   category: {
     type: String,
-    enum: ['telecom', 'bills', 'education', 'transfer', 'funding', 'travel', 'giftcards'],
+    enum: ['telecom', 'bills', 'education', 'transfer', 'funding', 'travel', 'giftcards', 'commission'],
     required: true,
   },
   

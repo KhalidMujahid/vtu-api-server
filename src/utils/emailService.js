@@ -232,6 +232,52 @@ exports.sendStaffCredentials = async ({ email, firstName, lastName, tempPassword
   }
 };
 
+exports.sendAgentVerificationEmail = async (email, firstName, verificationUrl) => {
+  try {
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: 'Verify Your Agent Account - Yareema Data Hub',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width:600px; margin:auto;">
+          <h2 style="color:#333;">Verify Your Agent Account</h2>
+
+          <p style="font-size:16px;">
+            Hi <strong>${firstName}</strong>,
+          </p>
+
+          <p style="font-size:16px;">
+            Your agent account has been created. Please verify your email address to continue.
+          </p>
+
+          <div style="text-align:center; margin:30px 0;">
+            <a href="${verificationUrl}"
+               style="background-color:#0f766e; color:white; padding:12px 30px;
+                      text-decoration:none; border-radius:5px; font-size:16px;">
+              Verify Email
+            </a>
+          </div>
+
+          <p style="font-size:14px;color:#666;">
+            If the button does not work, copy and paste this link into your browser:
+          </p>
+          <p style="font-size:14px;color:#0f766e; word-break:break-all;">${verificationUrl}</p>
+
+          <p style="font-size:14px;color:#666;">
+            This link will expire in 24 hours.
+          </p>
+        </div>
+      `,
+    };
+
+    await resend.emails.send(mailOptions);
+    logger.info(`Agent verification email sent to ${email}`);
+  } catch (error) {
+    logger.error('Error sending agent verification email:', error);
+    throw error;
+  }
+};
+
 exports.sendApiBalanceAlertEmail = async ({ email, providerName, balance, threshold, currency = 'NGN' }) => {
   try {
     const mailOptions = {

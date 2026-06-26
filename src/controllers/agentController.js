@@ -1,9 +1,11 @@
 const User = require('../models/User');
 const Wallet = require('../models/Wallet');
 const Transaction = require('../models/Transaction');
-const ServicePricing = require("../models/ServicePricing");
 const ProviderStatus = require("../models/ProviderStatus");
 const AdminLog = require('../models/AdminLog');
+const WalletService = require('../services/walletService');
+const telecomController = require('./telecomController');
+const billsController = require('./billsController');
 const { AppError } = require('../middlewares/errorHandler');
 const logger = require('../utils/logger');
 const crypto = require('crypto');
@@ -11,6 +13,7 @@ const jwt = require("jsonwebtoken");
 const NelloBytesService = require('../services/nelloBytesService');
 const ProviderPurchaseGuardService = require('../services/providerPurchaseGuardService');
 const vtuConfig = require('../config/vtuProviders');
+const { sendAgentVerificationEmail } = require('../utils/emailService');
 
 function normalizeDataType(dataType) {
   if (!dataType) return null;
@@ -97,6 +100,253 @@ const createSendToken = (user, statusCode, res) => {
       user,
     },
   });
+};
+
+const serializeWallet = (wallet) => {
+  if (!wallet) return null;
+
+  return {
+    balance: wallet.balance,
+    currency: wallet.currency,
+    locked: wallet.locked,
+    virtualAccount: wallet.virtualAccount
+      ? {
+          bankName: wallet.virtualAccount.bankName,
+          accountNumber: wallet.virtualAccount.accountNumber,
+          accountName: wallet.virtualAccount.accountName,
+          bankCode: wallet.virtualAccount.bankCode,
+          reference: wallet.virtualAccount.reference,
+        }
+      : null,
+  };
+};
+
+const getOrCreateAgentWallet = async (agent) => {
+  return WalletService.createWallet(agent);
+};
+
+const prepareAgentEmailVerification = async (agent) => {
+  const rawToken = crypto.randomBytes(32).toString('hex');
+  const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+  agent.emailVerificationToken = tokenHash;
+  agent.emailVerificationExpires = expiresAt;
+  await agent.save();
+
+  const baseUrl = process.env.FRONTEND_URL || process.env.SERVER_URL || 'https://api.yareemadata.com';
+  const verificationUrl = `${baseUrl.replace(/\/$/, '')}/agent/verify-email/${rawToken}`;
+  await sendAgentVerificationEmail(agent.email, agent.firstName, verificationUrl);
+
+  return { token: rawToken, verificationUrl, expiresAt };
+};
+
+const extractPurchaseAmount = (payload) => {
+  const candidates = [
+    payload?.data?.amount,
+    payload?.data?.transaction?.amount,
+    payload?.data?.providerAmount,
+    payload?.data?.billDetails?.amount,
+    payload?.data?.transaction?.totalAmount,
+  ];
+
+  for (const candidate of candidates) {
+    const amount = Number(candidate);
+    if (Number.isFinite(amount) && amount > 0) {
+      return amount;
+    }
+  }
+
+  return 0;
+};
+
+const COMMISSION_TRANSACTION_MATCH = [
+  { type: 'commission_earned' },
+  { type: 'commission_transfer' },
+  { type: 'commission_withdrawal' },
+  { 'metadata.commissionEarned': true },
+  { 'metadata.commissionTransfer': true },
+  { 'metadata.commissionWithdrawal': true },
+];
+
+const buildCommissionHistoryQuery = (agentId) => ({
+  user: agentId,
+  status: 'successful',
+  $or: COMMISSION_TRANSACTION_MATCH,
+});
+
+const getCommissionHistory = async (agentId, limit = 10) => {
+  const query = buildCommissionHistoryQuery(agentId);
+  const [transactions, summary] = await Promise.all([
+    Transaction.find(query)
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean(),
+    Transaction.aggregate([
+      { $match: query },
+      {
+        $group: {
+          _id: null,
+          totalTransactions: { $sum: 1 },
+          totalCommission: {
+            $sum: {
+              $ifNull: ['$metadata.commission', '$metadata.commissionEarned'],
+            },
+          },
+          totalWithdrawn: {
+            $sum: {
+              $cond: [
+                { $in: ['$type', ['commission_transfer', 'commission_withdrawal']] },
+                '$amount',
+                0,
+              ],
+            },
+          },
+        },
+      },
+    ]),
+  ]);
+
+  return {
+    summary: summary[0] || {
+      totalTransactions: 0,
+      totalCommission: 0,
+      totalWithdrawn: 0,
+    },
+    transactions,
+  };
+};
+
+const captureControllerPayload = async (req, handler) => {
+  let statusCode = 200;
+  let payload = null;
+  const proxyRes = {
+    status(code) {
+      statusCode = code;
+      return this;
+    },
+    json(body) {
+      payload = body;
+      return this;
+    },
+    send(body) {
+      payload = body;
+      return this;
+    },
+    setHeader() {
+      return this;
+    },
+    header() {
+      return this;
+    },
+  };
+
+  await handler(req, proxyRes, (error) => {
+    throw error;
+  });
+
+  return { statusCode, payload };
+};
+
+const getAgentCommissionRate = async (agentId) => {
+  const agent = await User.findById(agentId).select('agentInfo.commissionRate');
+  return Number(agent?.agentInfo?.commissionRate || 0);
+};
+
+const creditAgentCommission = async (agentId, purchaseAmount) => {
+  const commissionRate = await getAgentCommissionRate(agentId);
+  const commissionAmount = (commissionRate / 100) * Number(purchaseAmount || 0);
+
+  if (!Number.isFinite(commissionAmount) || commissionAmount <= 0) {
+    return { commissionAmount: 0, commissionRate };
+  }
+
+  const agent = await User.findById(agentId);
+  if (!agent) {
+    return { commissionAmount: 0, commissionRate };
+  }
+
+  const previousAvailableCommission = Number(agent.agentInfo?.availableCommission || 0);
+  const previousTotalCommission = Number(agent.agentInfo?.totalCommissionEarned || 0);
+
+  agent.agentInfo = agent.agentInfo || {};
+  agent.agentInfo.totalCommissionEarned = previousTotalCommission + commissionAmount;
+  agent.agentInfo.availableCommission = previousAvailableCommission + commissionAmount;
+  agent.agentInfo.totalTransactions = Number(agent.agentInfo.totalTransactions || 0) + 1;
+  agent.agentInfo.totalTransactionAmount = Number(agent.agentInfo.totalTransactionAmount || 0) + Number(purchaseAmount || 0);
+  await agent.save();
+
+  try {
+    await Transaction.create({
+      reference: `COM-EARN-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
+      user: agentId,
+      type: 'commission_earned',
+      category: 'commission',
+      amount: commissionAmount,
+      fee: 0,
+      totalAmount: commissionAmount,
+      previousBalance: previousAvailableCommission,
+      newBalance: agent.agentInfo.availableCommission,
+      status: 'successful',
+      description: 'Commission earned from agent service purchase',
+      metadata: {
+        commissionEarned: true,
+        commissionRate,
+        purchaseAmount: Number(purchaseAmount || 0),
+      },
+      completedAt: new Date(),
+    });
+  } catch (ledgerError) {
+    logger.error('Failed to write commission ledger transaction:', ledgerError);
+  }
+
+  return { commissionAmount, commissionRate };
+};
+
+const forwardUserServiceWithAgentCommission = async (req, res, next, handler, options = {}) => {
+  const originalStatus = res.status.bind(res);
+  const originalJson = res.json.bind(res);
+  let statusCode = 200;
+  let payload = null;
+
+  const proxyRes = Object.create(res);
+  proxyRes.status = (code) => {
+    statusCode = code;
+    return proxyRes;
+  };
+  proxyRes.json = (body) => {
+    payload = body;
+    return proxyRes;
+  };
+
+  try {
+    await handler(req, proxyRes, (error) => {
+      throw error;
+    });
+  } catch (error) {
+    return next(error);
+  } finally {
+    res.status = originalStatus;
+    res.json = originalJson;
+  }
+
+  if (!payload) {
+    return null;
+  }
+
+  const responseStatus = String(payload?.status || '').toLowerCase();
+  const transactionStatus = String(
+    payload?.data?.transaction?.status ||
+    payload?.data?.status ||
+    ''
+  ).toLowerCase();
+
+  if (responseStatus === 'success' && ['successful', 'pending'].includes(transactionStatus || 'successful')) {
+    const purchaseAmount = extractPurchaseAmount(payload);
+    await creditAgentCommission(req.user._id, purchaseAmount);
+  }
+
+  return originalStatus(statusCode).json(payload);
 };
 
 class AgentController {
@@ -335,10 +585,7 @@ class AgentController {
 
       const agent = await User.create(agentData);
 
-      await Wallet.create({
-        user: agent._id,
-        balance: 0,
-      });
+      await WalletService.createWallet(agent);
 
       await AdminLog.log({
         admin: req.admin._id,
@@ -719,7 +966,15 @@ class AgentController {
       const query = {
         user: agent._id,
         status: 'successful',
-        'metadata.commissionEarned': { $exists: true },
+        $or: [
+          { type: 'commission_earned' },
+          { type: 'commission_transfer' },
+          { type: 'commission_withdrawal' },
+          { 'metadata.commission': { $exists: true } },
+          { 'metadata.commissionEarned': { $exists: true } },
+          { 'metadata.commissionTransfer': true },
+          { 'metadata.commissionWithdrawal': true },
+        ],
       };
 
       if (Object.keys(dateFilter).length > 0) {
@@ -737,15 +992,19 @@ class AgentController {
 
       const commissionStats = await Transaction.aggregate([
         { $match: query },
-        {
-          $group: {
-            _id: null,
-            totalTransactions: { $sum: 1 },
-            totalAmount: { $sum: '$amount' },
-            totalCommission: { $sum: '$metadata.commissionEarned' },
+          {
+            $group: {
+              _id: null,
+              totalTransactions: { $sum: 1 },
+              totalAmount: { $sum: '$amount' },
+              totalCommission: {
+                $sum: {
+                  $ifNull: ['$metadata.commission', '$metadata.commissionEarned'],
+                },
+              },
+            },
           },
-        },
-      ]);
+        ]);
 
       const monthlyTrend = await Transaction.aggregate([
         { $match: query },
@@ -756,7 +1015,11 @@ class AgentController {
             },
             count: { $sum: 1 },
             amount: { $sum: '$amount' },
-            commission: { $sum: '$metadata.commissionEarned' },
+            commission: {
+              $sum: {
+                $ifNull: ['$metadata.commission', '$metadata.commissionEarned'],
+              },
+            },
           },
         },
         { $sort: { _id: 1 } },
@@ -802,14 +1065,7 @@ class AgentController {
   static async getAgentCommission(req, res, next) {
     try {
       const agent = req.user;
-
-      const transactions = await Transaction.find({
-        user: agent._id,
-        'metadata.commissionWithdrawal': true,
-      })
-        .sort({ createdAt: -1 })
-        .limit(10)
-        .lean();
+      const commissionHistory = await getCommissionHistory(agent._id, 10);
 
       res.status(200).json({
         status: 'success',
@@ -819,7 +1075,10 @@ class AgentController {
             available: agent.agentInfo.availableCommission || 0,
             currency: 'NGN',
           },
-          recentWithdrawals: transactions,
+          commissionHistory: {
+            summary: commissionHistory.summary,
+            transactions: commissionHistory.transactions,
+          },
         },
       });
 
@@ -845,9 +1104,9 @@ class AgentController {
       const agent = await User.findById(req.user._id).session(session);
 
       if (!agent) {
-  await session.abortTransaction();
-  return next(new AppError('Agent not found', 404));
-}
+        await session.abortTransaction();
+        return next(new AppError('Agent not found', 404));
+      }
 
       if (agent.agentInfo.availableCommission < amount) {
         await session.abortTransaction();
@@ -856,13 +1115,17 @@ class AgentController {
         );
       }
 
-      const wallet = await Wallet.findOne({
+      let wallet = await Wallet.findOne({
         user: agent._id,
       }).session(session);
 
       if (!wallet) {
-        await session.abortTransaction();
-        return next(new AppError('Wallet not found', 404));
+        const createdWallet = await WalletService.createWallet(agent);
+        wallet = await Wallet.findById(createdWallet._id).session(session);
+        if (!wallet) {
+          await session.abortTransaction();
+          return next(new AppError('Wallet not found', 404));
+        }
       }
 
       const previousWalletBalance = wallet.balance;
@@ -878,42 +1141,42 @@ class AgentController {
       await wallet.save({ session });
 
       const transaction = new Transaction({
-  reference: `COM-WALLET-${Date.now()}`,
-  user: agent._id,
-  type: 'commission_transfer',
-  category: 'commission',
-  amount,
-  fee: 0,
-  totalAmount: amount,
-  previousBalance: previousWalletBalance,
-  newBalance: wallet.balance,
-  status: 'successful',
-  description: 'Commission moved to wallet',
-  metadata: {
-    commissionTransfer: true,
-  },
-  completedAt: new Date(),
-});
+        reference: `COM-WALLET-${Date.now()}`,
+        user: agent._id,
+        type: 'commission_transfer',
+        category: 'commission',
+        amount,
+        fee: 0,
+        totalAmount: amount,
+        previousBalance: previousWalletBalance,
+        newBalance: wallet.balance,
+        status: 'successful',
+        description: 'Commission moved to wallet',
+        metadata: {
+          commissionTransfer: true,
+        },
+        completedAt: new Date(),
+      });
 
-await transaction.save({ session });
+      await transaction.save({ session });
 
       await session.commitTransaction();
 
       res.status(200).json({
-  status: 'success',
-  message: 'Commission transferred to wallet successfully',
-  data: {
-    transaction: {
-      id: transaction._id,
-      reference: transaction.reference,
-      amount: transaction.amount,
-      status: transaction.status,
-      createdAt: transaction.createdAt,
-    },
-    walletBalance: wallet.balance,
-    availableCommission: agent.agentInfo.availableCommission,
-  },
-});
+        status: 'success',
+        message: 'Commission transferred to wallet successfully',
+        data: {
+          transaction: {
+            id: transaction._id,
+            reference: transaction.reference,
+            amount: transaction.amount,
+            status: transaction.status,
+            createdAt: transaction.createdAt,
+          },
+          walletBalance: wallet.balance,
+          availableCommission: agent.agentInfo.availableCommission,
+        },
+      });
 
     } catch (error) {
       await session.abortTransaction();
@@ -1044,6 +1307,44 @@ await transaction.save({ session });
     }
   }
 
+  static async verifyEmail(req, res, next) {
+    try {
+      const { token } = req.params;
+
+      if (!token) {
+        return next(new AppError('Verification token is required', 400));
+      }
+
+      const hashedToken = crypto.createHash('sha256').update(token.trim()).digest('hex');
+
+      const agent = await User.findOne({
+        role: 'agent',
+        emailVerificationToken: hashedToken,
+      });
+
+      if (!agent) {
+        return next(new AppError('Invalid or expired verification token', 400));
+      }
+
+      if (!agent.emailVerificationExpires || new Date(agent.emailVerificationExpires).getTime() < Date.now()) {
+        return next(new AppError('Verification token has expired', 400));
+      }
+
+      agent.isEmailVerified = true;
+      agent.emailVerificationToken = undefined;
+      agent.emailVerificationExpires = undefined;
+      await agent.save();
+
+      res.status(200).json({
+        status: 'success',
+        message: 'Email verified successfully',
+      });
+    } catch (error) {
+      logger.error('Error verifying agent email:', error);
+      next(error);
+    }
+  }
+
   static async login(req, res, next) {
     try {
       const { email, phoneNumber, password } = req.body;
@@ -1060,10 +1361,46 @@ await transaction.save({ session });
       if (email) query.$or.push({ email });
       if (phoneNumber) query.$or.push({ phoneNumber });
 
-      const agent = await User.findOne(query).select('+password');
+      const agent = await User.findOne(query).select('+password +failedLoginAttempts +lockUntil');
 
       if (!agent) {
         return next(new AppError('Invalid credentials', 401));
+      }
+
+      if (agent.isLocked()) {
+        return next(
+          new AppError(
+            'Account is locked. Please try again later or contact support.',
+            401
+          )
+        );
+      }
+
+      if (agent.isAccountLocked) {
+        return next(
+          new AppError(
+            'Your account has been locked by an administrator. Please contact support.',
+            401
+          )
+        );
+      }
+
+      if (!agent.isApproved) {
+        return next(
+          new AppError(
+            'Your agent account is pending approval. Please contact admin for approval.',
+            401
+          )
+        );
+      }
+
+      if (!agent.isEmailVerified) {
+        return next(
+          new AppError(
+            'Please verify your email address before logging in.',
+            401
+          )
+        );
       }
 
       if (!agent.isActive) {
@@ -1072,14 +1409,18 @@ await transaction.save({ session });
 
       const isPasswordValid = await agent.comparePassword(password);
       if (!isPasswordValid) {
+        await agent.incrementLoginAttempts();
         return next(new AppError('Invalid credentials', 401));
+      }
+
+      if (agent.failedLoginAttempts > 0) {
+        agent.failedLoginAttempts = 0;
+        agent.lockUntil = undefined;
       }
 
       agent.lastLogin = new Date();
       agent.lastLoginIp = req.ip;
       agent.lastLoginDevice = req.get('user-agent');
-      agent.failedLoginAttempts = 0;
-      agent.lockUntil = undefined;
 
       await agent.save({ validateBeforeSave: false });
 
@@ -1098,7 +1439,28 @@ await transaction.save({ session });
 
       logger.info(`Agent login: ${agent.email}, Agent ID: ${agent.agentInfo.agentId}`);
 
-      createSendToken(agent, 200, res);
+      let wallet = null;
+      try {
+        wallet = await getOrCreateAgentWallet(agent);
+      } catch (walletError) {
+        logger.warn('Wallet fetch failed during agent login:', walletError);
+      }
+
+      agent.password = undefined;
+      agent.transactionPin = undefined;
+
+      const token = signToken(agent._id);
+      const refreshToken = signRefreshToken(agent._id);
+
+      res.status(200).json({
+        status: 'success',
+        token,
+        refreshToken,
+        data: {
+          agent,
+          wallet: serializeWallet(wallet),
+        },
+      });
 
     } catch (error) {
       logger.error('Error during agent login:', error);
@@ -1176,18 +1538,13 @@ await transaction.save({ session });
 
       const agent = await User.create(agentData);
 
-      await Wallet.create({
-        user: agent._id,
-        balance: 0,
-      });
+      await WalletService.createWallet(agent);
 
-      const verificationToken = crypto.randomBytes(32).toString('hex');
-      agent.emailVerificationToken = crypto
-        .createHash('sha256')
-        .update(verificationToken)
-        .digest('hex');
-      agent.emailVerificationExpires = Date.now() + 24 * 60 * 60 * 1000;
-      await agent.save();
+      try {
+        await prepareAgentEmailVerification(agent);
+      } catch (verificationError) {
+        logger.warn('Agent verification email could not be sent:', verificationError);
+      }
 
 
       await AdminLog.log({
@@ -1234,778 +1591,74 @@ await transaction.save({ session });
   }
 
   static async purchaseAirtime(req, res, next) {
-    try {
-      const { phoneNumber, amount, network, requestId, bypassOTP } = req.body;
-
-      if (!phoneNumber || !amount || !network) {
-        return next(new AppError('Please provide phone number, amount, and network', 400));
-      }
-
-      const agent = req.user;
-      const wallet = await Wallet.findOne({ user: agent._id });
-
-      if (!wallet) {
-        return next(new AppError('Wallet not found', 404));
-      }
-
-      const service = await ServicePricing.findOne({
-        serviceType: 'airtime_recharge',
-        network: network.toLowerCase(),
-        isActive: true,
-        isAvailable: true,
-      }).sort({ sellingPrice: 1 });
-
-      if (!service) {
-        return next(new AppError('Airtime service is currently unavailable for this network', 400));
-      }
-
-      const commission = (service.agentCommission || 0) * amount / 100;
-      const costAfterCommission = amount - commission;
-      const totalCost = costAfterCommission;
-
-      if (wallet.balance < totalCost) {
-        return next(new AppError('Insufficient wallet balance', 400));
-      }
-
-      const reference = requestId || `AIRT-${Date.now()}`;
-
-      const transaction = await Transaction.create({
-        reference,
-        user: agent._id,
-        type: 'airtime_recharge',
-        category: 'airtime',
-        amount: amount,
-        fee: 0,
-        totalAmount: totalCost,
-        previousBalance: wallet.balance,
-        newBalance: wallet.balance - totalCost,
-        status: 'processing',
-        description: `Airtime recharge of ${amount} NGN to ${phoneNumber} (${network})`,
-        metadata: {
-          phoneNumber,
-          network,
-          serviceId: service._id,
-          commission,
-          costAfterCommission,
-          bypassOTP: bypassOTP || false,
-        },
-      });
-
-      wallet.balance -= totalCost;
-      await wallet.save();
-
-      const provider = await ProviderStatus.findOne({
-        supportedServices: 'airtime_recharge',
-        status: 'active',
-      }).sort({ priority: 1, successRate: -1 });
-
-      if (!provider) {
-        throw new AppError('No provider available for airtime recharge', 500);
-      }
-
-      await ProviderPurchaseGuardService.assertSufficientProviderBalance(
-        provider.providerName,
-        Number(amount),
-        { serviceType: 'airtime_recharge', network, phoneNumber, actor: 'agent' }
-      );
-
-      const apiResponse = {
-        success: true,
-        reference: transaction.reference,
-        status: 'successful',
-        message: 'Airtime recharge successful',
-        data: {
-          amount,
-          phoneNumber,
-          network,
-          transactionId: `API-${Date.now()}`,
-        },
-      };
-
-      if (apiResponse.success) {
-        transaction.status = 'successful';
-        transaction.metadata.apiResponse = apiResponse;
-        transaction.metadata.providerUsed = provider.providerName;
-        transaction.completedAt = new Date();
-        transaction.statusHistory.push({
-          status: 'successful',
-          note: 'Airtime delivered successfully',
-          timestamp: new Date(),
-        });
-
-        agent.agentInfo.totalCommissionEarned += commission;
-        agent.agentInfo.availableCommission += commission;
-        agent.agentInfo.totalTransactions += 1;
-        await agent.save();
-
-        await provider.incrementRequest(true);
-
-        await AdminLog.log({
-          admin: agent._id,
-          adminEmail: agent.email,
-          adminRole: agent.role,
-          action: 'purchase',
-          entity: 'transaction',
-          entityId: transaction._id,
-          description: `Airtime recharge of ${amount} NGN to ${phoneNumber}`,
-          ipAddress: req.ip,
-          userAgent: req.get('user-agent'),
-          status: 'success',
-          metadata: {
-            amount,
-            phoneNumber,
-            network,
-            commission,
-            provider: provider.providerName,
-          },
-        });
-
-        logger.info(`Airtime purchase successful: ${agent.email}, Amount: ${amount}, Phone: ${phoneNumber}`);
-      } else {
-        wallet.balance += totalCost;
-        await wallet.save();
-
-        transaction.status = 'failed';
-        transaction.metadata.apiResponse = apiResponse;
-        transaction.metadata.providerUsed = provider.providerName;
-        transaction.statusHistory.push({
-          status: 'failed',
-          note: apiResponse.message || 'Airtime recharge failed',
-          timestamp: new Date(),
-        });
-
-        await provider.incrementRequest(false);
-
-        logger.error(`Airtime purchase failed: ${agent.email}, Amount: ${amount}, Phone: ${phoneNumber}`);
-      }
-
-      await transaction.save();
-
-      res.status(200).json({
-        status: 'success',
-        message: apiResponse.success ? 'Airtime purchase successful' : 'Airtime purchase failed',
-        data: {
-          transaction: {
-            id: transaction._id,
-            reference: transaction.reference,
-            amount: transaction.amount,
-            status: transaction.status,
-            timestamp: transaction.createdAt,
-          },
-          airtimeDetails: {
-            phoneNumber,
-            network,
-            amount,
-            commission,
-          },
-          walletBalance: wallet.balance,
-        },
-      });
-
-    } catch (error) {
-      logger.error('Error during airtime purchase:', error);
-      next(error);
-    }
+    return forwardUserServiceWithAgentCommission(req, res, next, telecomController.purchaseAirtime, {
+      serviceType: 'airtime_recharge',
+    });
   }
 
   static async purchaseData(req, res, next) {
-    try {
-      const { phoneNumber, planId, requestId, dataType } = req.body;
-      const requestedDataType = normalizeDataType(dataType);
-
-      if (!phoneNumber || !planId) {
-        return next(new AppError('Please provide phone number and plan ID', 400));
-      }
-
-      const agent = req.user;
-      const wallet = await Wallet.findOne({ user: agent._id });
-
-      if (!wallet) {
-        return next(new AppError('Wallet not found', 404));
-      }
-
-      const service = await ServicePricing.findById(planId);
-
-      if (!service || !service.isActive || !service.isAvailable) {
-        return next(new AppError('Data plan is currently unavailable', 400));
-      }
-
-      const serviceDataType = normalizeDataType(
-        service.providerPlanType || inferDataTypeFromPlanName(service.planName || service.size || '')
-      ) || 'other';
-      if (requestedDataType && requestedDataType !== 'all' && requestedDataType !== serviceDataType) {
-        return next(new AppError(`Selected plan is '${serviceDataType}' type, but '${requestedDataType}' was requested`, 400));
-      }
-
-      const commission = (service.agentCommission || 0) * service.sellingPrice / 100;
-      const costAfterCommission = service.sellingPrice - commission;
-      const totalCost = costAfterCommission;
-
-      if (wallet.balance < totalCost) {
-        return next(new AppError('Insufficient wallet balance', 400));
-      }
-
-      const reference = requestId || `DATA-${Date.now()}`;
-
-      const transaction = await Transaction.create({
-        reference,
-        user: agent._id,
-        type: 'data_recharge',
-        category: 'data',
-        amount: service.sellingPrice,
-        fee: 0,
-        totalAmount: totalCost,
-        previousBalance: wallet.balance,
-        newBalance: wallet.balance - totalCost,
-        status: 'processing',
-        description: `Data recharge: ${service.planName} to ${phoneNumber}`,
-        metadata: {
-          phoneNumber,
-          network: service.network,
-          planName: service.planName,
-          planCode: service.planCode,
-          dataAmount: service.dataAmount,
-          validity: service.validity,
-          serviceId: service._id,
-          commission,
-          costAfterCommission,
-        },
-      });
-
-      wallet.balance -= totalCost;
-      await wallet.save();
-
-      const provider = await ProviderStatus.findOne({
-        supportedServices: 'data_recharge',
-        status: 'active',
-      }).sort({ priority: 1, successRate: -1 });
-
-      if (!provider) {
-        throw new AppError('No provider available for data recharge', 500);
-      }
-
-      await ProviderPurchaseGuardService.assertSufficientProviderBalance(
-        provider.providerName,
-        Number(service.sellingPrice),
-        { serviceType: 'data_recharge', network: service.network, phoneNumber, actor: 'agent' }
-      );
-
-      const apiResponse = {
-        success: true,
-        reference: transaction.reference,
-        status: 'successful',
-        message: 'Data recharge successful',
-        data: {
-          phoneNumber,
-          planName: service.planName,
-          dataAmount: service.dataAmount,
-          validity: service.validity,
-          transactionId: `API-${Date.now()}`,
-        },
-      };
-
-      if (apiResponse.success) {
-        transaction.status = 'successful';
-        transaction.metadata.apiResponse = apiResponse;
-        transaction.metadata.providerUsed = provider.providerName;
-        transaction.completedAt = new Date();
-        transaction.statusHistory.push({
-          status: 'successful',
-          note: 'Data delivered successfully',
-          timestamp: new Date(),
-        });
-
-        agent.agentInfo.totalCommissionEarned += commission;
-        agent.agentInfo.availableCommission += commission;
-        agent.agentInfo.totalTransactions += 1;
-        await agent.save();
-
-        await provider.incrementRequest(true);
-
-        await AdminLog.log({
-          admin: agent._id,
-          adminEmail: agent.email,
-          adminRole: agent.role,
-          action: 'purchase',
-          entity: 'transaction',
-          entityId: transaction._id,
-          description: `Data recharge: ${service.planName} to ${phoneNumber}`,
-          ipAddress: req.ip,
-          userAgent: req.get('user-agent'),
-          status: 'success',
-          metadata: {
-            planName: service.planName,
-            amount: service.sellingPrice,
-            phoneNumber,
-            commission,
-            provider: provider.providerName,
-          },
-        });
-
-        logger.info(`Data purchase successful: ${agent.email}, Plan: ${service.planName}, Phone: ${phoneNumber}`);
-      } else {
-        wallet.balance += totalCost;
-        await wallet.save();
-
-        transaction.status = 'failed';
-        transaction.metadata.apiResponse = apiResponse;
-        transaction.metadata.providerUsed = provider.providerName;
-        transaction.statusHistory.push({
-          status: 'failed',
-          note: apiResponse.message || 'Data recharge failed',
-          timestamp: new Date(),
-        });
-
-        await provider.incrementRequest(false);
-
-        logger.error(`Data purchase failed: ${agent.email}, Plan: ${service.planName}, Phone: ${phoneNumber}`);
-      }
-
-      await transaction.save();
-
-      res.status(200).json({
-        status: 'success',
-        message: apiResponse.success ? 'Data purchase successful' : 'Data purchase failed',
-        data: {
-          transaction: {
-            id: transaction._id,
-            reference: transaction.reference,
-            amount: transaction.amount,
-            status: transaction.status,
-            timestamp: transaction.createdAt,
-          },
-          dataDetails: {
-            phoneNumber,
-            planName: service.planName,
-            dataAmount: service.dataAmount,
-            validity: service.validity,
-            network: service.network,
-            dataType: serviceDataType,
-            commission,
-          },
-          walletBalance: wallet.balance,
-        },
-      });
-
-    } catch (error) {
-      logger.error('Error during data purchase:', error);
-      next(error);
-    }
+    return forwardUserServiceWithAgentCommission(req, res, next, telecomController.purchaseData, {
+      serviceType: 'data_recharge',
+    });
   }
 
   static async payBill(req, res, next) {
-    try {
-      const { serviceType, meterNumber, amount, provider, requestId, customerDetails } = req.body;
-
-      if (!serviceType || !meterNumber) {
-        return next(new AppError('Please provide service type and meter/customer number', 400));
-      }
-
-      const agent = req.user;
-      const wallet = await Wallet.findOne({ user: agent._id });
-
-      if (!wallet) {
-        return next(new AppError('Wallet not found', 404));
-      }
-
-
-      const validServices = ['electricity', 'cable_tv', 'education_pin', 'rrr_payment'];
-      if (!validServices.includes(serviceType)) {
-        return next(new AppError('Invalid service type', 400));
-      }
-
-      if (serviceType === 'electricity') {
-        const activeProvider = await vtuConfig.getProviderIdForService('electricity');
-
-        if (activeProvider !== 'clubkonnect') {
-          return next(new AppError(`Electricity provider ${activeProvider} is not implemented for agent bill payment`, 400));
-        }
-
-        const billAmount = Number(amount);
-        if (Number.isNaN(billAmount) || billAmount < 500 || billAmount > 100000) {
-          return next(new AppError('Amount must be between ₦500 and ₦100,000', 400));
-        }
-
-        const meterType = customerDetails?.meterType || 'prepaid';
-        const verification = await NelloBytesService.verifyElectricityMeter({
-          electricCompany: provider,
-          meterNo: meterNumber,
-          meterType,
-        });
-
-        if (!verification.valid) {
-          return next(new AppError('Invalid meter number', 400));
-        }
-
-        if (wallet.balance < billAmount) {
-          return next(new AppError('Insufficient wallet balance', 400));
-        }
-
-        await ProviderPurchaseGuardService.assertSufficientProviderBalance(
-          'clubkonnect',
-          billAmount,
-          { serviceType: 'electricity', provider, meterNumber, actor: 'agent' }
-        );
-
-        const reference = requestId || `${serviceType.toUpperCase()}-${Date.now()}`;
-        const previousBalance = wallet.balance;
-
-        wallet.balance -= billAmount;
-        await wallet.save();
-
-        const transaction = await Transaction.create({
-          reference,
-          user: agent._id,
-          type: serviceType,
-          category: 'bills',
-          amount: billAmount,
-          fee: 0,
-          totalAmount: billAmount,
-          previousBalance,
-          newBalance: wallet.balance,
-          status: 'pending',
-          description: `${serviceType} payment for ${meterNumber}`,
-          metadata: {
-            serviceType,
-            meterNumber,
-            provider,
-            amount: billAmount,
-            customerDetails,
-            customerName: verification.customerName,
-            source: 'nellobytes',
-          },
-          service: {
-            provider: 'clubkonnect',
-            disco: provider,
-            meterNumber,
-            customerName: verification.customerName,
-          },
-        });
-
-        const apiResponse = await NelloBytesService.payElectricityBill({
-          electricCompany: provider,
-          meterNo: meterNumber,
-          meterType,
-          amount: billAmount,
-          phoneNo: customerDetails?.phone || agent.phoneNumber,
-          requestId: reference,
-          callBackURL: `${process.env.SERVER_URL || 'https://api.yareemadata.com'}/api/v1/bills/webhook/nellobytes`,
-        });
-
-        if (apiResponse.success || apiResponse.statusCode === '100') {
-          transaction.status = apiResponse.statusCode === '200' ? 'successful' : 'pending';
-          transaction.metadata.apiResponse = apiResponse.response;
-          transaction.metadata.providerUsed = 'clubkonnect';
-          transaction.service.orderId = apiResponse.orderId;
-          transaction.service.meterType = meterType;
-          transaction.statusHistory.push({
-            status: transaction.status,
-            note: transaction.status === 'successful' ? 'Bill payment successful' : 'Bill payment initiated',
-            timestamp: new Date(),
-          });
-
-          if (transaction.status === 'successful') {
-            transaction.completedAt = new Date();
-          }
-
-          await transaction.save();
-
-          return res.status(200).json({
-            status: 'success',
-            message: transaction.status === 'successful' ? 'Bill payment successful' : 'Bill payment initiated',
-            data: {
-              transaction: {
-                id: transaction._id,
-                reference: transaction.reference,
-                amount: transaction.amount,
-                status: transaction.status,
-                timestamp: transaction.createdAt,
-              },
-              billDetails: {
-                serviceType,
-                meterNumber,
-                amount: billAmount,
-                provider,
-                customerName: verification.customerName,
-                source: 'nellobytes',
-              },
-              walletBalance: wallet.balance,
-            },
-          });
-        }
-
-        wallet.balance += billAmount;
-        await wallet.save();
-
-        transaction.status = 'failed';
-        transaction.metadata.apiResponse = apiResponse.response || apiResponse;
-        transaction.metadata.providerUsed = 'clubkonnect';
-        transaction.statusHistory.push({
-          status: 'failed',
-          note: apiResponse.status || apiResponse.message || 'Bill payment failed',
-          timestamp: new Date(),
-        });
-        await transaction.save();
-
-        return next(new AppError(apiResponse.status || apiResponse.message || 'Bill payment failed', 500));
-      }
-
-
-      let service;
-      let query = {
-        serviceType,
-        isActive: true,
-        isAvailable: true,
-      };
-
-      if (serviceType === 'electricity') {
-        query.disco = provider;
-      } else if (serviceType === 'cable_tv') {
-        query.cableProvider = provider;
-      } else {
-        query.provider = provider;
-      }
-
-      service = await ServicePricing.findOne(query).sort({ sellingPrice: 1 });
-
-      if (!service) {
-        return next(new AppError('Service is currently unavailable', 400));
-      }
-
-      if (serviceType === 'electricity' && amount) {
-        if (service.minAmount && amount < service.minAmount) {
-          return next(new AppError(`Minimum amount is ${service.minAmount}`, 400));
-        }
-        if (service.maxAmount && amount > service.maxAmount) {
-          return next(new AppError(`Maximum amount is ${service.maxAmount}`, 400));
-        }
-      }
-
-      const billAmount = amount || service.sellingPrice;
-
-      const commission = (service.agentCommission || 0) * billAmount / 100;
-      const costAfterCommission = billAmount - commission;
-      const totalCost = costAfterCommission;
-
-      if (wallet.balance < totalCost) {
-        return next(new AppError('Insufficient wallet balance', 400));
-      }
-
-      const reference = requestId || `${serviceType.toUpperCase()}-${Date.now()}`;
-
-      const transaction = await Transaction.create({
-        reference,
-        user: agent._id,
-        type: serviceType,
-        category: 'bills',
-        amount: billAmount,
-        fee: 0,
-        totalAmount: totalCost,
-        previousBalance: wallet.balance,
-        newBalance: wallet.balance - totalCost,
-        status: 'processing',
-        description: `${serviceType} payment for ${meterNumber}`,
-        metadata: {
-          serviceType,
-          meterNumber,
-          provider,
-          amount: billAmount,
-          customerDetails,
-          serviceId: service._id,
-          commission,
-          costAfterCommission,
-        },
+    const { serviceType } = req.body;
+    if (serviceType === 'electricity') {
+      return forwardUserServiceWithAgentCommission(req, res, next, billsController.purchaseElectricity, {
+        serviceType: 'electricity',
       });
-
-      wallet.balance -= totalCost;
-      await wallet.save();
-
-      const billProvider = await ProviderStatus.findOne({
-        supportedServices: serviceType,
-        status: 'active',
-      }).sort({ priority: 1, successRate: -1 });
-
-      if (!billProvider) {
-        throw new AppError('No provider available for bill payment', 500);
-      }
-
-      await ProviderPurchaseGuardService.assertSufficientProviderBalance(
-        billProvider.providerName,
-        Number(billAmount),
-        { serviceType, provider, meterNumber, actor: 'agent' }
-      );
-
-      const apiResponse = {
-        success: true,
-        reference: transaction.reference,
-        status: 'successful',
-        message: 'Bill payment successful',
-        data: {
-          serviceType,
-          meterNumber,
-          amount: billAmount,
-          provider,
-          transactionId: `API-${Date.now()}`,
-        },
-      };
-
-      if (apiResponse.success) {
-        transaction.status = 'successful';
-        transaction.metadata.apiResponse = apiResponse;
-        transaction.metadata.providerUsed = billProvider.providerName;
-        transaction.completedAt = new Date();
-        transaction.statusHistory.push({
-          status: 'successful',
-          note: 'Bill payment successful',
-          timestamp: new Date(),
-        });
-
-        agent.agentInfo.totalCommissionEarned += commission;
-        agent.agentInfo.availableCommission += commission;
-        agent.agentInfo.totalTransactions += 1;
-        await agent.save();
-
-        await billProvider.incrementRequest(true);
-
-        await AdminLog.log({
-          admin: agent._id,
-          adminEmail: agent.email,
-          adminRole: agent.role,
-          action: 'payment',
-          entity: 'transaction',
-          entityId: transaction._id,
-          description: `${serviceType} payment of ${billAmount} NGN for ${meterNumber}`,
-          ipAddress: req.ip,
-          userAgent: req.get('user-agent'),
-          status: 'success',
-          metadata: {
-            serviceType,
-            amount: billAmount,
-            meterNumber,
-            commission,
-            provider: billProvider.providerName,
-          },
-        });
-
-        logger.info(`Bill payment successful: ${agent.email}, Service: ${serviceType}, Amount: ${billAmount}`);
-      } else {
-        wallet.balance += totalCost;
-        await wallet.save();
-
-        transaction.status = 'failed';
-        transaction.metadata.apiResponse = apiResponse;
-        transaction.metadata.providerUsed = billProvider.providerName;
-        transaction.statusHistory.push({
-          status: 'failed',
-          note: apiResponse.message || 'Bill payment failed',
-          timestamp: new Date(),
-        });
-
-        await billProvider.incrementRequest(false);
-
-        logger.error(`Bill payment failed: ${agent.email}, Service: ${serviceType}, Amount: ${billAmount}`);
-      }
-
-      await transaction.save();
-
-      res.status(200).json({
-        status: 'success',
-        message: apiResponse.success ? 'Bill payment successful' : 'Bill payment failed',
-        data: {
-          transaction: {
-            id: transaction._id,
-            reference: transaction.reference,
-            amount: transaction.amount,
-            status: transaction.status,
-            timestamp: transaction.createdAt,
-          },
-          billDetails: {
-            serviceType,
-            meterNumber,
-            amount: billAmount,
-            provider,
-            commission,
-          },
-          walletBalance: wallet.balance,
-        },
-      });
-
-    } catch (error) {
-      logger.error('Error during bill payment:', error);
-      next(error);
     }
+
+    if (serviceType === 'cable_tv') {
+      return forwardUserServiceWithAgentCommission(req, res, next, billsController.purchaseCableTV, {
+        serviceType: 'cable_tv',
+      });
+    }
+
+    if (serviceType === 'education_pin') {
+      return forwardUserServiceWithAgentCommission(req, res, next, billsController.purchaseEducationPin, {
+        serviceType: 'education_pin',
+      });
+    }
+
+    return next(new AppError('Unsupported service type for agent purchases', 400));
   }
 
   static async getServices(req, res, next) {
     try {
       const { serviceType, network, provider } = req.query;
-      const activeProvider = await vtuConfig.getProviderIdForService('electricity');
+      const services = {};
 
-      if (serviceType === 'electricity') {
-        if (activeProvider === 'clubkonnect') {
-          const electricityDiscos = await NelloBytesService.getElectricityDiscos();
-          const discos = electricityDiscos.discos || normalizeElectricityDiscos(electricityDiscos);
-
-          return res.status(200).json({
-            status: 'success',
-            data: {
-              services: {
-                electricity: discos,
-              },
-              providers: [
-                {
-                  providerName: 'clubkonnect',
-                  displayName: 'Club Konnect (NelloBytes)',
-                  status: 'active',
-                },
-              ],
-              source: 'nellobytes',
-              timestamp: new Date(),
-            },
-          });
-        }
+      if (!serviceType || serviceType === 'data') {
+        const dataPlansResult = await captureControllerPayload(
+          { ...req, query: { network, dataType: req.query.dataType, source: req.query.source } },
+          telecomController.getDataPlans
+        );
+        services.data = dataPlansResult.payload?.data || dataPlansResult.payload || null;
       }
 
-      const query = {
-        isActive: true,
-        isAvailable: true,
-      };
-
-      if (!serviceType && activeProvider === 'clubkonnect') {
-        query.serviceType = { $ne: 'electricity' };
+      if (!serviceType || serviceType === 'electricity') {
+        const electricityResult = await captureControllerPayload(req, billsController.getElectricityDiscos);
+        services.electricity = electricityResult.payload?.data || electricityResult.payload || null;
       }
 
-      if (serviceType) query.serviceType = serviceType;
-      if (network) query.network = network;
-      if (provider) query.provider = provider;
+      if (!serviceType || serviceType === 'cable_tv') {
+        const cableResult = await captureControllerPayload({ ...req, query: { provider } }, billsController.getCablePlans);
+        services.cable_tv = cableResult.payload?.data || cableResult.payload || null;
+      }
 
-      const services = await ServicePricing.find(query)
-        .sort({ priority: 1, sellingPrice: 1 })
-        .lean();
-
-      const groupedServices = services.reduce((acc, service) => {
-        if (!acc[service.serviceType]) {
-          acc[service.serviceType] = [];
-        }
-        acc[service.serviceType].push(service);
-        return acc;
-      }, {});
-
-      const providers = await ProviderStatus.find({
-        status: { $in: ['active', 'degraded'] },
-      }).lean();
-
-      if (!serviceType && activeProvider === 'clubkonnect') {
-        const electricityDiscos = await NelloBytesService.getElectricityDiscos();
-        groupedServices.electricity = electricityDiscos.discos || normalizeElectricityDiscos(electricityDiscos);
+      if (serviceType === 'education_pin') {
+        services.education_pin = {
+          exams: ['waecdirect', 'waec-registration', 'de', 'utme-mock', 'utme-no-mock'],
+        };
       }
 
       res.status(200).json({
         status: 'success',
         data: {
-          services: groupedServices,
-          providers,
-          ...(activeProvider === 'clubkonnect' ? { electricitySource: 'nellobytes' } : {}),
+          services,
+          source: 'user-service-flow',
           timestamp: new Date(),
         },
       });
@@ -2194,6 +1847,8 @@ await transaction.save({ session });
         { $sort: { amount: -1 } },
       ]);
 
+      const commissionHistory = await getCommissionHistory(agent._id, 10);
+
       const referralsCount = await User.countDocuments({
         referredBy: agent._id,
         role: 'user',
@@ -2222,6 +1877,10 @@ await transaction.save({ session });
           },
           recentTransactions,
           serviceBreakdown,
+          commissionHistory: {
+            summary: commissionHistory.summary,
+            transactions: commissionHistory.transactions,
+          },
         },
       });
 

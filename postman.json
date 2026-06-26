@@ -130,6 +130,34 @@
           "response": []
         },
         {
+          "name": "Agent Verify Email",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/agents/verify-email/:token",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agents",
+                "verify-email",
+                ":token"
+              ],
+              "variable": [
+                {
+                  "key": "token",
+                  "value": "your-verification-token"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "description": "Verify an agent email address"
+        },
+        {
           "name": "Verify OTP",
           "request": {
             "method": "POST",
@@ -1954,231 +1982,74 @@
           "name": "Gift Cards (Frontend)",
           "item": [
             {
-              "name": "GiftCards: Get Categories",
+              "name": "GiftCards: Get Catalog",
               "request": {
                 "method": "GET",
                 "header": [],
                 "url": {
-                  "raw": "{{base_url}}/api/v1/telecom/giftcards/categories",
+                  "raw": "{{base_url}}/api/v1/giftcards/catalog",
                   "host": [
                     "{{base_url}}"
                   ],
                   "path": [
                     "api",
                     "v1",
-                    "telecom",
                     "giftcards",
-                    "categories"
+                    "catalog"
                   ]
                 }
               },
               "response": [],
-              "description": "Frontend: load gift card categories"
+              "description": "Frontend: load the normalized gift card catalog"
             },
             {
-              "name": "GiftCards: Get Countries",
+              "name": "GiftCards: Get Catalog Item",
               "request": {
                 "method": "GET",
                 "header": [],
                 "url": {
-                  "raw": "{{base_url}}/api/v1/telecom/giftcards/countries",
+                  "raw": "{{base_url}}/api/v1/giftcards/catalog/:id",
                   "host": [
                     "{{base_url}}"
                   ],
                   "path": [
                     "api",
                     "v1",
-                    "telecom",
                     "giftcards",
-                    "countries"
-                  ]
-                }
-              },
-              "response": [],
-              "description": "Frontend: load available countries"
-            },
-            {
-              "name": "GiftCards: Get Products",
-              "request": {
-                "method": "GET",
-                "header": [],
-                "url": {
-                  "raw": "{{base_url}}/api/v1/telecom/giftcards/products?size=20&page=1&countryCode=US&productName=Amazon",
-                  "host": [
-                    "{{base_url}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "telecom",
-                    "giftcards",
-                    "products"
-                  ],
-                  "query": [
-                    {
-                      "key": "size",
-                      "value": "20"
-                    },
-                    {
-                      "key": "page",
-                      "value": "1"
-                    },
-                    {
-                      "key": "countryCode",
-                      "value": "US"
-                    },
-                    {
-                      "key": "productName",
-                      "value": "Amazon"
-                    }
-                  ]
-                }
-              },
-              "response": [],
-              "description": "Frontend: list/search products"
-            },
-            {
-              "name": "GiftCards: Get Product By ID",
-              "request": {
-                "method": "GET",
-                "header": [],
-                "url": {
-                  "raw": "{{base_url}}/api/v1/telecom/giftcards/products/:productId",
-                  "host": [
-                    "{{base_url}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "telecom",
-                    "giftcards",
-                    "products",
-                    ":productId"
+                    "catalog",
+                    ":id"
                   ],
                   "variable": [
                     {
-                      "key": "productId",
-                      "value": "1"
+                      "key": "id",
+                      "value": "reloadly:123"
                     }
                   ]
                 }
               },
               "response": [],
-              "description": "Frontend: fetch product details"
+              "description": "Frontend: fetch one gift card product"
             },
             {
-              "name": "GiftCards: Get Product Discount",
-              "request": {
-                "method": "GET",
-                "header": [],
-                "url": {
-                  "raw": "{{base_url}}/api/v1/telecom/giftcards/products/:productId/discounts",
-                  "host": [
-                    "{{base_url}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "telecom",
-                    "giftcards",
-                    "products",
-                    ":productId",
-                    "discounts"
-                  ],
-                  "variable": [
-                    {
-                      "key": "productId",
-                      "value": "1"
-                    }
-                  ]
-                }
-              },
-              "response": [],
-              "description": "Frontend: fetch discount for selected product"
-            },
-            {
-              "name": "GiftCards: Get Product Redeem Instructions",
-              "request": {
-                "method": "GET",
-                "header": [],
-                "url": {
-                  "raw": "{{base_url}}/api/v1/telecom/giftcards/products/:productId/redeem-instructions",
-                  "host": [
-                    "{{base_url}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "telecom",
-                    "giftcards",
-                    "products",
-                    ":productId",
-                    "redeem-instructions"
-                  ],
-                  "variable": [
-                    {
-                      "key": "productId",
-                      "value": "1"
-                    }
-                  ]
-                }
-              },
-              "response": [],
-              "description": "Frontend: fetch redeem instructions"
-            },
-            {
-              "name": "GiftCards: Get FX Rate",
-              "request": {
-                "method": "GET",
-                "header": [],
-                "url": {
-                  "raw": "{{base_url}}/api/v1/telecom/giftcards/fx-rate?currencyCode=USD&amount=50",
-                  "host": [
-                    "{{base_url}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "telecom",
-                    "giftcards",
-                    "fx-rate"
-                  ],
-                  "query": [
-                    {
-                      "key": "currencyCode",
-                      "value": "USD"
-                    },
-                    {
-                      "key": "amount",
-                      "value": "50"
-                    }
-                  ]
-                }
-              },
-              "response": [],
-              "description": "Frontend: estimate sender amount via FX"
-            },
-            {
-              "name": "GiftCards: Order Gift Card",
+              "name": "GiftCards: Create Order",
               "request": {
                 "method": "POST",
                 "header": [],
                 "url": {
-                  "raw": "{{base_url}}/api/v1/telecom/giftcards/orders",
+                  "raw": "{{base_url}}/api/v1/giftcards/orders",
                   "host": [
                     "{{base_url}}"
                   ],
                   "path": [
                     "api",
                     "v1",
-                    "telecom",
                     "giftcards",
                     "orders"
                   ]
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"customIdentifier\": \"gift-order-001\",\n  \"productId\": 1,\n  \"quantity\": 1,\n  \"senderName\": \"John Doe\",\n  \"unitPrice\": 25,\n  \"recipientEmail\": \"anyone@email.com\",\n  \"transactionPin\": \"1234\"\n}",
+                  "raw": "{\n  \"productId\": \"reloadly:123\",\n  \"amount\": 25,\n  \"recipientEmail\": \"john@example.com\",\n  \"recipientName\": \"John\",\n  \"senderName\": \"David\",\n  \"message\": \"Happy Birthday\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -2187,76 +2058,137 @@
                 }
               },
               "response": [],
-              "description": "Frontend: create gift card order"
+              "description": "Frontend: create a pending gift card order"
             },
             {
-              "name": "GiftCards: Get Transactions",
+              "name": "GiftCards: List Orders",
               "request": {
                 "method": "GET",
                 "header": [],
                 "url": {
-                  "raw": "{{base_url}}/api/v1/telecom/giftcards/transactions?size=20&page=1",
+                  "raw": "{{base_url}}/api/v1/giftcards/orders?status=pending&page=1&limit=20",
                   "host": [
                     "{{base_url}}"
                   ],
                   "path": [
                     "api",
                     "v1",
-                    "telecom",
                     "giftcards",
-                    "transactions"
+                    "orders"
                   ],
                   "query": [
                     {
-                      "key": "size",
-                      "value": "20"
+                      "key": "status",
+                      "value": "pending"
                     },
                     {
                       "key": "page",
                       "value": "1"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "20"
                     }
                   ]
                 }
               },
               "response": [],
-              "description": "Frontend: list gift card transaction history"
+              "description": "Frontend: list gift card orders"
             },
             {
-              "name": "GiftCards: Get Redeem Code",
+              "name": "GiftCards: Get Order",
               "request": {
                 "method": "GET",
                 "header": [],
                 "url": {
-                  "raw": "{{base_url}}/api/v1/telecom/giftcards/orders/transactions/:transactionId/cards?version=v2",
+                  "raw": "{{base_url}}/api/v1/giftcards/orders/:id",
                   "host": [
                     "{{base_url}}"
                   ],
                   "path": [
                     "api",
                     "v1",
-                    "telecom",
                     "giftcards",
                     "orders",
-                    "transactions",
-                    ":transactionId",
-                    "cards"
-                  ],
-                  "query": [
-                    {
-                      "key": "version",
-                      "value": "v2"
-                    }
+                    ":id"
                   ],
                   "variable": [
                     {
-                      "key": "transactionId",
-                      "value": "1"
+                      "key": "id",
+                      "value": "GCO-123"
                     }
                   ]
                 }
               },
               "response": [],
-              "description": "Frontend: fetch redeem code for a successful transaction"
+              "description": "Frontend: fetch a gift card order"
+            },
+            {
+              "name": "GiftCards: Purchase Order",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/giftcards/orders/:id/purchase",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "giftcards",
+                    "orders",
+                    ":id",
+                    "purchase"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "GCO-123"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"transactionPin\": \"1234\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": [],
+              "description": "Frontend: debit wallet and complete the purchase"
+            },
+            {
+              "name": "GiftCards: Get Code",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/giftcards/orders/:id/code",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "giftcards",
+                    "orders",
+                    ":id",
+                    "code"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "GCO-123"
+                    }
+                  ]
+                }
+              },
+              "response": [],
+              "description": "Frontend: retrieve the saved gift card code"
             }
           ]
         },

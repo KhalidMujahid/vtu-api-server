@@ -21,11 +21,11 @@ class WalletService {
     static async createWallet(user) {
       try {
         const existingWallet = await Wallet.findOne({ user: user._id });
-        if (existingWallet) {
+        if (existingWallet?.virtualAccount && existingWallet?.budpayCustomerCode) {
           logger.info(`Wallet already exists for user ${user._id}`);
           return existingWallet;
         }
-  
+
         const customerResponse = await axios.post(
           'https://api.budpay.com/api/v2/customer',
           {
@@ -62,28 +62,26 @@ class WalletService {
         if (!accountResponse.data.status) {
           throw new Error('Failed to create virtual account');
         }
-  
+
         const accountData = accountResponse.data.data;
-  
-        const wallet = await Wallet.create({
-          user: user._id,
-          balance: 0,
-          currency: 'NGN',
-          locked: false,
-          totalFunded: 0,
-          totalSpent: 0,
-          budpayCustomerCode: customerCode,
-          virtualAccount: {
-            bankName: accountData.bank.name,
-            accountNumber: accountData.account_number,
-            accountName: accountData.account_name,
-            bankCode: accountData.bank.bank_code,
-            reference: accountData.reference
-          }
-        });
-  
+
+        const wallet = existingWallet || new Wallet({ user: user._id, balance: 0 });
+        wallet.currency = wallet.currency || 'NGN';
+        wallet.locked = wallet.locked || false;
+        wallet.totalFunded = wallet.totalFunded || 0;
+        wallet.totalSpent = wallet.totalSpent || 0;
+        wallet.budpayCustomerCode = customerCode;
+        wallet.virtualAccount = {
+          bankName: accountData.bank.name,
+          accountNumber: accountData.account_number,
+          accountName: accountData.account_name,
+          bankCode: accountData.bank.bank_code,
+          reference: accountData.reference
+        };
+        await wallet.save();
+
         logger.info(`wallet created for user ${user._id}`);
-  
+
         return wallet;
   
       } catch (error) {

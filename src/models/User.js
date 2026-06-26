@@ -63,6 +63,8 @@ const userSchema = new mongoose.Schema({
   otpResendAfter: Date,
   verificationToken: String,
   verificationTokenExpires: Date,
+  emailVerificationToken: String,
+  emailVerificationExpires: Date,
   twoFactor: {
     enabled: {
       type: Boolean,

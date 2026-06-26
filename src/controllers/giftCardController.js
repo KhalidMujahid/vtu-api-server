@@ -1,9 +1,15 @@
 const PrestmitService = require('../services/prestmitService');
 const ZenditService = require('../services/zenditService');
+const ReloadlyGiftCardService = require('../services/reloadlyGiftCardService');
 const Wallet = require('../models/Wallet');
+const User = require('../models/User');
 const Transaction = require('../models/Transaction');
+const GiftCardProduct = require('../models/GiftCardProduct');
+const GiftCardOrder = require('../models/GiftCardOrder');
+const GiftCardCode = require('../models/GiftCardCode');
 const { AppError } = require('../middlewares/errorHandler');
 const logger = require('../utils/logger');
+const crypto = require('crypto');
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -17,6 +23,641 @@ async function refundToWallet(transaction, reason, amount) {
     logger.error('Gift card refund failed', { ref: transaction.reference, err: err.message });
   }
 }
+
+const normalizeCatalogId = (value = '') =>
+  String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+
+const makeGiftCardProductId = (provider, productId) => `${provider}:${normalizeCatalogId(productId)}`;
+
+const makeGiftCardReference = (prefix = 'GCO') =>
+  `${prefix}-${Date.now()}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
+
+const extractProviderList = (response) => {
+  if (Array.isArray(response)) return response;
+  return response?.data || response?.products || response?.items || response?.results || [];
+};
+
+const normalizeGiftCardProduct = (provider, rawProduct) => {
+  const providerProductId = String(
+    rawProduct?.id ||
+    rawProduct?.offerId ||
+    rawProduct?.productId ||
+    rawProduct?.product_id ||
+    rawProduct?.sku ||
+    rawProduct?.code ||
+    ''
+  ).trim();
+
+  const currency = String(rawProduct?.currency || rawProduct?.currencyCode || 'USD').toUpperCase();
+  const minAmount = Number(rawProduct?.minAmount || rawProduct?.min || rawProduct?.minimum || 0) || undefined;
+  const maxAmount = Number(rawProduct?.maxAmount || rawProduct?.max || rawProduct?.maximum || 0) || undefined;
+  const fixedAmounts = Array.isArray(rawProduct?.fixedAmounts)
+    ? rawProduct.fixedAmounts.map((amount) => Number(amount)).filter((amount) => Number.isFinite(amount))
+    : Array.isArray(rawProduct?.denominations)
+      ? rawProduct.denominations.map((amount) => Number(amount)).filter((amount) => Number.isFinite(amount))
+      : [];
+
+  return {
+    provider,
+    providerProductId,
+    productId: makeGiftCardProductId(provider, providerProductId),
+    name: String(rawProduct?.name || rawProduct?.brand || rawProduct?.title || providerProductId).trim(),
+    description: String(rawProduct?.description || rawProduct?.summary || '').trim() || undefined,
+    country: String(rawProduct?.country || rawProduct?.countryCode || rawProduct?.country_name || '').trim().toUpperCase() || undefined,
+    currency,
+    fixed: Boolean(rawProduct?.fixed || fixedAmounts.length > 0),
+    fixedAmounts,
+    minAmount,
+    maxAmount,
+    logo: rawProduct?.logo || rawProduct?.image || rawProduct?.imageUrl || rawProduct?.logoUrl || undefined,
+    active: rawProduct?.active !== false && rawProduct?.status !== 'inactive',
+    raw: rawProduct,
+    cachedAt: new Date(),
+    expiresAt: new Date(Date.now() + 6 * 60 * 60 * 1000),
+  };
+};
+
+const syncGiftCardCatalog = async () => {
+  const providers = [
+    { name: 'prestmit', service: PrestmitService },
+    { name: 'zendit', service: ZenditService },
+  ];
+
+  const normalizedProducts = [];
+
+  for (const provider of providers) {
+    try {
+      const response = provider.name === 'prestmit'
+        ? await provider.service.getProducts({ page: 1, limit: 100 })
+        : await provider.service.listVouchers({ limit: 100, offset: 0 });
+      const items = extractProviderList(response);
+      for (const item of items) {
+        const product = normalizeGiftCardProduct(provider.name, item);
+        if (product.providerProductId) {
+          normalizedProducts.push(product);
+        }
+      }
+    } catch (error) {
+      logger.warn(`Gift card catalog sync skipped for ${provider.name}: ${error.message}`);
+    }
+  }
+
+  if (normalizedProducts.length) {
+    const bulkOps = normalizedProducts.map((product) => ({
+      updateOne: {
+        filter: { productId: product.productId },
+        update: { $set: product },
+        upsert: true,
+      },
+    }));
+    await GiftCardProduct.bulkWrite(bulkOps, { ordered: false });
+  }
+
+  return GiftCardProduct.find({ provider: 'reloadly', active: true }).sort({ name: 1 }).lean();
+};
+
+const getGiftCardCatalog = async ({ forceRefresh = false } = {}) => {
+  const cacheExpiry = new Date(Date.now() - 6 * 60 * 60 * 1000);
+  const cachedProducts = await GiftCardProduct.find({
+    active: true,
+    cachedAt: { $gte: cacheExpiry },
+  }).sort({ name: 1 }).lean();
+
+  if (cachedProducts.length > 0 && !forceRefresh) {
+    return cachedProducts;
+  }
+
+  return syncGiftCardCatalog();
+};
+
+const serializeGiftCardProduct = (product) => ({
+  id: product.productId,
+  name: product.name,
+  description: product.description || `${product.name} Gift Card`,
+  country: product.country || null,
+  logo: product.logo || null,
+  currency: product.currency,
+  fixed: product.fixed,
+  fixedAmounts: product.fixedAmounts || [],
+  minAmount: product.minAmount || null,
+  maxAmount: product.maxAmount || null,
+  provider: product.provider,
+});
+
+const serializeGiftCardOrder = (order) => ({
+  id: order.reference,
+  reference: order.reference,
+  status: order.status,
+  amount: order.amount,
+  currency: order.currency,
+  product: {
+    id: order.productId,
+    provider: order.provider,
+    providerProductId: order.providerProductId,
+  },
+  recipientEmail: order.recipientEmail,
+  recipientName: order.recipientName,
+  senderName: order.senderName,
+  message: order.message,
+  walletBefore: order.walletBefore ?? null,
+  walletAfter: order.walletAfter ?? null,
+  providerReference: order.providerReference || null,
+  failureReason: order.failureReason || null,
+  completedAt: order.completedAt || null,
+  purchasedAt: order.purchasedAt || null,
+  createdAt: order.createdAt,
+  updatedAt: order.updatedAt,
+});
+
+const serializeGiftCardCode = (code) => ({
+  code: code.code || null,
+  pin: code.pin || null,
+  serial: code.serial || null,
+  expiresAt: code.expiresAt || null,
+  providerPayload: code.providerPayload || null,
+});
+
+const findCatalogProductById = async (catalogId) => {
+  const normalizedId = normalizeCatalogId(catalogId);
+  return GiftCardProduct.findOne({
+    $or: [
+      { productId: catalogId },
+      { productId: normalizedId },
+      { providerProductId: catalogId },
+      { providerProductId: normalizedId },
+    ],
+  }).lean();
+};
+
+const validateGiftCardAmount = (product, amount) => {
+  const amountNumber = Number(amount);
+  if (!Number.isFinite(amountNumber) || amountNumber <= 0) {
+    throw new AppError('amount is required and must be a positive number', 400);
+  }
+
+  const fixedAmounts = Array.isArray(product.fixedAmounts) ? product.fixedAmounts.map(Number).filter(Number.isFinite) : [];
+  if (fixedAmounts.length > 0) {
+    if (!fixedAmounts.includes(amountNumber)) {
+      throw new AppError(`amount must be one of: ${fixedAmounts.join(', ')}`, 400);
+    }
+    return amountNumber;
+  }
+
+  const minAmount = Number(product.minAmount || 0);
+  const maxAmount = Number(product.maxAmount || 0);
+  if (Number.isFinite(minAmount) && minAmount > 0 && amountNumber < minAmount) {
+    throw new AppError(`amount must be at least ${minAmount}`, 400);
+  }
+  if (Number.isFinite(maxAmount) && maxAmount > 0 && amountNumber > maxAmount) {
+    throw new AppError(`amount must not exceed ${maxAmount}`, 400);
+  }
+
+  return amountNumber;
+};
+
+const normalizeReloadlyProduct = (rawProduct) => {
+  const providerProductId = String(
+    rawProduct?.productId ||
+    rawProduct?.id ||
+    rawProduct?.offerId ||
+    rawProduct?.sku ||
+    ''
+  ).trim();
+
+  const currency = String(rawProduct?.currencyCode || rawProduct?.currency || 'USD').toUpperCase();
+  const fixedAmounts = Array.isArray(rawProduct?.fixedRecipientDenominations)
+    ? rawProduct.fixedRecipientDenominations.map((value) => Number(value)).filter(Number.isFinite)
+    : Array.isArray(rawProduct?.fixedAmounts)
+      ? rawProduct.fixedAmounts.map((value) => Number(value)).filter(Number.isFinite)
+      : [];
+
+  const minimum = Number(rawProduct?.minRecipientDenomination || rawProduct?.minAmount || rawProduct?.minimumAmount || 0);
+  const maximum = Number(rawProduct?.maxRecipientDenomination || rawProduct?.maxAmount || rawProduct?.maximumAmount || 0);
+
+  return {
+    provider: 'reloadly',
+    providerProductId,
+    productId: makeGiftCardProductId('reloadly', providerProductId),
+    name: String(rawProduct?.productName || rawProduct?.name || rawProduct?.brand || providerProductId).trim(),
+    description: String(rawProduct?.description || rawProduct?.summary || '').trim() || undefined,
+    country: String(rawProduct?.countryCode || rawProduct?.country || '').trim().toUpperCase() || undefined,
+    currency,
+    fixed: Boolean(rawProduct?.fixed || fixedAmounts.length > 0),
+    fixedAmounts,
+    minAmount: Number.isFinite(minimum) && minimum > 0 ? minimum : undefined,
+    maxAmount: Number.isFinite(maximum) && maximum > 0 ? maximum : undefined,
+    logo: rawProduct?.logoUrls?.[0] || rawProduct?.logo || rawProduct?.image || rawProduct?.imageUrl || undefined,
+    active: rawProduct?.active !== false && rawProduct?.status !== 'inactive',
+    raw: rawProduct,
+    cachedAt: new Date(),
+    expiresAt: new Date(Date.now() + 6 * 60 * 60 * 1000),
+  };
+};
+
+const syncReloadlyCatalog = async () => {
+  const response = await ReloadlyGiftCardService.getProducts({ page: 1, size: 200 });
+  const items = extractProviderList(response);
+  const normalizedProducts = [];
+
+  for (const item of items) {
+    const product = normalizeReloadlyProduct(item);
+    if (product.providerProductId) {
+      normalizedProducts.push(product);
+    }
+  }
+
+  if (normalizedProducts.length > 0) {
+    const bulkOps = normalizedProducts.map((product) => ({
+      updateOne: {
+        filter: { productId: product.productId },
+        update: { $set: product },
+        upsert: true,
+      },
+    }));
+    await GiftCardProduct.bulkWrite(bulkOps, { ordered: false });
+  }
+
+  return GiftCardProduct.find({ active: true }).sort({ name: 1 }).lean();
+};
+
+const getReloadlyCatalog = async ({ forceRefresh = false } = {}) => {
+  const cacheExpiry = new Date(Date.now() - 6 * 60 * 60 * 1000);
+  const cachedProducts = await GiftCardProduct.find({
+    provider: 'reloadly',
+    active: true,
+    cachedAt: { $gte: cacheExpiry },
+  }).sort({ name: 1 }).lean();
+
+  if (cachedProducts.length > 0 && !forceRefresh) {
+    return cachedProducts;
+  }
+
+  return syncReloadlyCatalog();
+};
+
+const findOrderForUser = async (userId, identifier) => {
+  const normalizedId = normalizeCatalogId(identifier);
+  return GiftCardOrder.findOne({
+    user: userId,
+    $or: [
+      { _id: identifier },
+      { reference: identifier },
+      { reference: normalizedId },
+    ],
+  }).populate('product').lean();
+};
+
+const extractProviderCodes = (providerResponse) => {
+  const source =
+    providerResponse?.data ||
+    providerResponse?.cards ||
+    providerResponse?.giftCards ||
+    providerResponse?.results ||
+    providerResponse;
+
+  if (Array.isArray(source)) return source;
+  if (source && typeof source === 'object') return [source];
+  return [];
+};
+
+exports.getCatalog = async (req, res, next) => {
+  try {
+    const forceRefresh = String(req.query.refresh || '').toLowerCase() === 'true';
+    const products = await getReloadlyCatalog({ forceRefresh });
+    return res.status(200).json({
+      status: 'success',
+      data: products.map(serializeGiftCardProduct),
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+exports.getCatalogProduct = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return next(new AppError('id is required', 400));
+    }
+
+    let product = await findCatalogProductById(id);
+    if (!product) {
+      await getReloadlyCatalog({ forceRefresh: true });
+      product = await findCatalogProductById(id);
+    }
+
+    if (!product) {
+      return next(new AppError('Gift card product not found', 404));
+    }
+
+    return res.status(200).json({
+      status: 'success',
+      data: serializeGiftCardProduct(product),
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+exports.createOrder = async (req, res, next) => {
+  try {
+    const userId = req.user?._id || req.user?.id;
+    const { productId, amount, recipientEmail, recipientName, senderName, message } = req.body;
+
+    if (!productId) {
+      return next(new AppError('productId is required', 400));
+    }
+
+    if (!recipientEmail) {
+      return next(new AppError('recipientEmail is required', 400));
+    }
+
+    let product = await findCatalogProductById(productId);
+    if (!product) {
+      await getReloadlyCatalog({ forceRefresh: true });
+      product = await findCatalogProductById(productId);
+    }
+
+    if (!product) {
+      return next(new AppError('Gift card product not found', 404));
+    }
+
+    const normalizedAmount = validateGiftCardAmount(product, amount);
+    const senderDisplayName = senderName || `${req.user?.firstName || ''} ${req.user?.lastName || ''}`.trim() || req.user?.email || 'Customer';
+
+    const order = await GiftCardOrder.create({
+      reference: makeGiftCardReference('GCO'),
+      user: userId,
+      product: product._id,
+      productId: product.productId,
+      provider: product.provider,
+      providerProductId: product.providerProductId,
+      amount: normalizedAmount,
+      currency: product.currency || 'USD',
+      recipientEmail,
+      recipientName,
+      senderName: senderDisplayName,
+      message,
+      status: 'pending',
+    });
+
+    return res.status(201).json({
+      status: 'success',
+      data: serializeGiftCardOrder(order.toObject()),
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+exports.getOrders = async (req, res, next) => {
+  try {
+    const userId = req.user?._id || req.user?.id;
+    const { status, page = 1, limit = 20 } = req.query;
+    const query = { user: userId };
+
+    if (status) {
+      query.status = String(status).toLowerCase();
+    }
+
+    const pageNumber = Math.max(Number(page) || 1, 1);
+    const limitNumber = Math.min(Math.max(Number(limit) || 20, 1), 100);
+    const skip = (pageNumber - 1) * limitNumber;
+
+    const [orders, total] = await Promise.all([
+      GiftCardOrder.find(query).sort({ createdAt: -1 }).skip(skip).limit(limitNumber).lean(),
+      GiftCardOrder.countDocuments(query),
+    ]);
+
+    return res.status(200).json({
+      status: 'success',
+      data: {
+        items: orders.map(serializeGiftCardOrder),
+        pagination: {
+          page: pageNumber,
+          limit: limitNumber,
+          total,
+          pages: Math.ceil(total / limitNumber) || 0,
+        },
+      },
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+exports.getOrder = async (req, res, next) => {
+  try {
+    const userId = req.user?._id || req.user?.id;
+    const { id } = req.params;
+
+    const order = await GiftCardOrder.findOne({
+      user: userId,
+      $or: [{ _id: id }, { reference: id }],
+    }).lean();
+
+    if (!order) {
+      return next(new AppError('Order not found', 404));
+    }
+
+    return res.status(200).json({
+      status: 'success',
+      data: serializeGiftCardOrder(order),
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+exports.purchaseOrder = async (req, res, next) => {
+  try {
+    const userId = req.user?._id || req.user?.id;
+    const { id } = req.params;
+    const user = await User.findById(userId);
+    if (!user) {
+      return next(new AppError('User not found', 404));
+    }
+
+    const order = await GiftCardOrder.findOne({
+      user: userId,
+      $or: [{ _id: id }, { reference: id }],
+    }).populate('product');
+
+    if (!order) {
+      return next(new AppError('Order not found', 404));
+    }
+
+    if (order.status !== 'pending') {
+      return next(new AppError(`Order is already ${order.status}`, 400));
+    }
+
+    const product = order.product || await findCatalogProductById(order.productId);
+    if (!product) {
+      return next(new AppError('Gift card product not found', 404));
+    }
+
+    const wallet = await Wallet.findOne({ user: userId });
+    if (!wallet) {
+      return next(new AppError('Wallet not found', 404));
+    }
+
+    const walletBefore = wallet.balance;
+    let debitedWallet;
+    try {
+      debitedWallet = await wallet.safeDebit(order.amount);
+    } catch (error) {
+      return next(new AppError('Insufficient wallet balance', 400));
+    }
+    const reference = order.reference || makeGiftCardReference('GCO');
+
+    const transaction = await Transaction.create({
+      reference,
+      user: userId,
+      type: 'gift_card',
+      category: 'giftcards',
+      amount: order.amount,
+      totalAmount: order.amount,
+      previousBalance: walletBefore,
+      newBalance: debitedWallet.balance,
+      status: 'pending',
+      description: `Gift card purchase for ${product.name}`,
+      service: {
+        provider: 'reloadly',
+        plan: order.productId,
+        orderId: null,
+      },
+      metadata: {
+        orderReference: order.reference,
+        productId: order.productId,
+        providerProductId: order.providerProductId,
+        recipientEmail: order.recipientEmail,
+      },
+      statusHistory: [
+        { status: 'pending', note: 'Gift card purchase initiated', timestamp: new Date() },
+      ],
+    });
+
+    order.status = 'processing';
+    order.walletBefore = walletBefore;
+    order.walletAfter = debitedWallet.balance;
+    order.purchasedAt = new Date();
+    await order.save();
+
+    try {
+      const apiResponse = await ReloadlyGiftCardService.orderGiftCard({
+        customIdentifier: order.reference,
+        preOrder: false,
+        productId: order.providerProductId,
+        quantity: 1,
+        recipientEmail: order.recipientEmail,
+        senderName: order.senderName,
+        unitPrice: order.amount,
+      });
+
+      const providerStatus = String(apiResponse?.status || '').toUpperCase();
+      const providerReference = String(apiResponse?.transactionId || apiResponse?.id || '').trim() || null;
+      let codeDocument = null;
+
+      if (providerReference) {
+        try {
+          const redeemResponse = await ReloadlyGiftCardService.getRedeemCode(providerReference, 'v2');
+          const redeemCodes = extractProviderCodes(redeemResponse);
+          const firstCode = redeemCodes[0] || {};
+          codeDocument = await GiftCardCode.findOneAndUpdate(
+            { order: order._id },
+            {
+              order: order._id,
+              code: firstCode.code || firstCode.pinCode || firstCode.redeemCode || null,
+              pin: firstCode.pin || firstCode.pinCode || null,
+              serial: firstCode.serial || null,
+              expiresAt: firstCode.expiresAt || null,
+              providerPayload: redeemResponse,
+            },
+            { upsert: true, new: true, setDefaultsOnInsert: true }
+          );
+        } catch (codeError) {
+          logger.warn(`Gift card redeem code not ready for ${order.reference}: ${codeError.message}`);
+        }
+      }
+
+      const orderCompleted = Boolean(codeDocument?.code || providerStatus === 'SUCCESSFUL');
+      order.status = orderCompleted ? 'completed' : (['FAILED', 'REFUNDED'].includes(providerStatus) ? 'failed' : 'processing');
+      order.providerReference = providerReference;
+      order.providerResponse = apiResponse;
+      if (orderCompleted) {
+        order.completedAt = new Date();
+      }
+
+      transaction.status = orderCompleted ? 'successful' : order.status;
+      transaction.service.orderId = providerReference;
+      transaction.provider = {
+        name: 'reloadly',
+        providerReference,
+        providerResponse: apiResponse,
+      };
+      transaction.completedAt = orderCompleted ? new Date() : undefined;
+      transaction.metadata.codeStored = Boolean(codeDocument?.code);
+      transaction.metadata.providerStatus = providerStatus;
+      await transaction.save();
+      await order.save();
+
+      return res.status(200).json({
+        status: 'success',
+        data: {
+          order: serializeGiftCardOrder(order.toObject()),
+          code: codeDocument ? serializeGiftCardCode(codeDocument.toObject()) : null,
+          providerStatus,
+          providerReference,
+        },
+      });
+    } catch (error) {
+      await debitedWallet.credit(order.amount);
+      order.status = 'failed';
+      order.failureReason = error.message;
+      await order.save();
+
+      transaction.status = 'failed';
+      transaction.failureReason = error.message;
+      await transaction.save();
+
+      return next(new AppError('Gift card purchase failed. Please try again.', 500));
+    }
+  } catch (error) {
+    return next(error);
+  }
+};
+
+exports.getOrderCode = async (req, res, next) => {
+  try {
+    const userId = req.user?._id || req.user?.id;
+    const { id } = req.params;
+
+    const order = await GiftCardOrder.findOne({
+      user: userId,
+      $or: [{ _id: id }, { reference: id }],
+    }).lean();
+
+    if (!order) {
+      return next(new AppError('Order not found', 404));
+    }
+
+    const code = await GiftCardCode.findOne({ order: order._id }).lean();
+    if (!code) {
+      return next(new AppError('Gift card code not available yet', 404));
+    }
+
+    return res.status(200).json({
+      status: 'success',
+      data: serializeGiftCardCode(code),
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
 
 // ─── Prestmit (Primary) ───────────────────────────────────────────────────────
 
