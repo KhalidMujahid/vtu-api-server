@@ -15,6 +15,7 @@ const adminLogSchema = new mongoose.Schema({
       'update_staff_role',
       'remove_staff',
       'create_staff',
+      'register',
       'create',
       'read',
       'update',
