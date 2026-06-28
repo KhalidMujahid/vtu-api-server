@@ -196,17 +196,6 @@ exports.login = async (req, res, next) => {
     }
 
     
-    if (user.role === 'agent' || (user.roles && user.roles.includes('agent'))) {
-      if (!user.isApproved) {
-        return next(
-          new AppError(
-            'Your agent account is pending approval. Please contact admin for approval.',
-            401
-          )
-        );
-      }
-    }
-
     if (!user.isActive) {
       return next(
         new AppError(

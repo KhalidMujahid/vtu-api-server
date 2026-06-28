@@ -1385,15 +1385,6 @@ class AgentController {
         );
       }
 
-      if (!agent.isApproved) {
-        return next(
-          new AppError(
-            'Your agent account is pending approval. Please contact admin for approval.',
-            401
-          )
-        );
-      }
-
       // if (!agent.isEmailVerified) {
       //   return next(
       //     new AppError(
@@ -1517,7 +1508,7 @@ class AgentController {
         roles: ['agent'],
         isEmailVerified: false,
         isPhoneVerified: false,
-        isActive: false,
+        isActive: true,
         isApproved: false,
         kycStatus: 'pending',
         referredBy: referringAgent?._id,
@@ -1566,7 +1557,7 @@ class AgentController {
 
       res.status(201).json({
         status: 'success',
-        message: 'Registration successful. Please check your email for verification.',
+        message: 'Registration successful. You can now log in.',
         data: {
           agent: {
             id: agent._id,
@@ -1577,7 +1568,7 @@ class AgentController {
             agentId: agent.agentInfo.agentId,
             referralCode: agent.agentInfo.referralCode,
             isVerified: agent.agentInfo.isVerified,
-            status: 'pending_approval',
+            status: 'active',
           },
         },
       });
