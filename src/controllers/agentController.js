@@ -1394,14 +1394,14 @@ class AgentController {
         );
       }
 
-      if (!agent.isEmailVerified) {
-        return next(
-          new AppError(
-            'Please verify your email address before logging in.',
-            401
-          )
-        );
-      }
+      // if (!agent.isEmailVerified) {
+      //   return next(
+      //     new AppError(
+      //       'Please verify your email address before logging in.',
+      //       401
+      //     )
+      //   );
+      // }
 
       if (!agent.isActive) {
         return next(new AppError('Your account is deactivated. Please contact support.', 403));
