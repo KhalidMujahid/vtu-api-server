@@ -197,14 +197,6 @@ exports.login = async (req, res, next) => {
 
     
     if (user.role === 'agent' || (user.roles && user.roles.includes('agent'))) {
-      if (!user.isEmailVerified) {
-        return next(
-          new AppError(
-            'Please verify your email address before logging in.',
-            401
-          )
-        );
-      }
       if (!user.isApproved) {
         return next(
           new AppError(
