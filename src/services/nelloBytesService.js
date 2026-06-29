@@ -1047,76 +1047,261 @@ class NelloBytesService {
 
 
   static async getEPINDiscount() {
-    const endpoint = '/APIEPINDiscountV2.asp';
-    const response = await this.request(endpoint);
-    return response;
+    return this.getDatabundlePlans();
   }
 
   
 
 
-  static async buyEPIN({ mobileNetwork, value, quantity, requestId = null, callBackURL = null }) {
-    const endpoint = '/APIEPINV1.asp';
-    
+  static async requestUserOnly(endpoint, params = {}) {
+    try {
+      const url = `${this.config.baseUrl}${endpoint}`;
+      const response = await axios.get(url, {
+        params: {
+          UserID: this.config.userId,
+          ...params,
+        },
+        timeout: this.config.timeout,
+      });
+
+      return this.normalizeResponsePayload(response.data);
+    } catch (error) {
+      logger.error(`NelloBytes API Error: ${endpoint}`, {
+        message: error.message,
+        response: error.response?.data,
+      });
+      throw new AppError(`NelloBytes API error: ${error.message}`, error.response?.status || 500);
+    }
+  }
+
+  static normalizeDatabundlePlanItem(item = {}, networkHint = '') {
+    const planId = String(
+      item.DataPlan ||
+      item.dataplan ||
+      item.dataplan_id ||
+      item.product_id ||
+      item.PRODUCT_ID ||
+      item.plan_id ||
+      item.id ||
+      ''
+    ).trim();
+
+    const planName = String(
+      item.PlanName ||
+      item.planname ||
+      item.plan_name ||
+      item.product_name ||
+      item.PRODUCT_NAME ||
+      item.name ||
+      item.description ||
+      ''
+    ).trim();
+
+    const amountRaw =
+      item.amount ??
+      item.Amount ??
+      item.price ??
+      item.Price ??
+      item.PRODUCT_AMOUNT ??
+      item.product_amount ??
+      item.plan_amount ??
+      item.planPrice ??
+      null;
+
+    const amount = Number(String(amountRaw ?? '').replace(/[^0-9.-]/g, ''));
+    const networkValue = String(
+      item.MobileNetwork ||
+      item.mobilenetwork ||
+      item.network ||
+      item.network_name ||
+      item.networkcode ||
+      networkHint ||
+      ''
+    ).trim();
+    const normalizedNetwork = this.normalizeNetwork(networkValue);
+
+    return {
+      id: planId,
+      planId,
+      planCode: planId,
+      providerPlanId: planId,
+      planName,
+      network: normalizedNetwork || networkValue || null,
+      price: Number.isNaN(amount) ? null : amount,
+      amount: Number.isNaN(amount) ? null : amount,
+      validity: String(item.validity || item.Validity || item.month_validate || item.duration || '').trim() || null,
+      raw: item,
+    };
+  }
+
+  static normalizeDatabundlePlansResponse(response) {
+    const groupedPlans = {};
+
+    const addPlan = (networkKey, planItem) => {
+      const normalizedNetwork = this.normalizeNetwork(networkKey || planItem?.network || planItem?.MobileNetwork || '');
+      if (!normalizedNetwork) return;
+      if (!groupedPlans[normalizedNetwork]) {
+        groupedPlans[normalizedNetwork] = [];
+      }
+      groupedPlans[normalizedNetwork].push(this.normalizeDatabundlePlanItem(planItem, normalizedNetwork));
+    };
+
+    const traverse = (value, networkHint = '') => {
+      if (!value) return;
+
+      if (Array.isArray(value)) {
+        value.forEach((item) => {
+          if (item && typeof item === 'object') {
+            addPlan(networkHint, item);
+          }
+        });
+        return;
+      }
+
+      if (typeof value !== 'object') {
+        return;
+      }
+
+      const candidateNetwork = this.normalizeNetwork(
+        value.MobileNetwork || value.mobilenetwork || value.network || value.network_name || networkHint || ''
+      );
+
+      const directPlanKeys = ['DataPlan', 'dataplan', 'plan', 'plan_name', 'product_name', 'PRODUCT_NAME', 'id', 'product_id'];
+      if (directPlanKeys.some((key) => Object.prototype.hasOwnProperty.call(value, key))) {
+        addPlan(candidateNetwork || networkHint, value);
+        return;
+      }
+
+      for (const [key, nestedValue] of Object.entries(value)) {
+        const nestedNetwork = this.normalizeNetwork(key) || candidateNetwork || networkHint;
+
+        if (Array.isArray(nestedValue)) {
+          nestedValue.forEach((item) => {
+            if (item && typeof item === 'object') {
+              addPlan(nestedNetwork, item);
+            }
+          });
+          continue;
+        }
+
+        if (nestedValue && typeof nestedValue === 'object') {
+          const containsPlanData = Object.keys(nestedValue).some((nestedKey) =>
+            ['DataPlan', 'dataplan', 'plan', 'plan_name', 'product_name', 'PRODUCT_NAME', 'id', 'product_id'].includes(nestedKey)
+          );
+
+          if (containsPlanData) {
+            addPlan(nestedNetwork, nestedValue);
+            continue;
+          }
+
+          traverse(nestedValue, nestedNetwork);
+        }
+      }
+    };
+
+    traverse(response);
+    return groupedPlans;
+  }
+
+  static async getDatabundlePlans(network = null) {
+    const endpoint = '/APIDatabundlePlansV2.asp';
+    const response = await this.requestUserOnly(endpoint);
+    const groupedPlans = this.normalizeDatabundlePlansResponse(response);
+
+    if (network) {
+      const normalizedNetwork = this.normalizeNetwork(network);
+      return {
+        success: true,
+        data: normalizedNetwork ? { [normalizedNetwork]: groupedPlans[normalizedNetwork] || [] } : groupedPlans,
+        raw: response,
+      };
+    }
+
+    return {
+      success: true,
+      data: groupedPlans,
+      raw: response,
+    };
+  }
+
+  static async buyDatabundleEPIN({ mobileNetwork, dataPlan, quantity, requestId = null, callBackURL = null }) {
+    const endpoint = '/APIDatabundleEPINV1.asp';
+
     const normalizedNetwork = this.normalizeNetwork(mobileNetwork);
     const networkCode = this.networkCodes[normalizedNetwork];
     if (!networkCode) {
       throw new AppError('Invalid network. Use: mtn/glo/airtel/9mobile or 01/02/03/04', 400);
     }
 
-    
-    const allowedValues = ['100', '200', '500'];
-    if (!allowedValues.includes(String(value))) {
-      throw new AppError('Invalid value. Allowed: 100, 200, 500', 400);
+    const resolvedDataPlan = String(dataPlan || '').trim();
+    if (!resolvedDataPlan) {
+      throw new AppError('DataPlan is required', 400);
     }
 
-    
-    if (quantity < 1 || quantity > 100) {
-      throw new AppError('Invalid quantity. Allowed: 1 to 100', 400);
+    const parsedQuantity = Number(quantity);
+    if (!Number.isInteger(parsedQuantity) || parsedQuantity < 1 || parsedQuantity > 100) {
+      throw new AppError('Quantity must be between 1 and 100', 400);
     }
 
-    const resolvedRequestId = requestId || uuidv4().substring(0, 8).toUpperCase();
+    const resolvedRequestId = requestId || uuidv4().substring(0, 12).toUpperCase();
 
     const response = await this.request(endpoint, {
       MobileNetwork: networkCode,
-      Value: value,
-      Quantity: quantity,
+      DataPlan: resolvedDataPlan,
+      Quantity: parsedQuantity,
       RequestID: resolvedRequestId,
       CallBackURL: callBackURL || '',
     });
 
+    const statusCode = String(response?.statuscode || response?.STATUSCODE || '');
+    const status = String(response?.status || response?.orderstatus || '').toUpperCase();
+
     return {
-      success: response.statuscode === '200' || response.TXN_EPIN,
-      status: response.status,
-      statusCode: response.statuscode,
-      orderId: response.orderid,
-      requestId: response.requestid || resolvedRequestId,
-      epins: response.TXN_EPIN || [],
+      success: statusCode === '100' || status === 'ORDER_RECEIVED' || status === 'ORDER_ONHOLD',
+      status: response?.status || response?.orderstatus,
+      statusCode,
+      orderId: response?.orderid || response?.orderId || null,
+      requestId: response?.requestid || resolvedRequestId,
       response,
     };
+  }
+
+  static async queryDatabundleEPINTransaction({ orderId = null, requestId = null }) {
+    const endpoint = '/APIQueryV1.asp';
+
+    const params = {};
+    if (orderId) params.OrderID = orderId;
+    if (requestId) params.RequestID = requestId;
+
+    const response = await this.request(endpoint, params);
+
+    return {
+      orderId: response.orderid,
+      requestId: response.requestid || requestId || null,
+      status: response.status || response.orderstatus,
+      statusCode: response.statuscode,
+      remark: response.remark || response.orderremark,
+      date: response.orderdate || response.transactiondate || response.date,
+      epins: response.TXN_EPIN_DATABUNDLE || response.TXN_EPIN || [],
+      response,
+    };
+  }
+
+  static async buyEPIN({ mobileNetwork, dataPlan, quantity, requestId = null, callBackURL = null }) {
+    return this.buyDatabundleEPIN({
+      mobileNetwork,
+      dataPlan,
+      quantity,
+      requestId,
+      callBackURL,
+    });
   }
 
   
 
 
   static async queryEPINTransaction({ orderId = null, requestId = null }) {
-    const endpoint = '/APIQueryV1.asp';
-    
-    const params = {};
-    if (orderId) params.OrderID = orderId;
-    if (requestId) params.RequestID = requestId;
-
-    const response = await this.request(endpoint, params);
-    
-    return {
-      orderId: response.orderid,
-      status: response.orderstatus,
-      statusCode: response.statuscode,
-      remark: response.orderremark,
-      date: response.orderdate,
-      epins: response.TXN_EPIN || [],
-      response,
-    };
+    return this.queryDatabundleEPINTransaction({ orderId, requestId });
   }
 
   

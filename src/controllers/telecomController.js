@@ -2624,15 +2624,22 @@ exports.airtimeWebhook = async (req, res) => {
 
 exports.purchaseRechargePin = async (req, res, next) => {
   try {
-    const { network, pinType, value, quantity = 1, transactionPin } = req.body;
+    const {
+      network,
+      dataPlan,
+      planId,
+      pinType,
+      value,
+      quantity = 1,
+      requestId,
+      callBackURL,
+      transactionPin,
+    } = req.body;
     const normalizedNetwork = normalizeNetwork(network);
     const parsedQuantity = Number(quantity);
-    const parsedValue = Number(
-      String(value ?? pinType)
-        .replace(/[^\d]/g, '')
-    );
+    const requestedPlanId = String(dataPlan || planId || pinType || value || '').trim();
 
-    if (!network || (!pinType && !value) || !transactionPin) {
+    if (!network || !requestedPlanId || !transactionPin) {
       return next(new AppError('All fields required', 400));
     }
 
@@ -2658,10 +2665,6 @@ exports.purchaseRechargePin = async (req, res, next) => {
       return next(new AppError('Wallet not found', 404));
     }
 
-    if (![100, 200, 500].includes(parsedValue)) {
-      return next(new AppError('Recharge PIN value must be 100, 200, or 500', 400));
-    }
-
     const activeProvider = await vtuConfig.getProviderIdForService('airtimepin');
     const providerConfig = vtuConfig.providers[activeProvider];
 
@@ -2673,19 +2676,58 @@ exports.purchaseRechargePin = async (req, res, next) => {
       return next(new AppError(`Recharge PIN is not supported for configured provider '${activeProvider}'`, 400));
     }
 
-    const pinValue = parsedValue;
-    const totalAmount = pinValue * parsedQuantity;
+    if (!(activeProvider === 'clubkonnect' || providerConfig.source === 'nellobytes')) {
+      return next(new AppError('Recharge PIN service is currently unavailable. Please try again later.', 400));
+    }
+
+    const planLookup = await NelloBytesService.getDatabundlePlans(normalizedNetwork);
+    const availablePlans = planLookup.data?.[normalizedNetwork] || [];
+    const selectedPlan = availablePlans.find((plan = {}) => {
+      const candidates = [
+        plan.planId,
+        plan.planCode,
+        plan.providerPlanId,
+        plan.id,
+        plan.planName,
+      ]
+        .filter(Boolean)
+        .map((value) => String(value).trim().toLowerCase());
+
+      return candidates.includes(requestedPlanId.toLowerCase());
+    });
+
+    if (!selectedPlan) {
+      return next(new AppError('Selected data plan was not found', 404));
+    }
+
+    const providerAmount = Number(selectedPlan.price ?? selectedPlan.amount ?? 0);
+    if (!Number.isFinite(providerAmount) || providerAmount <= 0) {
+      return next(new AppError('Selected data plan price is not available', 400));
+    }
+
+    const chargePricing = await ProviderMarkupService.applyMarkup({
+      providerId: activeProvider,
+      serviceType: 'recharge_pin',
+      baseAmount: providerAmount * parsedQuantity,
+    });
+    const totalAmount = chargePricing.chargedAmount;
+
     if (wallet.balance < totalAmount) {
       return next(new AppError('Insufficient balance', 400));
     }
 
     await ProviderPurchaseGuardService.assertSufficientProviderBalance(
       activeProvider,
-      totalAmount,
-      { serviceType: 'recharge_pin', network: normalizedNetwork, quantity: parsedQuantity }
+      providerAmount * parsedQuantity,
+      {
+        serviceType: 'recharge_pin',
+        network: normalizedNetwork,
+        quantity: parsedQuantity,
+        planId: selectedPlan.planId || requestedPlanId,
+      }
     );
 
-    await wallet.debit(totalAmount, 'Recharge PIN purchase');
+    await wallet.debit(totalAmount, `Recharge PIN purchase: ${normalizedNetwork} ${selectedPlan.planId || requestedPlanId}`);
 
     const reference = generateReference('PIN');
     const callbackUrl = `${SERVER_URL}/api/v1/telecom/webhook/nellobytes`;
@@ -2700,64 +2742,70 @@ exports.purchaseRechargePin = async (req, res, next) => {
       previousBalance: wallet.balance + totalAmount,
       newBalance: wallet.balance,
       status: 'pending',
-      description: `${normalizedNetwork.toUpperCase()} ${pinValue} x${parsedQuantity}`,
+      description: `${normalizedNetwork.toUpperCase()} ${selectedPlan.planName || selectedPlan.planId || requestedPlanId} x${parsedQuantity}`,
       service: {
         provider: activeProvider,
         network: normalizedNetwork,
-        plan: String(pinValue),
+        plan: selectedPlan.planId || requestedPlanId,
         quantity: parsedQuantity,
+      },
+      metadata: {
+        providerAmount,
+        chargedAmount: totalAmount,
+        markupPercentage: chargePricing.percentage,
+        markupAmount: chargePricing.markupAmount,
       },
       statusHistory: [{ status: 'pending', note: `Recharge PIN purchase initiated via ${activeProvider}`, timestamp: new Date() }],
     });
 
     try {
-      if (!(activeProvider === 'clubkonnect' || providerConfig.source === 'nellobytes')) {
-        throw new AppError('Recharge PIN service is currently unavailable. Please try again later.', 400);
-      }
-
-      const providerResponse = await NelloBytesService.buyEPIN({
+      const providerResponse = await NelloBytesService.buyDatabundleEPIN({
         mobileNetwork: normalizedNetwork,
-        value: pinValue,
+        dataPlan: selectedPlan.planId || requestedPlanId,
         quantity: parsedQuantity,
-        requestId: reference,
+        requestId: requestId || reference,
         callBackURL: callbackUrl,
       });
 
       transaction.service.orderId = providerResponse.orderId || reference;
       transaction.providerResponse = providerResponse;
 
-      if (providerResponse.epins?.length) {
-        transaction.status = 'successful';
-        transaction.statusHistory.push({
-          status: 'successful',
-          note: 'Recharge PIN generated by provider',
-          timestamp: new Date(),
-        });
-      } else {
-        transaction.status = 'pending';
-        transaction.statusHistory.push({
-          status: 'pending',
-          note: providerResponse.status || 'Recharge PIN request queued',
-          timestamp: new Date(),
-        });
-      }
+      const returnedPins = providerResponse.response?.TXN_EPIN_DATABUNDLE || providerResponse.response?.TXN_EPIN || [];
+      const normalizedStatus = String(providerResponse.status || '').toUpperCase();
+      const isCompleted = normalizedStatus === 'ORDER_COMPLETED' || providerResponse.statusCode === '200' || returnedPins.length > 0;
+
+      transaction.status = isCompleted ? 'successful' : 'pending';
+      transaction.statusHistory.push({
+        status: transaction.status,
+        note: isCompleted
+          ? 'Recharge PIN generated by provider'
+          : providerResponse.status || 'Recharge PIN request queued',
+        timestamp: new Date(),
+      });
 
       await transaction.save();
 
       res.status(200).json({
         status: 'success',
-        message: providerResponse.epins?.length
+        message: returnedPins.length
           ? 'Recharge PIN generated successfully'
           : 'Recharge PIN request submitted successfully',
         data: {
           reference,
           orderId: providerResponse.orderId || reference,
           network: normalizedNetwork,
-          pinType: String(pinValue),
+          planId: selectedPlan.planId || requestedPlanId,
+          planName: selectedPlan.planName || null,
           quantity: parsedQuantity,
-          pins: providerResponse.epins || [],
+          pins: returnedPins,
           provider: activeProvider,
           providerStatus: providerResponse.status,
+          providerAmount,
+          amount: totalAmount,
+          markup: {
+            percentage: chargePricing.percentage,
+            amount: chargePricing.markupAmount,
+          },
         },
       });
     } catch (err) {
@@ -2931,11 +2979,13 @@ exports.nelloBytesWebhook = async (req, res, next) => {
 
 exports.getEPINPlans = async (req, res, next) => {
   try {
-    const plans = await NelloBytesService.getEPINDiscount();
+    const { network } = req.query;
+    const plans = await NelloBytesService.getDatabundlePlans(network);
     
     res.status(200).json({
       status: 'success',
-      data: plans,
+      data: plans.data,
+      raw: plans.raw,
     });
   } catch (error) {
     next(error);
