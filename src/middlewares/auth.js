@@ -2,83 +2,85 @@ const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const logger = require('../utils/logger');
 
+const authenticateUser = async (req, res, next, { enforceAgentApproval = true } = {}) => {
+  let token;
+
+  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+    token = req.headers.authorization.split(' ')[1];
+  }
+
+  if (!token) {
+    return res.status(401).json({
+      status: 'error',
+      message: 'You are not logged in. Please log in to get access.',
+    });
+  }
+
+  const decoded = jwt.verify(token, process.env.JWT_SECRET);
+  const user = await User.findById(decoded.id).select('+lastLogin +lastLoginIp');
+
+  if (!user) {
+    return res.status(401).json({
+      status: 'error',
+      message: 'The user belonging to this token no longer exists.',
+    });
+  }
+
+  if (!user.isActive) {
+    return res.status(401).json({
+      status: 'error',
+      message: 'Your account has been deactivated. Please contact support.',
+    });
+  }
+
+  if (user.isLocked()) {
+    return res.status(401).json({
+      status: 'error',
+      message: 'Your account is locked. Please try again later or contact support.',
+    });
+  }
+
+  if (user.isAccountLocked) {
+    return res.status(401).json({
+      status: 'error',
+      message: 'Your account has been locked by an administrator. Please contact support.',
+    });
+  }
+
+  if (enforceAgentApproval && (user.role === 'agent' || (user.roles && user.roles.includes('agent')))) {
+    if (!user.isEmailVerified) {
+      return res.status(401).json({
+        status: 'error',
+        message: 'Please verify your email address before logging in.',
+      });
+    }
+    if (!user.isApproved) {
+      return res.status(401).json({
+        status: 'error',
+        message: 'Your agent account is pending approval. Please contact admin for approval.',
+      });
+    }
+  }
+
+  await User.updateOne(
+    { _id: user._id },
+    {
+      $set: {
+        lastLogin: new Date(),
+        lastLoginIp: req.ip,
+        lastLoginDevice: req.get('user-agent'),
+      },
+    }
+  );
+
+  req.user = user;
+  return next();
+};
+
 module.exports = {
   protect: async (req, res, next) => {
     try {
-      let token;
-      
-      if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
-        token = req.headers.authorization.split(' ')[1];
-      }
-      
-      if (!token) {
-        return res.status(401).json({
-          status: 'error',
-          message: 'You are not logged in. Please log in to get access.',
-        });
-      }
-      
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      
-      const user = await User.findById(decoded.id).select('+lastLogin +lastLoginIp');
-      
-      if (!user) {
-        return res.status(401).json({
-          status: 'error',
-          message: 'The user belonging to this token no longer exists.',
-        });
-      }
-      
-      if (!user.isActive) {
-        return res.status(401).json({
-          status: 'error',
-          message: 'Your account has been deactivated. Please contact support.',
-        });
-      }
-      
-      if (user.isLocked()) {
-        return res.status(401).json({
-          status: 'error',
-          message: 'Your account is locked. Please try again later or contact support.',
-        });
-      }
-      
-      if (user.isAccountLocked) {
-        return res.status(401).json({
-          status: 'error',
-          message: 'Your account has been locked by an administrator. Please contact support.',
-        });
-      }
-      
-      
-      if (user.role === 'agent' || (user.roles && user.roles.includes('agent'))) {
-        if (!user.isEmailVerified) {
-          return res.status(401).json({
-            status: 'error',
-            message: 'Please verify your email address before logging in.',
-          });
-        }
-        if (!user.isApproved) {
-          return res.status(401).json({
-            status: 'error',
-            message: 'Your agent account is pending approval. Please contact admin for approval.',
-          });
-        }
-      }
-
-      await User.updateOne(
-        { _id: user._id },
-        {
-          $set: {
-            lastLogin: new Date(),
-            lastLoginIp: req.ip,
-            lastLoginDevice: req.get('user-agent'),
-          },
-        }
-      );
-
-      req.user = user;
-      next();
+      await authenticateUser(req, res, next, { enforceAgentApproval: true });
     } catch (error) {
       logger.error('Auth middleware error:', error);
       
@@ -96,6 +98,33 @@ module.exports = {
         });
       }
       
+      return res.status(500).json({
+        status: 'error',
+        message: 'An error occurred during authentication.',
+      });
+    }
+  },
+
+  protectWalletAccess: async (req, res, next) => {
+    try {
+      await authenticateUser(req, res, next, { enforceAgentApproval: false });
+    } catch (error) {
+      logger.error('Wallet auth middleware error:', error);
+
+      if (error.name === 'JsonWebTokenError') {
+        return res.status(401).json({
+          status: 'error',
+          message: 'Invalid token. Please log in again.',
+        });
+      }
+
+      if (error.name === 'TokenExpiredError') {
+        return res.status(401).json({
+          status: 'error',
+          message: 'Your token has expired. Please log in again.',
+        });
+      }
+
       return res.status(500).json({
         status: 'error',
         message: 'An error occurred during authentication.',

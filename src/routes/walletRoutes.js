@@ -1,12 +1,14 @@
 const express = require('express');
 const router = express.Router();
 const walletController = require('../controllers/walletController');
-const { protect, requireTransactionPin } = require('../middlewares/auth');
+const { protect, protectWalletAccess, requireTransactionPin } = require('../middlewares/auth');
 const { hasWallet } = require('../middlewares/wallet');
 
+router.post('/create', protectWalletAccess, walletController.createWallet);
+router.get('/status', protectWalletAccess, walletController.checkWalletStatus);
+router.post('/set-pin', protectWalletAccess, walletController.setTransactionPin);
+
 router.use(protect);
-router.post('/create', walletController.createWallet);
-router.get('/status', walletController.checkWalletStatus);
 router.get('/balance', hasWallet, walletController.getWalletBalance);
 router.post('/fund', hasWallet, walletController.fundWallet);
 router.post('/transfer', hasWallet, requireTransactionPin, walletController.transferToUser);
@@ -15,7 +17,6 @@ router.get('/transactions', hasWallet, walletController.getTransactionHistory);
 router.get('/transactions/:id/receipt', hasWallet, walletController.downloadTransactionReceipt);
 router.get('/accounts', hasWallet, walletController.getWalletAccounts);
 router.post('/accounts/refresh', hasWallet, walletController.refreshWalletAccounts);
-router.post('/set-pin', walletController.setTransactionPin);
 router.post('/update-pin', walletController.updateTransactionPin);
 
 module.exports = router;
