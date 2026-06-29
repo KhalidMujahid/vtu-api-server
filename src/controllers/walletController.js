@@ -492,6 +492,7 @@ exports.setTransactionPin = async (req, res, next) => {
     }
     
     user.transactionPin = transactionPin;
+    user.pin = true;
     await user.save();
     
     res.status(200).json({
@@ -529,6 +530,7 @@ exports.updateTransactionPin = async (req, res, next) => {
     }
     
     user.transactionPin = transactionPin;
+    user.pin = true;
     await user.save();
     
     res.status(200).json({
@@ -584,6 +586,7 @@ exports.updateTransactionPin = async (req, res, next) => {
     const hashedPin = await bcrypt.hash(transactionPin, 12);
 
     user.transactionPin = hashedPin;
+    user.pin = true;
     await user.save();
 
     logger.info(`Transaction PIN updated for user: ${req.user.id}`);
