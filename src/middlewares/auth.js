@@ -48,12 +48,6 @@ const authenticateUser = async (req, res, next, { enforceAgentApproval = true } 
   }
 
   if (enforceAgentApproval && (user.role === 'agent' || (user.roles && user.roles.includes('agent')))) {
-    if (!user.isEmailVerified) {
-      return res.status(401).json({
-        status: 'error',
-        message: 'Please verify your email address before logging in.',
-      });
-    }
     if (!user.isApproved) {
       return res.status(401).json({
         status: 'error',
