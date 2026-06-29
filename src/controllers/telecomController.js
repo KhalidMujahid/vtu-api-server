@@ -4268,30 +4268,60 @@ exports.getInternationalOperators = async (req, res, next) => {
 exports.purchaseInternationalAirtime = async (req, res, next) => {
   try {
     const {
-      operatorId, amount, useLocalAmount = false,
-      recipientCountryCode, recipientNumber,
-      senderCountryCode, senderNumber,
-      amountNgn, transactionPin,
+      operatorId,
+      amount,
+      useLocalAmount = false,
+      recipientCountryCode,
+      recipientNumber,
+      senderCountryCode,
+      senderNumber,
+      amountNgn,
+      chargedNgn,
     } = req.body;
 
-    if (!operatorId || !amount || !recipientCountryCode || !recipientNumber) {
-      return next(new AppError('operatorId, amount, recipientCountryCode, and recipientNumber are required', 400));
+    const normalizedOperatorId = Number(operatorId);
+    const normalizedAmount = Number(amount);
+    const normalizedChargedAmount = Number(amountNgn ?? chargedNgn);
+    const normalizedRecipientCountryCode = String(recipientCountryCode || '').trim().toUpperCase();
+    const normalizedRecipientNumber = String(recipientNumber || '').replace(/\D/g, '');
+    const normalizedSenderCountryCode = String(senderCountryCode || '').trim().toUpperCase();
+    const normalizedSenderNumber = String(senderNumber || '').replace(/\D/g, '');
+    const shouldUseLocalAmount = Boolean(useLocalAmount);
+
+    if (!Number.isInteger(normalizedOperatorId) || normalizedOperatorId <= 0) {
+      return next(new AppError('operatorId must be a valid operator id', 400));
+    }
+
+    if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
+      return next(new AppError('amount must be a positive number', 400));
+    }
+
+    if (!normalizedRecipientCountryCode || !normalizedRecipientNumber) {
+      return next(new AppError('recipientCountryCode and recipientNumber are required', 400));
     }
 
     const user = req.user;
     const wallet = await Wallet.findOne({ user: user._id });
     if (!wallet) return next(new AppError('Wallet not found', 404));
 
-    const chargedAmount = Number(amountNgn);
-    if (!chargedAmount || chargedAmount <= 0) {
-      return next(new AppError('amountNgn (NGN equivalent to charge) is required', 400));
+    if (!Number.isFinite(normalizedChargedAmount) || normalizedChargedAmount <= 0) {
+      return next(new AppError('amountNgn is required and must be a positive number', 400));
     }
 
+    const operator = await ReloadlyAirtimeService.getOperator(normalizedOperatorId);
+    if (!operator) {
+      return next(new AppError('Selected operator was not found', 404));
+    }
+
+    const chargedAmount = normalizedChargedAmount;
     if (wallet.balance < chargedAmount) {
       return next(new AppError('Insufficient wallet balance', 400));
     }
 
-    await wallet.debit(chargedAmount, `International airtime: ${recipientCountryCode} ${recipientNumber}`);
+    await wallet.debit(
+      chargedAmount,
+      `International airtime: ${normalizedRecipientCountryCode} ${normalizedRecipientNumber}`
+    );
 
     const reference = `INTL-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
     const transaction = await Transaction.create({
@@ -4304,17 +4334,18 @@ exports.purchaseInternationalAirtime = async (req, res, next) => {
       previousBalance: wallet.balance + chargedAmount,
       newBalance: wallet.balance,
       status: 'pending',
-      description: `International airtime for +${recipientCountryCode} ${recipientNumber}`,
+      description: `International airtime for +${normalizedRecipientCountryCode} ${normalizedRecipientNumber}`,
       service: {
         provider: 'reloadly',
         network: 'international',
-        phoneNumber: recipientNumber,
+        phoneNumber: normalizedRecipientNumber,
       },
       metadata: {
-        operatorId,
-        amount: Number(amount),
-        useLocalAmount,
-        recipientCountryCode,
+        operatorId: normalizedOperatorId,
+        amount: normalizedAmount,
+        useLocalAmount: shouldUseLocalAmount,
+        recipientCountryCode: normalizedRecipientCountryCode,
+        recipientNumber: normalizedRecipientNumber,
         chargedNgn: chargedAmount,
       },
       statusHistory: [{ status: 'pending', note: 'International airtime initiated', timestamp: new Date() }],
@@ -4322,22 +4353,27 @@ exports.purchaseInternationalAirtime = async (req, res, next) => {
 
     try {
       const apiResponse = await ReloadlyAirtimeService.sendTopup({
-        operatorId,
-        amount,
-        useLocalAmount,
-        recipientCountryCode,
-        recipientNumber,
+        operatorId: normalizedOperatorId,
+        amount: normalizedAmount,
+        useLocalAmount: shouldUseLocalAmount,
+        recipientCountryCode: normalizedRecipientCountryCode,
+        recipientNumber: normalizedRecipientNumber,
         customIdentifier: reference,
-        senderCountryCode,
-        senderNumber,
+        senderCountryCode: normalizedSenderCountryCode || undefined,
+        senderNumber: normalizedSenderNumber || undefined,
       });
 
-      const success = String(apiResponse?.status || '').toUpperCase() === 'SUCCESSFUL';
-      transaction.status = success ? 'successful' : apiResponse?.status === 'PROCESSING' ? 'pending' : 'failed';
-      transaction.service.orderId = String(apiResponse?.transactionId || '');
+      const normalizedStatus = String(apiResponse?.status || apiResponse?.transactionStatus || '').trim().toUpperCase();
+      const successStatuses = new Set(['SUCCESSFUL', 'SUCCESS', 'COMPLETED', 'DONE']);
+      const pendingStatuses = new Set(['PROCESSING', 'PENDING', 'IN_PROGRESS', 'QUEUED']);
+      const success = successStatuses.has(normalizedStatus);
+      const pending = pendingStatuses.has(normalizedStatus);
+
+      transaction.status = success ? 'successful' : pending ? 'pending' : 'failed';
+      transaction.service.orderId = String(apiResponse?.transactionId || apiResponse?.id || '');
       transaction.statusHistory.push({
         status: transaction.status,
-        note: `Reloadly: ${apiResponse?.status || 'unknown'} — delivered ${apiResponse?.deliveredAmount} ${apiResponse?.deliveredAmountCurrencyCode || ''}`,
+        note: `Reloadly: ${apiResponse?.status || 'unknown'} - delivered ${apiResponse?.deliveredAmount || normalizedAmount} ${apiResponse?.deliveredAmountCurrencyCode || ''}`,
         timestamp: new Date(),
       });
       if (success) transaction.completedAt = new Date();
@@ -4350,7 +4386,7 @@ exports.purchaseInternationalAirtime = async (req, res, next) => {
 
       return res.status(success ? 200 : 202).json({
         status: 'success',
-        message: success ? 'International airtime sent successfully' : 'Top-up is processing',
+        message: success ? 'International airtime sent successfully' : pending ? 'Top-up is processing' : 'Top-up request submitted',
         data: {
           reference,
           transactionId: apiResponse?.transactionId,
@@ -4366,6 +4402,7 @@ exports.purchaseInternationalAirtime = async (req, res, next) => {
           balanceInfo: apiResponse?.balanceInfo,
           pinDetail: apiResponse?.pinDetail || null,
           provider: 'reloadly',
+          status: transaction.status,
         },
       });
     } catch (error) {

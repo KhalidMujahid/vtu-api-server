@@ -1,0 +1,523 @@
+{
+  "info": {
+    "_postman_id": "yareema-data-hub-postman-version",
+    "name": "Yareema Data Hub - Gift Cards, International Airtime, EPIN",
+    "description": "Slim Postman collection for gift cards, international airtime, and Databundle Recharge PIN endpoints.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:5000",
+      "type": "string"
+    },
+    {
+      "key": "auth_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "giftcard_country_code",
+      "value": "US",
+      "type": "string"
+    },
+    {
+      "key": "giftcard_product_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "giftcard_transaction_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "country_code",
+      "value": "US",
+      "type": "string"
+    },
+    {
+      "key": "operator_id",
+      "value": "12345",
+      "type": "string"
+    },
+    {
+      "key": "recipient_number",
+      "value": "5551234567",
+      "type": "string"
+    },
+    {
+      "key": "sender_number",
+      "value": "5550000000",
+      "type": "string"
+    },
+    {
+      "key": "epin_plan_id",
+      "value": "1000",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Gift Cards",
+      "item": [
+        {
+          "name": "Get Catalog",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/giftcards/catalog",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "giftcards",
+                "catalog"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Catalog Product",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/giftcards/catalog/{{giftcard_product_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "giftcards",
+                "catalog",
+                "{{giftcard_product_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Orders",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/giftcards/orders",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "giftcards",
+                "orders"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Order",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/giftcards/orders/{{giftcard_transaction_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "giftcards",
+                "orders",
+                "{{giftcard_transaction_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Order Code",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/giftcards/orders/{{giftcard_transaction_id}}/code",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "giftcards",
+                "orders",
+                "{{giftcard_transaction_id}}",
+                "code"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Order",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": \"reloadly:amazon-us\",\n  \"amount\": 25,\n  \"recipientEmail\": \"recipient@example.com\",\n  \"recipientName\": \"Recipient Name\",\n  \"senderName\": \"Sender Name\",\n  \"message\": \"Happy gifting!\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/giftcards/orders",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "giftcards",
+                "orders"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "International Airtime",
+      "item": [
+        {
+          "name": "Get Countries",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/telecom/international/countries",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "telecom",
+                "international",
+                "countries"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Operators",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/telecom/international/operators/{{country_code}}?page=1&size=100&includeBundles=true",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "telecom",
+                "international",
+                "operators",
+                "{{country_code}}"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "size",
+                  "value": "100"
+                },
+                {
+                  "key": "includeBundles",
+                  "value": "true"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Top Up",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"operatorId\": {{operator_id}},\n  \"amount\": 5,\n  \"useLocalAmount\": false,\n  \"recipientCountryCode\": \"NG\",\n  \"recipientNumber\": \"{{recipient_number}}\",\n  \"senderCountryCode\": \"NG\",\n  \"senderNumber\": \"{{sender_number}}\",\n  \"amountNgn\": 8000,\n  \"transactionPin\": \"1234\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/telecom/international/topup",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "telecom",
+                "international",
+                "topup"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Transactions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/telecom/international/transactions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "telecom",
+                "international",
+                "transactions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Transaction By Reference",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/telecom/international/transactions/{{giftcard_transaction_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "telecom",
+                "international",
+                "transactions",
+                "{{giftcard_transaction_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Balance",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/telecom/international/balance",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "telecom",
+                "international",
+                "balance"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Databundle Recharge PIN",
+      "item": [
+        {
+          "name": "Get EPIN Plans",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/telecom/epin/plans",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "telecom",
+                "epin",
+                "plans"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Recharge PIN Plans",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/telecom/recharge-pin/plans",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "telecom",
+                "recharge-pin",
+                "plans"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Purchase EPIN",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"network\": \"mtn\",\n  \"dataPlan\": \"{{epin_plan_id}}\",\n  \"quantity\": 1,\n  \"transactionPin\": \"1234\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/telecom/epin/purchase",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "telecom",
+                "epin",
+                "purchase"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Purchase Recharge PIN Alias",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"network\": \"mtn\",\n  \"dataPlan\": \"{{epin_plan_id}}\",\n  \"quantity\": 1,\n  \"transactionPin\": \"1234\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/telecom/recharge-pin/purchase",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "telecom",
+                "recharge-pin",
+                "purchase"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
