@@ -4447,6 +4447,60 @@ exports.purchaseInternationalAirtime = async (req, res, next) => {
   }
 };
 
+exports.getInternationalAirtimeQuote = async (req, res, next) => {
+  try {
+    const {
+      operatorId,
+      amount,
+      useLocalAmount = false,
+      amountNgn,
+      chargedNgn,
+      recipientCountryCode,
+      recipientNumber,
+    } = req.body;
+
+    const normalizedOperatorId = Number(operatorId);
+    const normalizedAmount = Number(amount);
+    const normalizedRecipientCountryCode = String(recipientCountryCode || '').trim().toUpperCase();
+    const normalizedRecipientNumber = String(recipientNumber || '').replace(/\D/g, '');
+
+    if (!Number.isInteger(normalizedOperatorId) || normalizedOperatorId <= 0) {
+      return next(new AppError('operatorId must be a valid operator id', 400));
+    }
+
+    if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
+      return next(new AppError('amount must be a positive number', 400));
+    }
+
+    if (!normalizedRecipientCountryCode || !normalizedRecipientNumber) {
+      return next(new AppError('recipientCountryCode and recipientNumber are required', 400));
+    }
+
+    const operator = await ReloadlyAirtimeService.getOperator(normalizedOperatorId);
+    if (!operator) {
+      return next(new AppError('Selected operator was not found', 404));
+    }
+
+    const pricing = resolveInternationalAirtimePricing({ amount: normalizedAmount, amountNgn, chargedNgn });
+
+    return res.status(200).json({
+      status: 'success',
+      data: {
+        operatorId: normalizedOperatorId,
+        operatorName: operator?.name || operator?.operatorName || null,
+        recipientCountryCode: normalizedRecipientCountryCode,
+        recipientNumber: normalizedRecipientNumber,
+        amount: normalizedAmount,
+        useLocalAmount: Boolean(useLocalAmount),
+        nairaPrice: pricing.nairaPrice,
+        fxRate: pricing.fxRate,
+      },
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 exports.getInternationalAirtimeTransactions = async (req, res, next) => {
   try {
     const { page = 0, size = 20, startDate, endDate } = req.query;

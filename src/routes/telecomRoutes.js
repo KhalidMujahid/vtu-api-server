@@ -89,6 +89,7 @@ router.get('/airtimenigeria/balance', protect, telecomController.getAirtimeNiger
 // ── International Airtime (Reloadly — 170+ countries) ────────────────────────
 router.get('/international/countries', protect, telecomController.getInternationalCountries);
 router.get('/international/operators/:countryCode', protect, telecomController.getInternationalOperators);
+router.post('/international/quote', protect, telecomController.getInternationalAirtimeQuote);
 router.post('/international/topup', protect, requireTransactionPin, telecomController.purchaseInternationalAirtime);
 router.get('/international/transactions', protect, telecomController.getInternationalAirtimeTransactions);
 router.get('/international/transactions/:reference', protect, telecomController.getInternationalAirtimeTransactionByRef);

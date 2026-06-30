@@ -7,6 +7,7 @@ router.use(protect);
 
 router.get('/catalog', giftCardController.getCatalog);
 router.get('/catalog/:id', giftCardController.getCatalogProduct);
+router.post('/quote', giftCardController.getGiftCardQuote);
 
 router.get('/orders', giftCardController.getOrders);
 router.post('/orders', giftCardController.createOrder);

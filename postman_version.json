@@ -27,6 +27,11 @@
       "type": "string"
     },
     {
+      "key": "giftcard_amount",
+      "value": "25",
+      "type": "string"
+    },
+    {
       "key": "giftcard_transaction_id",
       "value": "",
       "type": "string"
@@ -44,6 +49,16 @@
     {
       "key": "recipient_number",
       "value": "5551234567",
+      "type": "string"
+    },
+    {
+      "key": "airtime_amount",
+      "value": "5",
+      "type": "string"
+    },
+    {
+      "key": "airtime_amount_ngn",
+      "value": "8000",
       "type": "string"
     },
     {
@@ -166,6 +181,38 @@
                 "giftcards",
                 "catalog",
                 "{{giftcard_product_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Preview Gift Price",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": \"{{giftcard_product_id}}\",\n  \"amount\": {{giftcard_amount}}\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/giftcards/quote",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "giftcards",
+                "quote"
               ]
             }
           }
@@ -294,6 +341,39 @@
                   "key": "includeBundles",
                   "value": "true"
                 }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Preview Top Up",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"operatorId\": {{operator_id}},\n  \"amount\": {{airtime_amount}},\n  \"useLocalAmount\": false,\n  \"recipientCountryCode\": \"NG\",\n  \"recipientNumber\": \"{{recipient_number}}\",\n  \"senderCountryCode\": \"NG\",\n  \"senderNumber\": \"{{sender_number}}\",\n  \"amountNgn\": {{airtime_amount_ngn}}\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/telecom/international/quote",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "telecom",
+                "international",
+                "quote"
               ]
             }
           }

@@ -575,6 +575,47 @@ exports.getCatalogProduct = async (req, res, next) => {
   }
 };
 
+exports.getGiftCardQuote = async (req, res, next) => {
+  try {
+    const { productId, amount } = req.body;
+
+    if (!productId) {
+      return next(new AppError('productId is required', 400));
+    }
+
+    if (!amount) {
+      return next(new AppError('amount is required', 400));
+    }
+
+    let product = await findCatalogProductById(productId);
+    if (!product) {
+      await getReloadlyCatalog({ forceRefresh: true });
+      product = await findCatalogProductById(productId);
+    }
+
+    if (!product) {
+      return next(new AppError('Gift card product not found', 404));
+    }
+
+    const normalizedAmount = validateGiftCardAmount(product, amount);
+    const pricing = await getGiftCardNairaQuote(product, normalizedAmount);
+
+    return res.status(200).json({
+      status: 'success',
+      data: {
+        product: serializeGiftCardProduct(product),
+        amount: normalizedAmount,
+        currency: product.currency || 'USD',
+        nairaAmount: pricing.nairaAmount,
+        fxRate: pricing.fxRate,
+        pricingSource: pricing.source,
+      },
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 exports.createOrder = async (req, res, next) => {
   try {
     const userId = req.user?._id || req.user?.id;
