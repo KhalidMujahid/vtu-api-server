@@ -37,6 +37,10 @@ const giftCardOrderSchema = new mongoose.Schema({
     required: true,
     min: 0,
   },
+  nairaAmount: {
+    type: Number,
+    min: 0,
+  },
   currency: {
     type: String,
     default: 'USD',

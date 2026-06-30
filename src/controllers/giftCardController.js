@@ -153,6 +153,7 @@ const serializeGiftCardOrder = (order) => ({
   reference: order.reference,
   status: order.status,
   amount: order.amount,
+  nairaAmount: order.nairaAmount ?? order.amount,
   currency: order.currency,
   product: {
     id: order.productId,
@@ -214,6 +215,20 @@ const validateGiftCardAmount = (product, amount) => {
   }
   if (Number.isFinite(maxAmount) && maxAmount > 0 && amountNumber > maxAmount) {
     throw new AppError(`amount must not exceed ${maxAmount}`, 400);
+  }
+
+  return amountNumber;
+};
+
+const resolveGiftCardNairaAmount = (product, amount) => {
+  const amountNumber = Number(amount);
+  if (!Number.isFinite(amountNumber) || amountNumber <= 0) {
+    return null;
+  }
+
+  const senderAmount = ReloadlyGiftCardService.extractSenderAmountFromProduct(product, amountNumber);
+  if (Number.isFinite(senderAmount) && senderAmount > 0) {
+    return senderAmount;
   }
 
   return amountNumber;
@@ -387,6 +402,7 @@ exports.createOrder = async (req, res, next) => {
     }
 
     const normalizedAmount = validateGiftCardAmount(product, amount);
+    const nairaAmount = resolveGiftCardNairaAmount(product, normalizedAmount);
     const senderDisplayName = senderName || `${req.user?.firstName || ''} ${req.user?.lastName || ''}`.trim() || req.user?.email || 'Customer';
 
     const order = await GiftCardOrder.create({
@@ -397,6 +413,7 @@ exports.createOrder = async (req, res, next) => {
       provider: product.provider,
       providerProductId: product.providerProductId,
       amount: normalizedAmount,
+      nairaAmount,
       currency: product.currency || 'USD',
       recipientEmail,
       recipientName,
@@ -409,6 +426,202 @@ exports.createOrder = async (req, res, next) => {
       status: 'success',
       data: serializeGiftCardOrder(order.toObject()),
     });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+exports.buyGiftCard = async (req, res, next) => {
+  try {
+    const userId = req.user?._id || req.user?.id;
+    const {
+      productId,
+      amount,
+      recipientEmail,
+      recipientName,
+      senderName,
+      message,
+      transactionPin,
+    } = req.body;
+
+    if (!productId) {
+      return next(new AppError('productId is required', 400));
+    }
+
+    if (!recipientEmail) {
+      return next(new AppError('recipientEmail is required', 400));
+    }
+
+    if (!transactionPin) {
+      return next(new AppError('Transaction PIN is required', 400));
+    }
+
+    const user = await User.findById(userId).select('+transactionPin');
+    if (!user) {
+      return next(new AppError('User not found', 404));
+    }
+
+    const isPinValid = await user.compareTransactionPin(transactionPin);
+    if (!isPinValid) {
+      return next(new AppError('Invalid transaction PIN', 401));
+    }
+
+    let product = await findCatalogProductById(productId);
+    if (!product) {
+      await getReloadlyCatalog({ forceRefresh: true });
+      product = await findCatalogProductById(productId);
+    }
+
+    if (!product) {
+      return next(new AppError('Gift card product not found', 404));
+    }
+
+    const normalizedAmount = validateGiftCardAmount(product, amount);
+    const nairaAmount = resolveGiftCardNairaAmount(product, normalizedAmount);
+    const senderDisplayName = senderName || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || user?.email || 'Customer';
+
+    const wallet = await Wallet.findOne({ user: userId });
+    if (!wallet) {
+      return next(new AppError('Wallet not found', 404));
+    }
+
+    const walletBefore = wallet.balance;
+    let debitedWallet;
+    try {
+      debitedWallet = await wallet.safeDebit(nairaAmount);
+    } catch (error) {
+      return next(new AppError('Insufficient wallet balance', 400));
+    }
+
+    const reference = makeGiftCardReference('GCO');
+    const order = await GiftCardOrder.create({
+      reference,
+      user: userId,
+      product: product._id,
+      productId: product.productId,
+      provider: product.provider,
+      providerProductId: product.providerProductId,
+      amount: normalizedAmount,
+      nairaAmount,
+      currency: product.currency || 'USD',
+      recipientEmail,
+      recipientName,
+      senderName: senderDisplayName,
+      message,
+      status: 'processing',
+      walletBefore,
+      walletAfter: debitedWallet.balance,
+      purchasedAt: new Date(),
+    });
+
+    const transaction = await Transaction.create({
+      reference,
+      user: userId,
+      type: 'gift_card',
+      category: 'giftcards',
+      amount: nairaAmount,
+      totalAmount: nairaAmount,
+      previousBalance: walletBefore,
+      newBalance: debitedWallet.balance,
+      status: 'pending',
+      description: `Gift card purchase for ${product.name}`,
+      service: {
+        provider: 'reloadly',
+        plan: order.productId,
+        orderId: null,
+      },
+      metadata: {
+        orderReference: order.reference,
+        productId: order.productId,
+        providerProductId: order.providerProductId,
+        recipientEmail: order.recipientEmail,
+        nairaAmount,
+      },
+      statusHistory: [
+        { status: 'pending', note: 'Gift card purchase initiated', timestamp: new Date() },
+      ],
+    });
+
+    try {
+      const apiResponse = await ReloadlyGiftCardService.orderGiftCard({
+        customIdentifier: order.reference,
+        preOrder: false,
+        productId: order.providerProductId,
+        quantity: 1,
+        recipientEmail: order.recipientEmail,
+        senderName: order.senderName,
+        unitPrice: order.amount,
+      });
+
+      const providerStatus = String(apiResponse?.status || '').toUpperCase();
+      const providerReference = String(apiResponse?.transactionId || apiResponse?.id || '').trim() || null;
+      let codeDocument = null;
+
+      if (providerReference) {
+        try {
+          const redeemResponse = await ReloadlyGiftCardService.getRedeemCode(providerReference, 'v2');
+          const redeemCodes = extractProviderCodes(redeemResponse);
+          const firstCode = redeemCodes[0] || {};
+          codeDocument = await GiftCardCode.findOneAndUpdate(
+            { order: order._id },
+            {
+              order: order._id,
+              code: firstCode.code || firstCode.pinCode || firstCode.redeemCode || null,
+              pin: firstCode.pin || firstCode.pinCode || null,
+              serial: firstCode.serial || null,
+              expiresAt: firstCode.expiresAt || null,
+              providerPayload: redeemResponse,
+            },
+            { upsert: true, new: true, setDefaultsOnInsert: true }
+          );
+        } catch (codeError) {
+          logger.warn(`Gift card redeem code not ready for ${order.reference}: ${codeError.message}`);
+        }
+      }
+
+      const orderCompleted = Boolean(codeDocument?.code || providerStatus === 'SUCCESSFUL');
+      order.status = orderCompleted ? 'completed' : (['FAILED', 'REFUNDED'].includes(providerStatus) ? 'failed' : 'processing');
+      order.providerReference = providerReference;
+      order.providerResponse = apiResponse;
+      if (orderCompleted) {
+        order.completedAt = new Date();
+      }
+
+      transaction.status = orderCompleted ? 'successful' : order.status;
+      transaction.service.orderId = providerReference;
+      transaction.provider = {
+        name: 'reloadly',
+        providerReference,
+        providerResponse: apiResponse,
+      };
+      transaction.completedAt = orderCompleted ? new Date() : undefined;
+      transaction.metadata.codeStored = Boolean(codeDocument?.code);
+      transaction.metadata.providerStatus = providerStatus;
+      await transaction.save();
+      await order.save();
+
+      return res.status(200).json({
+        status: 'success',
+        data: {
+          order: serializeGiftCardOrder(order.toObject()),
+          code: codeDocument ? serializeGiftCardCode(codeDocument.toObject()) : null,
+          providerStatus,
+          providerReference,
+          nairaAmount,
+        },
+      });
+    } catch (error) {
+      await debitedWallet.credit(nairaAmount);
+      order.status = 'failed';
+      order.failureReason = error.message;
+      await order.save();
+
+      transaction.status = 'failed';
+      transaction.failureReason = error.message;
+      await transaction.save();
+
+      return next(new AppError('Gift card purchase failed. Please try again.', 500));
+    }
   } catch (error) {
     return next(error);
   }
@@ -505,10 +718,15 @@ exports.purchaseOrder = async (req, res, next) => {
       return next(new AppError('Wallet not found', 404));
     }
 
+    const chargedAmount = Number(order.nairaAmount ?? order.amount);
+    if (!Number.isFinite(chargedAmount) || chargedAmount <= 0) {
+      return next(new AppError('Unable to resolve gift card Naira amount', 400));
+    }
+
     const walletBefore = wallet.balance;
     let debitedWallet;
     try {
-      debitedWallet = await wallet.safeDebit(order.amount);
+      debitedWallet = await wallet.safeDebit(chargedAmount);
     } catch (error) {
       return next(new AppError('Insufficient wallet balance', 400));
     }
@@ -519,8 +737,8 @@ exports.purchaseOrder = async (req, res, next) => {
       user: userId,
       type: 'gift_card',
       category: 'giftcards',
-      amount: order.amount,
-      totalAmount: order.amount,
+      amount: chargedAmount,
+      totalAmount: chargedAmount,
       previousBalance: walletBefore,
       newBalance: debitedWallet.balance,
       status: 'pending',
@@ -535,6 +753,7 @@ exports.purchaseOrder = async (req, res, next) => {
         productId: order.productId,
         providerProductId: order.providerProductId,
         recipientEmail: order.recipientEmail,
+        nairaAmount: chargedAmount,
       },
       statusHistory: [
         { status: 'pending', note: 'Gift card purchase initiated', timestamp: new Date() },
@@ -545,6 +764,7 @@ exports.purchaseOrder = async (req, res, next) => {
     order.walletBefore = walletBefore;
     order.walletAfter = debitedWallet.balance;
     order.purchasedAt = new Date();
+    order.nairaAmount = chargedAmount;
     await order.save();
 
     try {

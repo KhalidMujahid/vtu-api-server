@@ -86,6 +86,36 @@
           }
         },
         {
+          "name": "Get Catalog Refresh",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/giftcards/catalog?refresh=true",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "giftcards",
+                "catalog"
+              ],
+              "query": [
+                {
+                  "key": "refresh",
+                  "value": "true"
+                }
+              ]
+            }
+          }
+        },
+        {
           "name": "Get Catalog Product",
           "request": {
             "method": "GET",
@@ -106,6 +136,64 @@
                 "giftcards",
                 "catalog",
                 "{{giftcard_product_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Buy Gift Card",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": \"reloadly:amazon-us\",\n  \"amount\": 25,\n  \"recipientEmail\": \"recipient@example.com\",\n  \"recipientName\": \"Recipient Name\",\n  \"senderName\": \"Sender Name\",\n  \"message\": \"Happy gifting!\",\n  \"transactionPin\": \"1234\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/giftcards/buy",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "giftcards",
+                "buy"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Order Code",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/giftcards/orders/{{giftcard_transaction_id}}/code",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "giftcards",
+                "orders",
+                "{{giftcard_transaction_id}}",
+                "code"
               ]
             }
           }
@@ -155,64 +243,6 @@
                 "giftcards",
                 "orders",
                 "{{giftcard_transaction_id}}"
-              ]
-            }
-          }
-        },
-        {
-          "name": "Get Order Code",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{auth_token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/v1/giftcards/orders/{{giftcard_transaction_id}}/code",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "giftcards",
-                "orders",
-                "{{giftcard_transaction_id}}",
-                "code"
-              ]
-            }
-          }
-        },
-        {
-          "name": "Create Order",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{auth_token}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"productId\": \"reloadly:amazon-us\",\n  \"amount\": 25,\n  \"recipientEmail\": \"recipient@example.com\",\n  \"recipientName\": \"Recipient Name\",\n  \"senderName\": \"Sender Name\",\n  \"message\": \"Happy gifting!\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/api/v1/giftcards/orders",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "giftcards",
-                "orders"
               ]
             }
           }
