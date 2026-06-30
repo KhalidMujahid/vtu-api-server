@@ -14,6 +14,7 @@ const AlrahuzDataService = require('../services/alrahuzDataService');
 const ArewaService = require('../services/arewaService');
 const ReloadlyGiftCardService = require('../services/reloadlyGiftCardService');
 const ReloadlyAirtimeService = require('../services/reloadlyAirtimeService');
+const FxRateService = require('../services/fxRateService');
 const AlrahuzDataReconciliationService = require('../services/alrahuzDataReconciliationService');
 const ProviderPurchaseGuardService = require('../services/providerPurchaseGuardService');
 const ProviderMarkupService = require('../services/providerMarkupService');
@@ -28,7 +29,7 @@ function generateReference(prefix = 'TX') {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
 }
 
-function resolveInternationalAirtimePricing({ amount, amountNgn, chargedNgn }) {
+async function resolveInternationalAirtimePricing({ amount, amountNgn, chargedNgn, currencyCode = 'USD' }) {
   const foreignAmount = Number(amount);
   const nairaPrice = Number(amountNgn ?? chargedNgn);
 
@@ -39,16 +40,35 @@ function resolveInternationalAirtimePricing({ amount, amountNgn, chargedNgn }) {
     };
   }
 
-  if (!Number.isFinite(nairaPrice) || nairaPrice <= 0) {
+  try {
+    const fxQuote = await FxRateService.convert(foreignAmount, currencyCode, 'NGN');
+    if (Number.isFinite(fxQuote.amount) && fxQuote.amount > 0 && Number.isFinite(fxQuote.rate) && fxQuote.rate > 0) {
+      return {
+        nairaPrice: Number(fxQuote.amount.toFixed(2)),
+        fxRate: Number(fxQuote.rate.toFixed(4)),
+        source: fxQuote.source || 'fx-api',
+      };
+    }
+  } catch (error) {
+    logger.warn('FX quote lookup failed for airtime', {
+      amount: foreignAmount,
+      currencyCode,
+      message: error.message,
+    });
+  }
+
+  if (Number.isFinite(nairaPrice) && nairaPrice > 0) {
     return {
-      nairaPrice: foreignAmount,
-      fxRate: 1,
+      nairaPrice,
+      fxRate: Number((nairaPrice / foreignAmount).toFixed(4)),
+      source: 'provided-naira',
     };
   }
 
   return {
-    nairaPrice,
-    fxRate: Number((nairaPrice / foreignAmount).toFixed(4)),
+    nairaPrice: foreignAmount,
+    fxRate: 1,
+    source: 'fallback-amount',
   };
 }
 
@@ -2316,8 +2336,24 @@ exports.getGiftCardFxRate = async (req, res, next) => {
     if (!currencyCode || !amount) {
       return next(new AppError('currencyCode and amount are required', 400));
     }
-    const data = await ReloadlyGiftCardService.getFxRate({ currencyCode, amount });
-    return res.status(200).json({ status: 'success', data });
+    const fxQuote = await FxRateService.convert(amount, currencyCode, 'NGN');
+    if (!fxQuote || !Number.isFinite(fxQuote.amount) || !Number.isFinite(fxQuote.rate)) {
+      return next(new AppError('FX conversion is currently unavailable', 502));
+    }
+
+    return res.status(200).json({
+      status: 'success',
+      data: {
+        currencyCode: String(currencyCode).trim().toUpperCase(),
+        amount: Number(amount),
+        nairaAmount: Number(fxQuote.amount.toFixed(2)),
+        fxRate: Number(fxQuote.rate.toFixed(4)),
+        rate: Number(fxQuote.rate.toFixed(4)),
+        convertedAmount: Number(fxQuote.amount.toFixed(2)),
+        source: fxQuote.source || 'fx-api',
+        date: fxQuote.date || null,
+      },
+    });
   } catch (error) {
     return next(error);
   }
@@ -4295,6 +4331,7 @@ exports.purchaseInternationalAirtime = async (req, res, next) => {
       operatorId,
       amount,
       useLocalAmount = false,
+      currencyCode,
       recipientCountryCode,
       recipientNumber,
       senderCountryCode,
@@ -4305,7 +4342,12 @@ exports.purchaseInternationalAirtime = async (req, res, next) => {
 
     const normalizedOperatorId = Number(operatorId);
     const normalizedAmount = Number(amount);
-    const pricing = resolveInternationalAirtimePricing({ amount: normalizedAmount, amountNgn, chargedNgn });
+    const pricing = await resolveInternationalAirtimePricing({
+      amount: normalizedAmount,
+      amountNgn,
+      chargedNgn,
+      currencyCode,
+    });
     const normalizedChargedAmount = pricing.nairaPrice;
     const normalizedRecipientCountryCode = String(recipientCountryCode || '').trim().toUpperCase();
     const normalizedRecipientNumber = String(recipientNumber || '').replace(/\D/g, '');
@@ -4373,6 +4415,7 @@ exports.purchaseInternationalAirtime = async (req, res, next) => {
         recipientNumber: normalizedRecipientNumber,
         chargedNgn: chargedAmount,
         fxRate: pricing.fxRate,
+        fxSource: pricing.source || null,
       },
       statusHistory: [{ status: 'pending', note: 'International airtime initiated', timestamp: new Date() }],
     });
@@ -4426,6 +4469,7 @@ exports.purchaseInternationalAirtime = async (req, res, next) => {
           chargedNgn: chargedAmount,
           nairaPrice: chargedAmount,
           fxRate: pricing.fxRate,
+          fxSource: pricing.source || null,
           foreignAmount: normalizedAmount,
           discount: apiResponse?.discount,
           balanceInfo: apiResponse?.balanceInfo,
@@ -4455,6 +4499,7 @@ exports.getInternationalAirtimeQuote = async (req, res, next) => {
       useLocalAmount = false,
       amountNgn,
       chargedNgn,
+      currencyCode,
       recipientCountryCode,
       recipientNumber,
     } = req.body;
@@ -4481,7 +4526,12 @@ exports.getInternationalAirtimeQuote = async (req, res, next) => {
       return next(new AppError('Selected operator was not found', 404));
     }
 
-    const pricing = resolveInternationalAirtimePricing({ amount: normalizedAmount, amountNgn, chargedNgn });
+    const pricing = await resolveInternationalAirtimePricing({
+      amount: normalizedAmount,
+      amountNgn,
+      chargedNgn,
+      currencyCode,
+    });
 
     return res.status(200).json({
       status: 'success',
@@ -4494,6 +4544,7 @@ exports.getInternationalAirtimeQuote = async (req, res, next) => {
         useLocalAmount: Boolean(useLocalAmount),
         nairaPrice: pricing.nairaPrice,
         fxRate: pricing.fxRate,
+        fxSource: pricing.source || null,
       },
     });
   } catch (error) {

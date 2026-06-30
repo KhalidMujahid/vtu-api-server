@@ -7,6 +7,7 @@ const Transaction = require('../models/Transaction');
 const GiftCardProduct = require('../models/GiftCardProduct');
 const GiftCardOrder = require('../models/GiftCardOrder');
 const GiftCardCode = require('../models/GiftCardCode');
+const FxRateService = require('../services/fxRateService');
 const { AppError } = require('../middlewares/errorHandler');
 const logger = require('../utils/logger');
 const crypto = require('crypto');
@@ -326,51 +327,6 @@ const resolveGiftCardNairaAmount = (product, amount) => {
   return amountNumber;
 };
 
-const extractGiftCardFxRate = (fxResponse, amount, currencyCode) => {
-  const amountNumber = Number(amount);
-  const parsedAmount =
-    Number(fxResponse?.convertedAmount) ||
-    Number(fxResponse?.converted_amount) ||
-    Number(fxResponse?.senderAmount) ||
-    Number(fxResponse?.sender_amount) ||
-    Number(fxResponse?.nairaAmount) ||
-    Number(fxResponse?.naira_amount) ||
-    Number(fxResponse?.amountNGN) ||
-    Number(fxResponse?.amountNgn) ||
-    Number(fxResponse?.targetAmount) ||
-    Number(fxResponse?.target_amount);
-
-  const parsedRate =
-    Number(fxResponse?.fxRate) ||
-    Number(fxResponse?.fx_rate) ||
-    Number(fxResponse?.exchangeRate) ||
-    Number(fxResponse?.exchange_rate) ||
-    Number(fxResponse?.rate) ||
-    Number(fxResponse?.conversionRate) ||
-    Number(fxResponse?.conversion_rate);
-
-  if (Number.isFinite(parsedAmount) && parsedAmount > 0 && Number.isFinite(amountNumber) && amountNumber > 0) {
-    return {
-      nairaAmount: parsedAmount,
-      fxRate: Number((parsedAmount / amountNumber).toFixed(4)),
-      source: 'reloadly-fx-api',
-      currencyCode,
-    };
-  }
-
-  if (Number.isFinite(parsedRate) && parsedRate > 0 && Number.isFinite(amountNumber) && amountNumber > 0) {
-    const nairaAmount = amountNumber * parsedRate;
-    return {
-      nairaAmount,
-      fxRate: Number(parsedRate.toFixed(4)),
-      source: 'reloadly-fx-api',
-      currencyCode,
-    };
-  }
-
-  return null;
-};
-
 const getGiftCardNairaQuote = async (product, amount) => {
   const amountNumber = Number(amount);
   if (!Number.isFinite(amountNumber) || amountNumber <= 0) {
@@ -387,6 +343,25 @@ const getGiftCardNairaQuote = async (product, amount) => {
     };
   }
 
+  try {
+    const fxQuote = await FxRateService.convert(amountNumber, currencyCode, 'NGN');
+    if (Number.isFinite(fxQuote.amount) && fxQuote.amount > 0 && Number.isFinite(fxQuote.rate) && fxQuote.rate > 0) {
+      return {
+        nairaAmount: Number(fxQuote.amount.toFixed(2)),
+        fxRate: Number(fxQuote.rate.toFixed(4)),
+        source: fxQuote.source || 'fx-api',
+        currencyCode,
+        fxDate: fxQuote.date || null,
+      };
+    }
+  } catch (error) {
+    logger.warn('FX lookup failed for gift card', {
+      currencyCode,
+      amount: amountNumber,
+      message: error.message,
+    });
+  }
+
   const senderAmount = ReloadlyGiftCardService.extractSenderAmountFromProduct(product, amountNumber);
   if (Number.isFinite(senderAmount) && senderAmount > 0) {
     return {
@@ -395,20 +370,6 @@ const getGiftCardNairaQuote = async (product, amount) => {
       source: 'product-exchange-rate',
       currencyCode,
     };
-  }
-
-  try {
-    const fxResponse = await ReloadlyGiftCardService.getFxRate({ currencyCode, amount: amountNumber });
-    const quote = extractGiftCardFxRate(fxResponse, amountNumber, currencyCode);
-    if (quote) {
-      return quote;
-    }
-  } catch (error) {
-    logger.warn('Reloadly FX lookup failed for gift card', {
-      currencyCode,
-      amount: amountNumber,
-      message: error.message,
-    });
   }
 
   return {
