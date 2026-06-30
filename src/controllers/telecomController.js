@@ -28,6 +28,30 @@ function generateReference(prefix = 'TX') {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
 }
 
+function resolveInternationalAirtimePricing({ amount, amountNgn, chargedNgn }) {
+  const foreignAmount = Number(amount);
+  const nairaPrice = Number(amountNgn ?? chargedNgn);
+
+  if (!Number.isFinite(foreignAmount) || foreignAmount <= 0) {
+    return {
+      nairaPrice: Number.isFinite(nairaPrice) && nairaPrice > 0 ? nairaPrice : null,
+      fxRate: null,
+    };
+  }
+
+  if (!Number.isFinite(nairaPrice) || nairaPrice <= 0) {
+    return {
+      nairaPrice: foreignAmount,
+      fxRate: 1,
+    };
+  }
+
+  return {
+    nairaPrice,
+    fxRate: Number((nairaPrice / foreignAmount).toFixed(4)),
+  };
+}
+
 const SOURCE_TO_PROVIDER = {
   nellobytes: 'clubkonnect',
   airtimenigeria: 'airtimenigeria',
@@ -4281,7 +4305,8 @@ exports.purchaseInternationalAirtime = async (req, res, next) => {
 
     const normalizedOperatorId = Number(operatorId);
     const normalizedAmount = Number(amount);
-    const normalizedChargedAmount = Number(amountNgn ?? chargedNgn);
+    const pricing = resolveInternationalAirtimePricing({ amount: normalizedAmount, amountNgn, chargedNgn });
+    const normalizedChargedAmount = pricing.nairaPrice;
     const normalizedRecipientCountryCode = String(recipientCountryCode || '').trim().toUpperCase();
     const normalizedRecipientNumber = String(recipientNumber || '').replace(/\D/g, '');
     const normalizedSenderCountryCode = String(senderCountryCode || '').trim().toUpperCase();
@@ -4347,6 +4372,7 @@ exports.purchaseInternationalAirtime = async (req, res, next) => {
         recipientCountryCode: normalizedRecipientCountryCode,
         recipientNumber: normalizedRecipientNumber,
         chargedNgn: chargedAmount,
+        fxRate: pricing.fxRate,
       },
       statusHistory: [{ status: 'pending', note: 'International airtime initiated', timestamp: new Date() }],
     });
@@ -4399,9 +4425,7 @@ exports.purchaseInternationalAirtime = async (req, res, next) => {
           providerStatus: apiResponse?.status,
           chargedNgn: chargedAmount,
           nairaPrice: chargedAmount,
-          fxRate: Number(normalizedAmount) > 0
-            ? Number((Number(chargedAmount) / Number(normalizedAmount)).toFixed(2))
-            : null,
+          fxRate: pricing.fxRate,
           foreignAmount: normalizedAmount,
           discount: apiResponse?.discount,
           balanceInfo: apiResponse?.balanceInfo,
