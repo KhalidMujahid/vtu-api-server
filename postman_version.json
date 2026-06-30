@@ -62,7 +62,7 @@
       "name": "Gift Cards",
       "item": [
         {
-          "name": "Get Catalog",
+          "name": "Browse Gifts",
           "request": {
             "method": "GET",
             "header": [
@@ -86,7 +86,7 @@
           }
         },
         {
-          "name": "Get Catalog Refresh",
+          "name": "Browse Gifts Refresh",
           "request": {
             "method": "GET",
             "header": [
@@ -116,7 +116,37 @@
           }
         },
         {
-          "name": "Get Catalog Product",
+          "name": "Browse Gifts by Country",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/giftcards/catalog?countryCode={{giftcard_country_code}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "giftcards",
+                "catalog"
+              ],
+              "query": [
+                {
+                  "key": "countryCode",
+                  "value": "{{giftcard_country_code}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Choose Gift",
           "request": {
             "method": "GET",
             "header": [
@@ -141,7 +171,7 @@
           }
         },
         {
-          "name": "Buy Gift Card",
+          "name": "Buy Gift",
           "request": {
             "method": "POST",
             "header": [
@@ -173,7 +203,7 @@
           }
         },
         {
-          "name": "Get Order Code",
+          "name": "View Code",
           "request": {
             "method": "GET",
             "header": [
@@ -197,63 +227,14 @@
               ]
             }
           }
-        },
-        {
-          "name": "Get Orders",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{auth_token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/v1/giftcards/orders",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "giftcards",
-                "orders"
-              ]
-            }
-          }
-        },
-        {
-          "name": "Get Order",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{auth_token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/v1/giftcards/orders/{{giftcard_transaction_id}}",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "giftcards",
-                "orders",
-                "{{giftcard_transaction_id}}"
-              ]
-            }
-          }
         }
       ]
     },
     {
-      "name": "International Airtime",
+      "name": "Send Airtime",
       "item": [
         {
-          "name": "Get Countries",
+          "name": "Browse Countries",
           "request": {
             "method": "GET",
             "header": [
@@ -278,7 +259,7 @@
           }
         },
         {
-          "name": "Get Operators",
+          "name": "Choose Operator",
           "request": {
             "method": "GET",
             "header": [
@@ -318,7 +299,7 @@
           }
         },
         {
-          "name": "Top Up",
+          "name": "Send Top Up",
           "request": {
             "method": "POST",
             "header": [
@@ -351,7 +332,7 @@
           }
         },
         {
-          "name": "Get Transactions",
+          "name": "View Transactions",
           "request": {
             "method": "GET",
             "header": [
@@ -376,7 +357,7 @@
           }
         },
         {
-          "name": "Get Transaction By Reference",
+          "name": "View Transaction",
           "request": {
             "method": "GET",
             "header": [
@@ -402,7 +383,7 @@
           }
         },
         {
-          "name": "Get Balance",
+          "name": "Check Balance",
           "request": {
             "method": "GET",
             "header": [
@@ -429,10 +410,10 @@
       ]
     },
     {
-      "name": "Databundle Recharge PIN",
+      "name": "Recharge PIN",
       "item": [
         {
-          "name": "Get EPIN Plans",
+          "name": "Browse EPIN Plans",
           "request": {
             "method": "GET",
             "header": [
@@ -457,7 +438,7 @@
           }
         },
         {
-          "name": "Get Recharge PIN Plans",
+          "name": "Browse Recharge PIN Plans",
           "request": {
             "method": "GET",
             "header": [
@@ -482,7 +463,7 @@
           }
         },
         {
-          "name": "Purchase EPIN",
+          "name": "Buy EPIN",
           "request": {
             "method": "POST",
             "header": [
@@ -515,7 +496,7 @@
           }
         },
         {
-          "name": "Purchase Recharge PIN Alias",
+          "name": "Buy Recharge PIN",
           "request": {
             "method": "POST",
             "header": [

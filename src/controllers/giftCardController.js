@@ -38,7 +38,7 @@ const makeGiftCardReference = (prefix = 'GCO') =>
 
 const extractProviderList = (response) => {
   if (Array.isArray(response)) return response;
-  return response?.data || response?.products || response?.items || response?.results || [];
+  return response?.content || response?.data || response?.products || response?.items || response?.results || [];
 };
 
 const normalizeGiftCardProduct = (provider, rawProduct) => {
@@ -342,6 +342,18 @@ const extractProviderCodes = (providerResponse) => {
 exports.getCatalog = async (req, res, next) => {
   try {
     const forceRefresh = String(req.query.refresh || '').toLowerCase() === 'true';
+    const countryCode = String(req.query.countryCode || req.query.country || '').trim().toUpperCase();
+
+    if (countryCode) {
+      const response = await ReloadlyGiftCardService.getProductsByCountry(countryCode);
+      const products = extractProviderList(response).map(normalizeReloadlyProduct);
+      return res.status(200).json({
+        status: 'success',
+        data: products.map(serializeGiftCardProduct),
+        countryCode,
+      });
+    }
+
     const products = await getReloadlyCatalog({ forceRefresh });
     return res.status(200).json({
       status: 'success',
