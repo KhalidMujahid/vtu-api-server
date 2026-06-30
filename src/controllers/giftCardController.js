@@ -243,9 +243,9 @@ const serializeGiftCardOrder = (order) => ({
   status: order.status,
   amount: order.amount,
   nairaAmount: order.nairaAmount ?? order.amount,
-  fxRate: Number(order.amount) > 0
-    ? Number((Number(order.nairaAmount ?? order.amount) / Number(order.amount)).toFixed(2))
-    : null,
+  fxRate: order.fxRate ?? (Number(order.amount) > 0
+    ? Number((Number(order.nairaAmount ?? order.amount) / Number(order.amount)).toFixed(4))
+    : null),
   currency: order.currency,
   product: {
     id: order.productId,
@@ -324,6 +324,99 @@ const resolveGiftCardNairaAmount = (product, amount) => {
   }
 
   return amountNumber;
+};
+
+const extractGiftCardFxRate = (fxResponse, amount, currencyCode) => {
+  const amountNumber = Number(amount);
+  const parsedAmount =
+    Number(fxResponse?.convertedAmount) ||
+    Number(fxResponse?.converted_amount) ||
+    Number(fxResponse?.senderAmount) ||
+    Number(fxResponse?.sender_amount) ||
+    Number(fxResponse?.nairaAmount) ||
+    Number(fxResponse?.naira_amount) ||
+    Number(fxResponse?.amountNGN) ||
+    Number(fxResponse?.amountNgn) ||
+    Number(fxResponse?.targetAmount) ||
+    Number(fxResponse?.target_amount);
+
+  const parsedRate =
+    Number(fxResponse?.fxRate) ||
+    Number(fxResponse?.fx_rate) ||
+    Number(fxResponse?.exchangeRate) ||
+    Number(fxResponse?.exchange_rate) ||
+    Number(fxResponse?.rate) ||
+    Number(fxResponse?.conversionRate) ||
+    Number(fxResponse?.conversion_rate);
+
+  if (Number.isFinite(parsedAmount) && parsedAmount > 0 && Number.isFinite(amountNumber) && amountNumber > 0) {
+    return {
+      nairaAmount: parsedAmount,
+      fxRate: Number((parsedAmount / amountNumber).toFixed(4)),
+      source: 'reloadly-fx-api',
+      currencyCode,
+    };
+  }
+
+  if (Number.isFinite(parsedRate) && parsedRate > 0 && Number.isFinite(amountNumber) && amountNumber > 0) {
+    const nairaAmount = amountNumber * parsedRate;
+    return {
+      nairaAmount,
+      fxRate: Number(parsedRate.toFixed(4)),
+      source: 'reloadly-fx-api',
+      currencyCode,
+    };
+  }
+
+  return null;
+};
+
+const getGiftCardNairaQuote = async (product, amount) => {
+  const amountNumber = Number(amount);
+  if (!Number.isFinite(amountNumber) || amountNumber <= 0) {
+    return { nairaAmount: null, fxRate: null, source: 'invalid-amount' };
+  }
+
+  const currencyCode = String(product?.currency || 'USD').toUpperCase();
+  if (currencyCode === 'NGN') {
+    return {
+      nairaAmount: amountNumber,
+      fxRate: 1,
+      source: 'local-currency',
+      currencyCode,
+    };
+  }
+
+  const senderAmount = ReloadlyGiftCardService.extractSenderAmountFromProduct(product, amountNumber);
+  if (Number.isFinite(senderAmount) && senderAmount > 0) {
+    return {
+      nairaAmount: senderAmount,
+      fxRate: Number((senderAmount / amountNumber).toFixed(4)),
+      source: 'product-exchange-rate',
+      currencyCode,
+    };
+  }
+
+  try {
+    const fxResponse = await ReloadlyGiftCardService.getFxRate({ currencyCode, amount: amountNumber });
+    const quote = extractGiftCardFxRate(fxResponse, amountNumber, currencyCode);
+    if (quote) {
+      return quote;
+    }
+  } catch (error) {
+    logger.warn('Reloadly FX lookup failed for gift card', {
+      currencyCode,
+      amount: amountNumber,
+      message: error.message,
+    });
+  }
+
+  return {
+    nairaAmount: amountNumber,
+    fxRate: 1,
+    source: 'fallback-amount',
+    currencyCode,
+  };
 };
 
 const normalizeReloadlyProduct = (rawProduct) => {
@@ -506,7 +599,9 @@ exports.createOrder = async (req, res, next) => {
     }
 
     const normalizedAmount = validateGiftCardAmount(product, amount);
-    const nairaAmount = resolveGiftCardNairaAmount(product, normalizedAmount);
+    const pricing = await getGiftCardNairaQuote(product, normalizedAmount);
+    const nairaAmount = pricing.nairaAmount;
+    const fxRate = pricing.fxRate;
     const senderDisplayName = senderName || `${req.user?.firstName || ''} ${req.user?.lastName || ''}`.trim() || req.user?.email || 'Customer';
 
     const order = await GiftCardOrder.create({
@@ -518,6 +613,7 @@ exports.createOrder = async (req, res, next) => {
       providerProductId: product.providerProductId,
       amount: normalizedAmount,
       nairaAmount,
+      fxRate,
       currency: product.currency || 'USD',
       recipientEmail,
       recipientName,
@@ -581,7 +677,9 @@ exports.buyGiftCard = async (req, res, next) => {
     }
 
     const normalizedAmount = validateGiftCardAmount(product, amount);
-    const nairaAmount = resolveGiftCardNairaAmount(product, normalizedAmount);
+    const pricing = await getGiftCardNairaQuote(product, normalizedAmount);
+    const nairaAmount = pricing.nairaAmount;
+    const fxRate = pricing.fxRate;
     const senderDisplayName = senderName || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || user?.email || 'Customer';
 
     const wallet = await Wallet.findOne({ user: userId });
@@ -607,6 +705,7 @@ exports.buyGiftCard = async (req, res, next) => {
       providerProductId: product.providerProductId,
       amount: normalizedAmount,
       nairaAmount,
+      fxRate,
       currency: product.currency || 'USD',
       recipientEmail,
       recipientName,
@@ -640,6 +739,7 @@ exports.buyGiftCard = async (req, res, next) => {
         providerProductId: order.providerProductId,
         recipientEmail: order.recipientEmail,
         nairaAmount,
+        fxRate,
       },
       statusHistory: [
         { status: 'pending', note: 'Gift card purchase initiated', timestamp: new Date() },
@@ -687,6 +787,7 @@ exports.buyGiftCard = async (req, res, next) => {
       order.status = orderCompleted ? 'completed' : (['FAILED', 'REFUNDED'].includes(providerStatus) ? 'failed' : 'processing');
       order.providerReference = providerReference;
       order.providerResponse = apiResponse;
+      order.fxRate = fxRate;
       if (orderCompleted) {
         order.completedAt = new Date();
       }
@@ -712,6 +813,7 @@ exports.buyGiftCard = async (req, res, next) => {
           providerStatus,
           providerReference,
           nairaAmount,
+          fxRate,
         },
       });
     } catch (error) {

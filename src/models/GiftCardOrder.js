@@ -41,6 +41,10 @@ const giftCardOrderSchema = new mongoose.Schema({
     type: Number,
     min: 0,
   },
+  fxRate: {
+    type: Number,
+    min: 0,
+  },
   currency: {
     type: String,
     default: 'USD',
