@@ -4399,6 +4399,9 @@ exports.purchaseInternationalAirtime = async (req, res, next) => {
           providerStatus: apiResponse?.status,
           chargedNgn: chargedAmount,
           nairaPrice: chargedAmount,
+          fxRate: Number(normalizedAmount) > 0
+            ? Number((Number(chargedAmount) / Number(normalizedAmount)).toFixed(2))
+            : null,
           foreignAmount: normalizedAmount,
           discount: apiResponse?.discount,
           balanceInfo: apiResponse?.balanceInfo,

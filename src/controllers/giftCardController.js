@@ -41,6 +41,95 @@ const extractProviderList = (response) => {
   return response?.content || response?.data || response?.products || response?.items || response?.results || [];
 };
 
+const resolveCountryLabel = (...values) => {
+  for (const value of values) {
+    if (value == null) {
+      continue;
+    }
+
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (trimmed && trimmed.toLowerCase() !== '[object object]') {
+        return trimmed;
+      }
+      continue;
+    }
+
+    if (typeof value === 'object') {
+      const codeCandidate = [
+        value.countryCode,
+        value.country_code,
+        value.code,
+        value.isoCode,
+        value.iso_code,
+        value.iso2,
+        value.alpha2,
+        value.alpha_2,
+      ].find((item) => typeof item === 'string' && item.trim());
+
+      if (codeCandidate) {
+        return codeCandidate.trim().toUpperCase();
+      }
+
+      const nameCandidate = [
+        value.countryName,
+        value.country_name,
+        value.name,
+        value.label,
+        value.text,
+      ].find((item) => typeof item === 'string' && item.trim());
+
+      if (nameCandidate) {
+        return nameCandidate.trim();
+      }
+    }
+  }
+
+  return undefined;
+};
+
+const resolveCountryDetails = (product) => {
+  const countrySource = resolveCountryLabel(
+    product?.country,
+    product?.raw?.country,
+    product?.raw?.countryCode,
+    product?.raw?.country_code,
+    product?.raw?.countryName,
+    product?.raw?.country_name
+  );
+
+  if (!countrySource) {
+    return null;
+  }
+
+  const codeCandidate = String(countrySource).trim();
+  const isCountryCode = /^[A-Z]{2}$/i.test(codeCandidate);
+
+  if (isCountryCode) {
+    return {
+      code: codeCandidate.toUpperCase(),
+      name:
+        resolveCountryLabel(
+          product?.raw?.countryName,
+          product?.raw?.country_name,
+          product?.raw?.countryLabel,
+          product?.raw?.country_label
+        ) || codeCandidate.toUpperCase(),
+    };
+  }
+
+  return {
+    code:
+      resolveCountryLabel(
+        product?.raw?.countryCode,
+        product?.raw?.country_code,
+        product?.raw?.code,
+        product?.countryCode
+      )?.toUpperCase() || null,
+    name: codeCandidate,
+  };
+};
+
 const normalizeGiftCardProduct = (provider, rawProduct) => {
   const providerProductId = String(
     rawProduct?.id ||
@@ -67,7 +156,7 @@ const normalizeGiftCardProduct = (provider, rawProduct) => {
     productId: makeGiftCardProductId(provider, providerProductId),
     name: String(rawProduct?.name || rawProduct?.brand || rawProduct?.title || providerProductId).trim(),
     description: String(rawProduct?.description || rawProduct?.summary || '').trim() || undefined,
-    country: String(rawProduct?.country || rawProduct?.countryCode || rawProduct?.country_name || '').trim().toUpperCase() || undefined,
+    country: resolveCountryLabel(rawProduct?.country, rawProduct?.countryCode, rawProduct?.country_name, rawProduct?.countryName),
     currency,
     fixed: Boolean(rawProduct?.fixed || fixedAmounts.length > 0),
     fixedAmounts,
@@ -138,7 +227,7 @@ const serializeGiftCardProduct = (product) => ({
   id: product.productId,
   name: product.name,
   description: product.description || `${product.name} Gift Card`,
-  country: product.country || null,
+  country: resolveCountryDetails(product),
   logo: product.logo || null,
   currency: product.currency,
   fixed: product.fixed,
@@ -154,6 +243,9 @@ const serializeGiftCardOrder = (order) => ({
   status: order.status,
   amount: order.amount,
   nairaAmount: order.nairaAmount ?? order.amount,
+  fxRate: Number(order.amount) > 0
+    ? Number((Number(order.nairaAmount ?? order.amount) / Number(order.amount)).toFixed(2))
+    : null,
   currency: order.currency,
   product: {
     id: order.productId,
@@ -259,7 +351,7 @@ const normalizeReloadlyProduct = (rawProduct) => {
     productId: makeGiftCardProductId('reloadly', providerProductId),
     name: String(rawProduct?.productName || rawProduct?.name || rawProduct?.brand || providerProductId).trim(),
     description: String(rawProduct?.description || rawProduct?.summary || '').trim() || undefined,
-    country: String(rawProduct?.countryCode || rawProduct?.country || '').trim().toUpperCase() || undefined,
+    country: resolveCountryLabel(rawProduct?.countryCode, rawProduct?.country, rawProduct?.country_name, rawProduct?.countryName),
     currency,
     fixed: Boolean(rawProduct?.fixed || fixedAmounts.length > 0),
     fixedAmounts,
