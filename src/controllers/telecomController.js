@@ -896,7 +896,12 @@ exports.purchaseData = async (req, res, next) => {
           || apiResponse.raw?.data?.id
           || reference;
         transaction.service.orderId = providerOrderId;
-        transaction.providerResponse = apiResponse;
+        transaction.provider = {
+          ...(transaction.provider || {}),
+          name: successfulProvider,
+          providerReference: providerOrderId,
+          providerResponse: apiResponse,
+        };
         transaction.statusHistory.push({ 
           status: 'pending', 
           note: `Order received from ${successfulProvider}: ${providerOrderId}`, 
@@ -909,6 +914,15 @@ exports.purchaseData = async (req, res, next) => {
             await reconcileAlrahuzDataTransaction(transaction, providerOrderId);
           } catch (syncError) {
             logger.warn(`Alrahuz status sync skipped for ${reference}: ${syncError.message}`);
+          }
+        } else if (transaction.status === 'pending') {
+          try {
+            await VtuTransactionLifecycleService.schedulePolling(transaction._id, {
+              attempt: 1,
+              reason: 'data-initial',
+            });
+          } catch (pollError) {
+            logger.warn(`Failed to enqueue data polling for ${reference}: ${pollError.message}`);
           }
         }
 
@@ -940,7 +954,62 @@ exports.purchaseData = async (req, res, next) => {
           },
         });
       } else {
-        throw new AppError(apiResponse.message || 'Purchase failed', 400);
+        const explicitlyFailed =
+          apiResponse.failed === true
+          || apiResponse.reversed === true
+          || apiResponse.status === 'failed'
+          || apiResponse.status === 'error'
+          || apiResponse.status === 'reversed';
+
+        if (explicitlyFailed) {
+          throw new AppError(apiResponse.message || apiResponse.note || 'Purchase failed', 400);
+        }
+
+        transaction.status = 'pending';
+        transaction.service.provider = successfulProvider;
+        transaction.service.orderId = apiResponse.reference
+          || apiResponse.orderId
+          || apiResponse.raw?.id
+          || reference;
+        transaction.provider = {
+          ...(transaction.provider || {}),
+          name: successfulProvider,
+          providerReference: transaction.service.orderId,
+          providerResponse: apiResponse,
+        };
+        transaction.statusHistory.push({
+          status: 'pending',
+          note: apiResponse.message || apiResponse.note || `Order received from ${successfulProvider}`,
+          timestamp: new Date(),
+        });
+        await transaction.save();
+        try {
+          await VtuTransactionLifecycleService.schedulePolling(transaction._id, {
+            attempt: 1,
+            reason: 'data-initial',
+          });
+        } catch (pollError) {
+          logger.warn(`Failed to enqueue data polling for ${reference}: ${pollError.message}`);
+        }
+        res.status(200).json({
+          status: 'success',
+          message: 'Data purchase initiated successfully',
+          data: {
+            reference,
+            orderId: transaction.service.orderId,
+            phoneNumber,
+            network: normalizedNetwork,
+            dataPlan: activePricing?.planName || planIdentifier,
+            amount: chargedAmount,
+            providerAmount: providerPrice,
+            markup: {
+              percentage: chargePricing.percentage,
+              amount: chargePricing.markupAmount,
+            },
+            status: 'pending',
+            provider: successfulProvider,
+          },
+        });
       }
     } catch (err) {
       
@@ -1230,20 +1299,74 @@ exports.purchaseAirtime = async (req, res, next) => {
           parsedAmount,
           transaction.service?.phoneNumber
         );
+      } else if (transaction.status === 'pending') {
+        try {
+          await VtuTransactionLifecycleService.schedulePolling(transaction._id, {
+            attempt: 1,
+            reason: 'airtime-initial',
+          });
+        } catch (pollError) {
+          logger.warn(`Failed to enqueue airtime polling for ${requestId}: ${pollError.message}`);
+        }
       }
     } else {
-      transaction.status = "failed";
+      const explicitlyFailed =
+        apiResponse?.failed === true
+        || apiResponse?.reversed === true
+        || apiResponse?.status === 'failed'
+        || apiResponse?.status === 'error'
+        || apiResponse?.status === 'reversed';
+
+      if (explicitlyFailed) {
+        transaction.status = "failed";
+
+        transaction.statusHistory.push({
+          status: "failed",
+          note: responseData.orderremark || responseData.status || responseData.orderstatus || "Provider rejected request",
+          timestamp: new Date(),
+        });
+
+        await transaction.save();
+
+        await refundTransactionToWallet(transaction, 'Airtime refund', chargedAmount);
+        await transaction.save();
+
+        return res.status(400).json({
+          status: "error",
+          message: "Airtime purchase failed",
+          data: {
+            reference: requestId,
+            provider: activeProvider,
+            status: "failed",
+            providerResponse: responseData,
+          },
+        });
+      }
+
+      transaction.status = "pending";
 
       transaction.statusHistory.push({
-        status: "failed",
-        note: responseData.orderremark || responseData.status || responseData.orderstatus || "Provider rejected request",
+        status: "pending",
+        note: responseData.orderremark || responseData.status || responseData.orderstatus || "Order received by provider",
         timestamp: new Date(),
       });
 
+      transaction.service = {
+        ...transaction.service,
+        orderId: apiResponse?.orderId || apiResponse?.reference || responseData?.orderid || requestId,
+        requestId: apiResponse?.requestId || responseData?.requestid || requestId,
+      };
+
       await transaction.save();
 
-      await refundTransactionToWallet(transaction, 'Airtime refund', chargedAmount);
-      await transaction.save();
+      try {
+        await VtuTransactionLifecycleService.schedulePolling(transaction._id, {
+          attempt: 1,
+          reason: 'airtime-initial',
+        });
+      } catch (pollError) {
+        logger.warn(`Failed to enqueue airtime polling for ${requestId}: ${pollError.message}`);
+      }
     }
 
     res.status(200).json({
@@ -1903,23 +2026,34 @@ exports.purchaseSmileData = async (req, res, next) => {
         actype: actype || 'AccountNumber',
       });
 
-      transaction.status = apiResponse.success ? 'successful' : 'failed';
-      transaction.providerResponse = apiResponse.response;
+      const smileClassification = classifyArewaResponse({
+        status: apiResponse?.response?.status || (apiResponse?.success ? 'success' : ''),
+        msg: apiResponse?.msg || apiResponse?.response?.msg,
+      });
+      transaction.status = smileClassification.state;
+      transaction.provider = {
+        ...(transaction.provider || {}),
+        name: 'arewa',
+        providerReference: null,
+        providerResponse: apiResponse.response,
+      };
       transaction.statusHistory.push({
-        status: apiResponse.success ? 'successful' : 'failed',
-        note: apiResponse.msg || 'Smile purchase completed',
+        status: smileClassification.state,
+        note: apiResponse.msg || 'Smile purchase response received',
         timestamp: new Date(),
       });
       await transaction.save();
 
-      if (!apiResponse.success) {
+      if (smileClassification.state === 'failed') {
         await refundTransactionToWallet(transaction, 'Smile data purchase refund', chargedAmount);
         return next(new AppError(apiResponse.msg || 'Smile purchase failed', 500));
       }
 
       return res.status(200).json({
         status: 'success',
-        message: apiResponse.msg || 'Smile data purchase successful',
+        message: smileClassification.state === 'successful'
+          ? (apiResponse.msg || 'Smile data purchase successful')
+          : 'Smile data purchase initiated',
         data: {
           reference,
           mobileNumber: accountNumber,
@@ -1967,6 +2101,33 @@ exports.cancelSmileTransaction = async (req, res, next) => {
     return next(error);
   }
 };
+
+function classifyArewaResponse(apiResponse = {}) {
+  const statusRaw = String(apiResponse?.status || apiResponse?.service || '').toLowerCase();
+  const msgRaw = String(
+    apiResponse?.msg
+    || apiResponse?.message
+    || apiResponse?.error
+    || apiResponse?.description
+    || ''
+  ).toLowerCase();
+
+  if (statusRaw === 'success' || statusRaw === 'completed' || statusRaw === 'delivered') {
+    return { state: 'successful', success: true };
+  }
+
+  const failureTokens = ['fail', 'error', 'invalid', 'insufficient', 'reject', 'denied', 'cannot', 'unable'];
+  const isExplicitFailure =
+    failureTokens.some((token) => statusRaw.includes(token))
+    || failureTokens.some((token) => msgRaw.includes(token));
+
+  if (isExplicitFailure) {
+    return { state: 'failed', success: false };
+  }
+
+  return { state: 'pending', success: false };
+}
+
 
 exports.getAlphaPlans = async (req, res) => {
   return res.status(200).json({
@@ -2063,25 +2224,30 @@ exports.purchaseAlpha = async (req, res, next) => {
 
     try {
       const apiResponse = await ArewaService.purchaseAlpha({ phone, planid: String(planid) });
-      const success = String(apiResponse?.status || '').toLowerCase() === 'success';
+      const alphaClassification = classifyArewaResponse(apiResponse);
+      const success = alphaClassification.state === 'successful';
 
-      transaction.status = success ? 'successful' : 'failed';
-      transaction.providerResponse = apiResponse;
+      transaction.status = alphaClassification.state;
+      transaction.provider = {
+        ...(transaction.provider || {}),
+        name: 'arewa',
+        providerResponse: apiResponse,
+      };
       transaction.statusHistory.push({
-        status: transaction.status,
+        status: alphaClassification.state,
         note: apiResponse?.msg || apiResponse?.message || 'Alpha response received',
         timestamp: new Date(),
       });
 
-      if (!success) {
+      if (alphaClassification.state === 'failed') {
         await refundTransactionToWallet(transaction, 'Alpha purchase refund', chargedAmount);
       }
 
       await transaction.save();
 
-      return res.status(success ? 200 : 400).json({
-        status: success ? 'success' : 'error',
-        message: apiResponse?.msg || (success ? 'Alpha purchased successfully' : 'Alpha purchase failed'),
+      return res.status(alphaClassification.state === 'failed' ? 400 : 200).json({
+        status: alphaClassification.state === 'failed' ? 'error' : 'success',
+        message: apiResponse?.msg || (success ? 'Alpha purchased successfully' : 'Alpha purchase initiated'),
         data: {
           reference,
           phone,
@@ -2182,25 +2348,30 @@ exports.purchaseKirani = async (req, res, next) => {
 
     try {
       const apiResponse = await ArewaService.purchaseKirani({ phone, planid: String(planid) });
-      const success = String(apiResponse?.status || '').toLowerCase() === 'success';
+      const kiraniClassification = classifyArewaResponse(apiResponse);
+      const success = kiraniClassification.state === 'successful';
 
-      transaction.status = success ? 'successful' : 'failed';
-      transaction.providerResponse = apiResponse;
+      transaction.status = kiraniClassification.state;
+      transaction.provider = {
+        ...(transaction.provider || {}),
+        name: 'arewa',
+        providerResponse: apiResponse,
+      };
       transaction.statusHistory.push({
-        status: transaction.status,
+        status: kiraniClassification.state,
         note: apiResponse?.msg || apiResponse?.message || 'Kirani response received',
         timestamp: new Date(),
       });
 
-      if (!success) {
+      if (kiraniClassification.state === 'failed') {
         await refundTransactionToWallet(transaction, 'Kirani purchase refund', chargedAmount);
       }
 
       await transaction.save();
 
-      return res.status(success ? 200 : 400).json({
-        status: success ? 'success' : 'error',
-        message: apiResponse?.msg || (success ? 'Kirani purchased successfully' : 'Kirani purchase failed'),
+      return res.status(kiraniClassification.state === 'failed' ? 400 : 200).json({
+        status: kiraniClassification.state === 'failed' ? 'error' : 'success',
+        message: apiResponse?.msg || (success ? 'Kirani purchased successfully' : 'Kirani purchase initiated'),
         data: {
           reference,
           phone,
@@ -3600,7 +3771,7 @@ exports.pluginngWebhook = async (req, res) => {
           timestamp: new Date(),
         });
         await transaction.save();
-      } else {
+      } else if (PluginngService.isFailedStatus(result.statusCode)) {
         transaction.status = 'failed';
         transaction.completedAt = new Date();
         transaction.statusHistory.push({
@@ -3620,6 +3791,14 @@ exports.pluginngWebhook = async (req, res) => {
           type: 'purchase_failed',
           reference: transaction.reference,
         });
+      } else {
+        transaction.status = 'pending';
+        transaction.statusHistory.push({
+          status: 'pending',
+          note: result.message || `Unknown provider status: ${result.statusCode || 'unknown'}`,
+          timestamp: new Date(),
+        });
+        await transaction.save();
       }
     }
 

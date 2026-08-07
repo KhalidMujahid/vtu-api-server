@@ -7,6 +7,7 @@ const NelloBytesService = require('../services/nelloBytesService');
 const PluginngService = require('../services/pluginngService');
 const NotificationService = require('../services/NotificationService');
 const ProviderPurchaseGuardService = require('../services/providerPurchaseGuardService');
+const VtuTransactionLifecycleService = require('../services/vtuTransactionLifecycleService');
 const vtuConfig = require('../config/vtuProviders');
 
 const SERVER_URL = process.env.SERVER_URL || 'https://api.yareemadata.com';
@@ -571,9 +572,21 @@ exports.purchaseElectricity = async (req, res, next) => {
           customReference: reference,
         });
 
-        transaction.status = apiResponse.pending ? 'pending' : (apiResponse.success ? 'successful' : 'failed');
+let pluginngLocalStatus = 'pending';
+        if (apiResponse.failed || apiResponse.reversed) {
+          pluginngLocalStatus = 'failed';
+        } else if (apiResponse.success && !apiResponse.pending) {
+          pluginngLocalStatus = 'successful';
+        }
+
+        transaction.status = pluginngLocalStatus;
         transaction.service.orderId = apiResponse.orderId || reference;
-        transaction.providerResponse = apiResponse.raw || apiResponse;
+        transaction.provider = {
+          ...(transaction.provider || {}),
+          name: activeProvider,
+          providerReference: apiResponse.orderId || reference,
+          providerResponse: apiResponse.raw || apiResponse,
+        };
         transaction.statusHistory.push({
           status: transaction.status,
           note: apiResponse.note || `Pluginng status: ${apiResponse.status || 'unknown'}`,
@@ -585,6 +598,45 @@ exports.purchaseElectricity = async (req, res, next) => {
           await refundTransactionToWallet(transaction, 'Electricity payment refund', parsedAmount);
           await transaction.save();
           throw new Error(apiResponse.note || 'Payment failed');
+        }
+
+        if (transaction.status === 'pending') {
+          try {
+            const queryResult = await PluginngService.queryTransaction(reference);
+            if (queryResult.success && !queryResult.pending) {
+              transaction.status = 'successful';
+              transaction.statusHistory.push({
+                status: 'successful',
+                note: queryResult.note || 'Provider confirmed successful electricity delivery',
+                timestamp: new Date(),
+              });
+              await transaction.save();
+            } else if (queryResult.failed) {
+              transaction.status = 'failed';
+              await transaction.save();
+              await refundTransactionToWallet(transaction, 'Electricity payment refund', parsedAmount);
+              await transaction.save();
+            } else {
+              try {
+                await VtuTransactionLifecycleService.schedulePolling(transaction._id, {
+                  attempt: 1,
+                  reason: 'pluginng-electricity-initial',
+                });
+              } catch (pollError) {
+                logger.warn(`Failed to enqueue Pluginng electricity polling for ${reference}: ${pollError.message}`);
+              }
+            }
+          } catch (requeryError) {
+            logger.warn(`Pluginng electricity requery failed for ${reference}: ${requeryError.message}`);
+            try {
+              await VtuTransactionLifecycleService.schedulePolling(transaction._id, {
+                attempt: 1,
+                reason: 'pluginng-electricity-initial',
+              });
+            } catch (pollError) {
+              logger.warn(`Failed to enqueue Pluginng electricity polling for ${reference}: ${pollError.message}`);
+            }
+          }
         }
 
         return res.status(200).json({
@@ -981,9 +1033,21 @@ exports.purchaseCableTV = async (req, res, next) => {
           customReference: reference,
         });
 
-        transaction.status = apiResponse.pending ? 'pending' : (apiResponse.success ? 'successful' : 'failed');
+        let pluginngLocalStatus = 'pending';
+        if (apiResponse.failed || apiResponse.reversed) {
+          pluginngLocalStatus = 'failed';
+        } else if (apiResponse.success && !apiResponse.pending) {
+          pluginngLocalStatus = 'successful';
+        }
+
+        transaction.status = pluginngLocalStatus;
         transaction.service.orderId = apiResponse.orderId || reference;
-        transaction.providerResponse = apiResponse.raw || apiResponse;
+        transaction.provider = {
+          ...(transaction.provider || {}),
+          name: activeProvider,
+          providerReference: apiResponse.orderId || reference,
+          providerResponse: apiResponse.raw || apiResponse,
+        };
         transaction.statusHistory.push({
           status: transaction.status,
           note: apiResponse.note || `Pluginng status: ${apiResponse.status || 'unknown'}`,
@@ -995,6 +1059,41 @@ exports.purchaseCableTV = async (req, res, next) => {
           await refundTransactionToWallet(transaction, 'Cable TV refund', totalAmount);
           await transaction.save();
           throw new Error(apiResponse.note || 'Purchase failed');
+        }
+
+        if (transaction.status === 'pending') {
+          try {
+            const queryResult = await PluginngService.queryTransaction(reference);
+            if (queryResult.success && !queryResult.pending) {
+              transaction.status = 'successful';
+              transaction.statusHistory.push({
+                status: 'successful',
+                note: queryResult.note || 'Provider confirmed successful cable subscription',
+                timestamp: new Date(),
+              });
+              await transaction.save();
+            } else if (queryResult.failed) {
+              transaction.status = 'failed';
+              await transaction.save();
+              await refundTransactionToWallet(transaction, 'Cable TV refund', totalAmount);
+              await transaction.save();
+            } else {
+              await VtuTransactionLifecycleService.schedulePolling(transaction._id, {
+                attempt: 1,
+                reason: 'pluginng-cable-initial',
+              });
+            }
+          } catch (requeryError) {
+            logger.warn(`Pluginng cable requery failed for ${reference}: ${requeryError.message}`);
+            try {
+              await VtuTransactionLifecycleService.schedulePolling(transaction._id, {
+                attempt: 1,
+                reason: 'pluginng-cable-initial',
+              });
+            } catch (pollError) {
+              logger.warn(`Failed to enqueue Pluginng cable polling for ${reference}: ${pollError.message}`);
+            }
+          }
         }
 
         return res.status(200).json({
@@ -1194,26 +1293,85 @@ exports.purchaseEducationPin = async (req, res, next) => {
         });
 
         transaction.service.orderId = purchaseResult.orderId || reference;
-        transaction.providerResponse = purchaseResult.raw || purchaseResult;
+        transaction.provider = {
+          ...(transaction.provider || {}),
+          name: activeProvider,
+          providerReference: purchaseResult.orderId || reference,
+          providerResponse: purchaseResult.raw || purchaseResult,
+        };
 
-        if (purchaseResult.success && !purchaseResult.pending) {
-          transaction.status = 'successful';
-          transaction.statusHistory.push({
-            status: 'successful',
-            note: purchaseResult.note || 'Education PIN delivered successfully',
-            timestamp: new Date(),
-          });
-        } else if (purchaseResult.pending) {
-          transaction.status = 'pending';
-          transaction.statusHistory.push({
-            status: 'pending',
-            note: purchaseResult.note || 'Order received by provider',
-            timestamp: new Date(),
-          });
-        } else {
+        let eduLocalStatus = 'pending';
+        if (purchaseResult.failed || purchaseResult.reversed) {
+          eduLocalStatus = 'failed';
+        } else if (purchaseResult.success && !purchaseResult.pending) {
+          eduLocalStatus = 'successful';
+        }
+
+        transaction.status = eduLocalStatus;
+        transaction.statusHistory.push({
+          status: transaction.status,
+          note: purchaseResult.note || (eduLocalStatus === 'successful'
+            ? 'Education PIN delivered successfully'
+            : eduLocalStatus === 'failed'
+              ? 'Order failed'
+              : 'Order received by provider'),
+          timestamp: new Date(),
+        });
+
+        if (eduLocalStatus === 'failed') {
+          await transaction.save();
           throw new Error(purchaseResult.note || 'Education PIN purchase failed');
         }
-        await transaction.save();
+
+        if (eduLocalStatus === 'pending') {
+          try {
+            const queryResult = await PluginngService.queryTransaction(reference);
+            if (queryResult.success && !queryResult.pending && queryResult.raw?.data?.cards) {
+              transaction.status = 'successful';
+              transaction.provider = {
+                ...(transaction.provider || {}),
+                providerResponse: { ...(purchaseResult.raw || queryResult.raw) },
+              };
+              transaction.statusHistory.push({
+                status: 'successful',
+                note: queryResult.note || 'Provider confirmed education PIN delivery',
+                timestamp: new Date(),
+              });
+              await transaction.save();
+            } else if (queryResult.failed) {
+              transaction.status = 'failed';
+              await transaction.save();
+              throw new Error(queryResult.note || 'Education PIN purchase failed');
+            } else {
+              await transaction.save();
+              try {
+                await VtuTransactionLifecycleService.schedulePolling(transaction._id, {
+                  attempt: 1,
+                  reason: 'pluginng-education-initial',
+                });
+              } catch (pollError) {
+                logger.warn(`Failed to enqueue Pluginng education polling for ${reference}: ${pollError.message}`);
+              }
+            }
+          } catch (requeryError) {
+            if (transaction.status !== 'failed') {
+              await transaction.save();
+              logger.warn(`Pluginng education requery failed for ${reference}: ${requeryError.message}`);
+              try {
+                await VtuTransactionLifecycleService.schedulePolling(transaction._id, {
+                  attempt: 1,
+                  reason: 'pluginng-education-initial',
+                });
+              } catch (pollError) {
+                logger.warn(`Failed to enqueue Pluginng education polling for ${reference}: ${pollError.message}`);
+              }
+            } else {
+              throw requeryError;
+            }
+          }
+        } else {
+          await transaction.save();
+        }
 
         return res.status(200).json({
           status: 'success',
