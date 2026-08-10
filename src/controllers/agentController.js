@@ -325,7 +325,20 @@ const forwardUserServiceWithAgentCommission = async (req, res, next, handler, op
       throw error;
     });
   } catch (error) {
-    return next(error);
+    res.status = originalStatus;
+    res.json = originalJson;
+    if (payload) {
+      return res.status(statusCode).json(payload);
+    }
+    const statusCodeOut = error?.statusCode || 500;
+    const message = error?.message || 'Purchase failed. Please try again.';
+    if (res.headersSent) {
+      return res.end();
+    }
+    return res.status(statusCodeOut).json({
+      status: statusCodeOut >= 500 ? 'error' : 'fail',
+      message,
+    });
   } finally {
     res.status = originalStatus;
     res.json = originalJson;
@@ -344,7 +357,13 @@ const forwardUserServiceWithAgentCommission = async (req, res, next, handler, op
 
   if (responseStatus === 'success' && ['successful', 'pending'].includes(transactionStatus || 'successful')) {
     const purchaseAmount = extractPurchaseAmount(payload);
-    await creditAgentCommission(req.user._id, purchaseAmount);
+    try {
+      await creditAgentCommission(req.user._id, purchaseAmount);
+    } catch (commissionError) {
+      logger.error(
+        `Agent commission credit failed for user ${req.user?._id}: ${commissionError?.message}`
+      );
+    }
   }
 
   return originalStatus(statusCode).json(payload);
