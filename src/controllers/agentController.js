@@ -290,6 +290,7 @@ const creditAgentCommission = async (agentId, purchaseAmount) => {
       status: 'successful',
       description: 'Commission earned from agent service purchase',
       metadata: {
+        commission: commissionAmount,
         commissionEarned: true,
         commissionRate,
         purchaseAmount: Number(purchaseAmount || 0),
@@ -1509,7 +1510,7 @@ class AgentController {
         isEmailVerified: false,
         isPhoneVerified: false,
         isActive: true,
-        isApproved: false,
+        isApproved: true,
         kycStatus: 'pending',
         referredBy: referringAgent?._id,
         agentInfo: {
@@ -1521,6 +1522,7 @@ class AgentController {
             number: idNumber,
             verified: false,
           },
+          commissionRate: 1,
           isVerified: false,
           activationDate: null,
           referralCode: `AGT${Date.now().toString().slice(-6)}`,
@@ -1567,6 +1569,7 @@ class AgentController {
             phoneNumber: agent.phoneNumber,
             agentId: agent.agentInfo.agentId,
             referralCode: agent.agentInfo.referralCode,
+            commissionRate: agent.agentInfo.commissionRate,
             isVerified: agent.agentInfo.isVerified,
             status: 'active',
           },

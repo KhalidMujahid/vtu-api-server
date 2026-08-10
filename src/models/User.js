@@ -161,7 +161,7 @@ const userSchema = new mongoose.Schema({
     },
     commissionRate: {
       type: Number,
-      default: 0,
+      default: 1,
       min: 0,
       max: 50,
     },
@@ -286,7 +286,7 @@ userSchema.pre('save', async function(next) {
   
   if (this.role === 'agent' && (!this.roles || this.roles.length === 0)) {
     this.roles = ['agent'];
-    if (!this.isApproved) {
+    if (this.isApproved === undefined) {
       this.isApproved = false;
     }
   } else if (this.role === 'user' && (!this.roles || this.roles.length === 0)) {

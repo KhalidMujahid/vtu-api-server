@@ -14,7 +14,7 @@ exports.getReferralList = async (req, res, next) => {
     const earningsAgg = await ReferralEarning.aggregate([
       {
         $match: {
-          referrer: referrals[0]?.referredBy || req.user.id,
+          referrer: req.user.id,
           referredUser: { $in: referralIds },
           status: 'credited',
         },
