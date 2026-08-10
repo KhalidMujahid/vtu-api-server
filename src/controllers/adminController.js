@@ -709,12 +709,8 @@ class AdminController {
         return next(new AppError('User not found', 404));
       }
       
-      if (user.isActive) {
+      if (user.isActive && user.isApproved) {
         return next(new AppError('User is already active', 400));
-      }
-
-      if (user.isApproved) {
-        return next(new AppError('User is already approved', 400));
       }
       
       
