@@ -6,6 +6,7 @@ const Transaction = require('../models/Transaction');
 const PrestmitService = require('../services/prestmitService');
 const ArewaService = require('../services/arewaService');
 const logger = require('../utils/logger');
+const cache = require('../utils/cache');
 const vtuConfig = require('../config/vtuProviders');
 
 const SERVICE_TYPE_TO_CONSOLE = {
@@ -1379,6 +1380,18 @@ exports.getBillPaymentProviders = async (req, res, next) => {
     res.status(200).json({
       status: 'success',
       data: billPaymentConfig
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.clearPlansCache = async (req, res, next) => {
+  try {
+    await cache.clearCached('dataplans');
+    res.status(200).json({
+      status: 'success',
+      message: 'Data plans cache cleared',
     });
   } catch (error) {
     next(error);

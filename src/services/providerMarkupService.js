@@ -1,5 +1,6 @@
 const Settings = require('../models/Settings');
 const vtuConfig = require('../config/vtuProviders');
+const cache = require('../utils/cache');
 
 const SETTINGS_KEY = 'pricing.providerMarkupPercentages';
 
@@ -97,6 +98,8 @@ class ProviderMarkupService {
       },
       { upsert: true, new: true }
     );
+
+    await cache.clearCached('dataplans');
 
     return {
       providerId: normalizedProviderId,

@@ -27,5 +27,6 @@ router.put('/providers/:providerId/status', adminAuth, vtuConsoleController.upda
 router.post('/init', adminAuth, vtuConsoleController.initializeProviders);
 router.get('/bill-payment/providers', adminAuth, vtuConsoleController.getBillPaymentProviders);
 router.post('/bill-payment/switch', adminAuth, vtuConsoleController.switchBillPaymentProvider);
+router.post('/cache/clear', adminAuth, vtuConsoleController.clearPlansCache);
 
 module.exports = router;

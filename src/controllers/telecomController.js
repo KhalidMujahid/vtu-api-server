@@ -4,6 +4,7 @@ const Transaction = require('../models/Transaction');
 const Wallet = require("../models/Wallet");
 const { AppError } = require('../middlewares/errorHandler');
 const logger = require('../utils/logger');
+const cache = require('../utils/cache');
 const NotificationService = require('../services/NotificationService');
 const NelloBytesService = require('../services/nelloBytesService');
 const VtuProviderService = require('../services/vtuProviderService');
@@ -614,6 +615,12 @@ exports.getDataPlans = async (req, res, next) => {
     const selectedSource = source || providerSource;
     const selectedProviderId = SOURCE_TO_PROVIDER[selectedSource] || activeProviderId;
 
+    const cacheKey = `dataplans:${selectedSource}:${normalizedNetwork || 'all'}:${normalizedDataType || 'all'}`;
+    const cachedResponse = await cache.getCached(cacheKey);
+    if (cachedResponse) {
+      return res.status(200).json(cachedResponse);
+    }
+
     const DataService = vtuConfig.getDataPlansService(selectedSource);
     
     if (DataService && DataService.getDataPlans) {
@@ -626,8 +633,9 @@ exports.getDataPlans = async (req, res, next) => {
         responseData = { [normalizedNetwork]: responseData[normalizedNetwork] || [] };
       }
 
+      let responsePayload;
       if (normalizedNetwork && !normalizedDataType) {
-        return res.status(200).json({
+        responsePayload = {
           status: 'success',
           availableDataTypes: formatAvailableDataTypes(availableTypes, normalizedNetwork),
           filters: {
@@ -636,20 +644,24 @@ exports.getDataPlans = async (req, res, next) => {
           },
           source: selectedSource,
           provider: selectedProviderId,
-        });
+        };
+      } else {
+        responsePayload = {
+          status: 'success',
+          data: responseData,
+          availableDataTypes: formatAvailableDataTypes(availableTypes, normalizedNetwork),
+          filters: {
+            network: normalizedNetwork || null,
+            dataType: normalizedDataType || null,
+          },
+          source: selectedSource,
+          provider: selectedProviderId,
+        };
       }
 
-      return res.status(200).json({
-        status: 'success',
-        data: responseData,
-        availableDataTypes: formatAvailableDataTypes(availableTypes, normalizedNetwork),
-        filters: {
-          network: normalizedNetwork || null,
-          dataType: normalizedDataType || null,
-        },
-        source: selectedSource,
-        provider: selectedProviderId,
-      });
+      await cache.setCached(cacheKey, responsePayload);
+
+      return res.status(200).json(responsePayload);
     }
 
     return next(new AppError('Data plans are currently unavailable. Please try again shortly.', 400));
@@ -3249,6 +3261,13 @@ exports.getCurrentProvider = async (req, res, next) => {
 exports.getAirtimeNigeriaDataPlans = async (req, res, next) => {
   try {
     const { network } = req.query;
+    const normalizedNetwork = normalizeNetwork(network);
+    const cacheKey = `dataplans:airtimenigeria:${normalizedNetwork || 'all'}:all`;
+    const cachedResponse = await cache.getCached(cacheKey);
+    if (cachedResponse) {
+      return res.status(200).json(cachedResponse);
+    }
+
     const plans = await AirtimeNigeriaService.getDataPlans(network);
     const pricedPlans = {};
 
@@ -3273,12 +3292,16 @@ exports.getAirtimeNigeriaDataPlans = async (req, res, next) => {
         };
       }));
     }
-    
-    res.status(200).json({
+
+    const responsePayload = {
       status: 'success',
       data: pricedPlans,
       source: 'airtimenigeria',
-    });
+    };
+
+    await cache.setCached(cacheKey, responsePayload);
+
+    res.status(200).json(responsePayload);
   } catch (error) {
     next(error);
   }
@@ -4144,6 +4167,12 @@ exports.getPluginngDataPlans = async (req, res, next) => {
     const normalizedNetwork = normalizeNetwork(network);
     const normalizedDataType = normalizeDataType(dataType);
 
+    const cacheKey = `dataplans:pluginng:${normalizedNetwork || 'all'}:${normalizedDataType || 'all'}`;
+    const cachedResponse = await cache.getCached(cacheKey);
+    if (cachedResponse) {
+      return res.status(200).json(cachedResponse);
+    }
+
     const rawPlans = await PluginngService.getDataPlans(normalizedNetwork);
     const unifiedPlans = vtuConfig.transformDataPlans('pluginng', rawPlans);
     const availableTypes = buildAvailableDataTypesFromGroupedPlans(unifiedPlans);
@@ -4154,7 +4183,7 @@ exports.getPluginngDataPlans = async (req, res, next) => {
       responseData = { [normalizedNetwork]: responseData[normalizedNetwork] || [] };
     }
 
-    return res.status(200).json({
+    const responsePayload = {
       status: 'success',
       data: responseData,
       availableDataTypes: formatAvailableDataTypes(availableTypes, normalizedNetwork),
@@ -4164,7 +4193,11 @@ exports.getPluginngDataPlans = async (req, res, next) => {
       },
       source: 'pluginng',
       provider: 'pluginng',
-    });
+    };
+
+    await cache.setCached(cacheKey, responsePayload);
+
+    return res.status(200).json(responsePayload);
   } catch (error) {
     next(error);
   }
