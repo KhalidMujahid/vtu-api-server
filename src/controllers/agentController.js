@@ -250,7 +250,8 @@ const captureControllerPayload = async (req, handler) => {
 
 const getAgentCommissionRate = async (agentId) => {
   const agent = await User.findById(agentId).select('agentInfo.commissionRate');
-  return Number(agent?.agentInfo?.commissionRate || 0);
+  const rate = Number(agent?.agentInfo?.commissionRate || 0);
+  return rate > 0 ? rate : 1;
 };
 
 const creditAgentCommission = async (agentId, purchaseAmount) => {

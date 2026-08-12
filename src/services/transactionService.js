@@ -56,7 +56,18 @@ class TransactionService {
       
       const query = { user: userId };
       
-      if (type) query.type = type;
+      if (type) {
+        const typeAliases = {
+          commission: { $in: ['commission_earned', 'commission_transfer', 'commission_withdrawal'] },
+          funding: 'fund_wallet',
+          transfer: 'wallet_transfer',
+        };
+        if (typeAliases[type]) {
+          query.type = typeAliases[type];
+        } else {
+          query.type = type;
+        }
+      }
       if (status) query.status = status;
       
       if (startDate || endDate) {
