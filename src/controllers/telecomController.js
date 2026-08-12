@@ -393,7 +393,12 @@ async function resolveDataPricing({ providerId, network, planIdentifier, allowUn
 
 function isProviderBalanceError(error) {
   const message = `${error?.response?.data?.message || ''} ${error?.message || ''}`.toLowerCase();
-  return message.includes('insufficient') && message.includes('balance');
+  return (
+    (message.includes('insufficient') && message.includes('balance'))
+    || message.includes('service is temporarily unavailable at the moment')
+    || message.includes('provider balance unavailable')
+    || (message.includes('unable to verify') && message.includes('balance'))
+  );
 }
 
 function shouldBypassProviderBalanceCheck(providerConfig, error) {
@@ -1033,7 +1038,8 @@ exports.purchaseData = async (req, res, next) => {
       await transaction.save();
 
       logger.error(`Data purchase failed → ${err.message}`);
-      return next(new AppError('Data purchase failed. Please try again shortly.', 500));
+      const clientMessage = err?.message || 'Data purchase failed. Please try again shortly.';
+      return next(new AppError(clientMessage, err?.statusCode || 500));
     }
   } catch (error) {
     next(error);
