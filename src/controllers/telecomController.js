@@ -1114,7 +1114,7 @@ exports.purchaseAirtime = async (req, res, next) => {
     }
 
     const defaultProvider = await vtuConfig.getProviderIdForService('airtime');
-    const activeProvider = defaultProvider;
+    let activeProvider = defaultProvider;
     const providerConfig = vtuConfig.providers[activeProvider];
 
     const user = await User.findById(req.user.id).select("+transactionPin");
@@ -1204,84 +1204,115 @@ exports.purchaseAirtime = async (req, res, next) => {
 
     let apiResponse;
     let responseData;
+    let successfulProvider = activeProvider;
     const airtimeCallbackUrl = `${SERVER_URL}/api/v1/telecom/webhook/airtimenigeria`;
 
-    
-    if (providerConfig?.source === 'airtimenigeria') {
-      apiResponse = await AirtimeNigeriaService.purchaseAirtime({
-        network: normalizedNetwork,
-        phone: normalizedPhoneNumber,
-        amount: parsedAmount,
-        maxAmount: parsedAmount,
-        callbackUrl: airtimeCallbackUrl,
-        customerReference: requestId,
-      });
-      responseData = {
-        status: apiResponse.success ? "ORDER_RECEIVED" : "FAILED",
-        orderid: apiResponse.reference,
-        raw: apiResponse,
-      };
-      
-    } else if (providerConfig?.source === 'smeplug') {
-      const smeCallbackUrl = `${SERVER_URL}/api/v1/telecom/webhook/smeplug`;
-      apiResponse = await SmePlugService.purchaseAirtime({
-        phone: normalizePhoneForSmePlug(normalizedPhoneNumber),
-        network: normalizedNetwork,
-        amount: parsedAmount,
-        customerReference: requestId,
-        callbackUrl: smeCallbackUrl,
-      });
-      responseData = {
-        status: apiResponse.success ? "ORDER_RECEIVED" : "FAILED",
-        orderid: apiResponse.reference,
-        raw: apiResponse,
-      };
-    } else if (providerConfig?.source === 'pluginng') {
-      const subcategoryId = await PluginngService.getAirtimeSubcategoryId(normalizedNetwork);
-      if (!subcategoryId) {
-        throw new AppError(`Pluginng airtime subcategory was not found for ${normalizedNetwork}`, 400);
+    const candidateProviders = [activeProvider];
+    for (const provider of VtuProviderService.getProvidersForNetwork(normalizedNetwork)) {
+      if (
+        provider?.id !== activeProvider
+        && provider?.supportedServices?.includes('airtime_recharge')
+        && !candidateProviders.includes(provider.id)
+      ) {
+        candidateProviders.push(provider.id);
       }
-
-      apiResponse = await PluginngService.purchaseAirtime({
-        amount: parsedAmount,
-        phoneNumber: normalizedPhoneNumber,
-        subcategoryId,
-        customReference: requestId,
-      });
-
-      const providerStatus = String(apiResponse.status || '').toLowerCase();
-      responseData = {
-        status: ['success', 'pending'].includes(providerStatus) ? "ORDER_RECEIVED" : "FAILED",
-        orderid: apiResponse.orderId || apiResponse.reference || requestId,
-        raw: apiResponse,
-      };
-      
-    } else if (providerConfig?.source === 'alrahuzdata') {
-      apiResponse = await AlrahuzDataService.purchaseAirtime({
-        network: normalizedNetwork,
-        amount: parsedAmount,
-        phoneNumber: normalizedPhoneNumber,
-        customReference: requestId,
-      });
-
-      const providerStatus = String(apiResponse.status || '').toLowerCase();
-      responseData = {
-        status: ['success', 'pending'].includes(providerStatus) ? "ORDER_RECEIVED" : "FAILED",
-        orderid: apiResponse.orderId || apiResponse.reference || requestId,
-        raw: apiResponse,
-      };
-      
-    } else {
-      apiResponse = await NelloBytesService.purchaseAirtime({
-        network: normalizedNetwork,
-        amount: parsedAmount,
-        mobileNumber: normalizedPhoneNumber,
-        requestId,
-        callBackURL: AIRTIME_CALLBACK_URL,
-        bonusType,
-      });
-      responseData = apiResponse.response;
     }
+
+    let lastAirtimeError = null;
+    for (const providerId of candidateProviders) {
+      const providerConfigTried = vtuConfig.providers[providerId];
+      if (!providerConfigTried) continue;
+
+      try {
+        if (providerConfigTried.source === 'airtimenigeria') {
+          apiResponse = await AirtimeNigeriaService.purchaseAirtime({
+            network: normalizedNetwork,
+            phone: normalizedPhoneNumber,
+            amount: parsedAmount,
+            maxAmount: parsedAmount,
+            callbackUrl: airtimeCallbackUrl,
+            customerReference: requestId,
+          });
+          responseData = {
+            status: apiResponse.success ? "ORDER_RECEIVED" : "FAILED",
+            orderid: apiResponse.reference,
+            raw: apiResponse,
+          };
+
+        } else if (providerConfigTried.source === 'smeplug') {
+          const smeCallbackUrl = `${SERVER_URL}/api/v1/telecom/webhook/smeplug`;
+          apiResponse = await SmePlugService.purchaseAirtime({
+            phone: normalizePhoneForSmePlug(normalizedPhoneNumber),
+            network: normalizedNetwork,
+            amount: parsedAmount,
+            customerReference: requestId,
+            callbackUrl: smeCallbackUrl,
+          });
+          responseData = {
+            status: apiResponse.success ? "ORDER_RECEIVED" : "FAILED",
+            orderid: apiResponse.reference,
+            raw: apiResponse,
+          };
+        } else if (providerConfigTried.source === 'pluginng') {
+          const subcategoryId = await PluginngService.getAirtimeSubcategoryId(normalizedNetwork);
+          if (!subcategoryId) {
+            throw new AppError(`Pluginng airtime subcategory was not found for ${normalizedNetwork}`, 400);
+          }
+
+          apiResponse = await PluginngService.purchaseAirtime({
+            amount: parsedAmount,
+            phoneNumber: normalizedPhoneNumber,
+            subcategoryId,
+            customReference: requestId,
+          });
+
+          const providerStatus = String(apiResponse.status || '').toLowerCase();
+          responseData = {
+            status: ['success', 'pending'].includes(providerStatus) ? "ORDER_RECEIVED" : "FAILED",
+            orderid: apiResponse.orderId || apiResponse.reference || requestId,
+            raw: apiResponse,
+          };
+
+        } else if (providerConfigTried.source === 'alrahuzdata') {
+          apiResponse = await AlrahuzDataService.purchaseAirtime({
+            network: normalizedNetwork,
+            amount: parsedAmount,
+            phoneNumber: normalizedPhoneNumber,
+            customReference: requestId,
+          });
+
+          const providerStatus = String(apiResponse.status || '').toLowerCase();
+          responseData = {
+            status: ['success', 'pending'].includes(providerStatus) ? "ORDER_RECEIVED" : "FAILED",
+            orderid: apiResponse.orderId || apiResponse.reference || requestId,
+            raw: apiResponse,
+          };
+
+        } else {
+          apiResponse = await NelloBytesService.purchaseAirtime({
+            network: normalizedNetwork,
+            amount: parsedAmount,
+            mobileNumber: normalizedPhoneNumber,
+            requestId,
+            callBackURL: AIRTIME_CALLBACK_URL,
+            bonusType,
+          });
+          responseData = apiResponse.response;
+        }
+
+        successfulProvider = providerId;
+        break;
+      } catch (providerError) {
+        lastAirtimeError = providerError;
+        logger.warn(`Airtime provider ${providerId} failed for ${normalizedNetwork}: ${providerError?.message}`);
+      }
+    }
+
+    if (!apiResponse) {
+      throw lastAirtimeError || new AppError('Airtime service temporarily unavailable', 503);
+    }
+    activeProvider = successfulProvider;
+    transaction.service.provider = successfulProvider;
 
     const providerStatus = String(responseData?.status || responseData?.orderstatus || '').toUpperCase();
     const providerStatusCode = String(responseData?.statuscode || '');
@@ -1291,15 +1322,18 @@ exports.purchaseAirtime = async (req, res, next) => {
     if (isOrderReceived || isOrderCompleted) {
       transaction.status = isOrderCompleted ? "successful" : "pending";
 
+      const successProviderConfig = vtuConfig.providers[successfulProvider];
+      const callbackForProvider = successProviderConfig?.source === 'airtimenigeria'
+        ? airtimeCallbackUrl
+        : (successProviderConfig?.source === 'smeplug'
+          ? `${SERVER_URL}/api/v1/telecom/webhook/smeplug`
+          : AIRTIME_CALLBACK_URL);
+
       transaction.service = {
         ...transaction.service,
         orderId: apiResponse?.orderId || apiResponse?.reference || responseData?.orderid || requestId,
         requestId: apiResponse?.requestId || responseData?.requestid || requestId,
-        callbackUrl: providerConfig?.source === 'airtimenigeria'
-          ? airtimeCallbackUrl
-          : (providerConfig?.source === 'smeplug'
-            ? `${SERVER_URL}/api/v1/telecom/webhook/smeplug`
-            : AIRTIME_CALLBACK_URL),
+        callbackUrl: callbackForProvider,
       };
 
       transaction.statusHistory.push({
@@ -1406,7 +1440,10 @@ exports.purchaseAirtime = async (req, res, next) => {
     });
   } catch (error) {
     console.error("Airtime Error:", error);
-    next(error);
+    const message = error?.response?.data?.message
+      || error?.message
+      || 'Airtime purchase failed. Please try again shortly.';
+    return next(new AppError(message, error?.response?.status || 500));
   }
 };
 
