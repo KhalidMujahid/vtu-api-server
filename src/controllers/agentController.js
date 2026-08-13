@@ -254,7 +254,7 @@ const getAgentCommissionRate = async (agentId) => {
   return rate > 0 ? rate : 1;
 };
 
-const creditAgentCommission = async (agentId, purchaseAmount) => {
+const creditAgentCommission = async (agentId, purchaseAmount, options = {}) => {
   const commissionRate = await getAgentCommissionRate(agentId);
   const commissionAmount = (commissionRate / 100) * Number(purchaseAmount || 0);
 
@@ -277,6 +277,28 @@ const creditAgentCommission = async (agentId, purchaseAmount) => {
   agent.agentInfo.totalTransactionAmount = Number(agent.agentInfo.totalTransactionAmount || 0) + Number(purchaseAmount || 0);
   await agent.save();
 
+  if (options?.transactionReference) {
+    try {
+      await Transaction.updateOne(
+        { reference: options.transactionReference, user: agentId },
+        {
+          $set: {
+            'metadata.commission': commissionAmount,
+            'metadata.commissionRate': commissionRate,
+            'metadata.commissionEarned': true,
+            'metadata.agentCommission': {
+              amount: commissionAmount,
+              rate: commissionRate,
+              purchaseAmount: Number(purchaseAmount || 0),
+            },
+          },
+        }
+      );
+    } catch (linkError) {
+      logger.warn(`Failed to link commission to purchase tx ${options.transactionReference}: ${linkError.message}`);
+    }
+  }
+
   try {
     await Transaction.create({
       reference: `COM-EARN-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
@@ -289,12 +311,14 @@ const creditAgentCommission = async (agentId, purchaseAmount) => {
       previousBalance: previousAvailableCommission,
       newBalance: agent.agentInfo.availableCommission,
       status: 'successful',
-      description: 'Commission earned from agent service purchase',
+      description: `Commission earned (${commissionRate}%) from ${options?.serviceType || 'agent service purchase'}`,
       metadata: {
         commission: commissionAmount,
         commissionEarned: true,
         commissionRate,
         purchaseAmount: Number(purchaseAmount || 0),
+        sourceTransaction: options?.transactionReference || null,
+        serviceType: options?.serviceType || null,
       },
       completedAt: new Date(),
     });
@@ -358,8 +382,18 @@ const forwardUserServiceWithAgentCommission = async (req, res, next, handler, op
 
   if (responseStatus === 'success' && ['successful', 'pending'].includes(transactionStatus || 'successful')) {
     const purchaseAmount = extractPurchaseAmount(payload);
+    const transactionReference = payload?.data?.reference
+      || payload?.data?.transaction?.reference
+      || payload?.data?.orderId
+      || null;
+    const serviceType = payload?.data?.transaction?.type
+      || payload?.data?.serviceType
+      || null;
     try {
-      await creditAgentCommission(req.user._id, purchaseAmount);
+      await creditAgentCommission(req.user._id, purchaseAmount, {
+        transactionReference,
+        serviceType,
+      });
     } catch (commissionError) {
       logger.error(
         `Agent commission credit failed for user ${req.user?._id}: ${commissionError?.message}`
@@ -1771,6 +1805,7 @@ class AgentController {
               user: agent._id,
               createdAt: { $gte: today },
               status: 'successful',
+              type: { $nin: ['commission_earned', 'commission_transfer', 'commission_withdrawal'] },
             },
           },
           {
@@ -1789,6 +1824,7 @@ class AgentController {
               user: agent._id,
               createdAt: { $gte: sevenDaysAgo },
               status: 'successful',
+              type: { $nin: ['commission_earned', 'commission_transfer', 'commission_withdrawal'] },
             },
           },
           {
@@ -1807,6 +1843,7 @@ class AgentController {
               user: agent._id,
               createdAt: { $gte: thirtyDaysAgo },
               status: 'successful',
+              type: { $nin: ['commission_earned', 'commission_transfer', 'commission_withdrawal'] },
             },
           },
           {
@@ -1824,6 +1861,7 @@ class AgentController {
             $match: {
               user: agent._id,
               status: 'successful',
+              type: { $nin: ['commission_earned', 'commission_transfer', 'commission_withdrawal'] },
             },
           },
           {
@@ -1848,6 +1886,7 @@ class AgentController {
             user: agent._id,
             createdAt: { $gte: thirtyDaysAgo },
             status: 'successful',
+            type: { $nin: ['commission_earned', 'commission_transfer', 'commission_withdrawal'] },
           },
         },
         {
@@ -1856,6 +1895,7 @@ class AgentController {
             count: { $sum: 1 },
             amount: { $sum: '$amount' },
             commission: { $sum: '$metadata.commission' },
+            commissionRate: { $max: '$metadata.commissionRate' },
           },
         },
         { $sort: { amount: -1 } },

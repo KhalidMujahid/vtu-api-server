@@ -8,7 +8,10 @@
     "start": "node server.js",
     "seed": "node src/scripts/seedAdmin.js",
     "reconcile": "node src/scripts/reconcileProviderTransactions.js",
-    "reconcile:all": "node src/scripts/reconcileProviderTransactions.js --all"
+    "reconcile:all": "node src/scripts/reconcileProviderTransactions.js --all",
+    "backfill": "node src/scripts/backfillCommissionsReferrals.js",
+    "backfill:commissions": "node src/scripts/backfillCommissionsReferrals.js --referrals-only",
+    "backfill:referrals": "node src/scripts/backfillCommissionsReferrals.js --commissions-only"
   },
   "keywords": [],
   "author": "",

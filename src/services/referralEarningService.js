@@ -20,8 +20,24 @@ class ReferralEarningService {
     return configured;
   }
 
+  static getFixedAmount() {
+    const configured = Number(process.env.REFERRAL_EARNING_FIXED_AMOUNT || 0);
+    if (Number.isNaN(configured) || configured < 0) return 0;
+    return configured;
+  }
+
   static round2(value) {
     return Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+  }
+
+  static computeEarning(baseAmount) {
+    const percent = this.getPercent();
+    const fixedAmount = this.getFixedAmount();
+    const percentEarning = this.round2((percent / 100) * Number(baseAmount || 0));
+    const amount = fixedAmount > 0
+      ? Math.max(fixedAmount, percentEarning)
+      : percentEarning;
+    return { amount, percent, fixedAmount };
   }
 
   static async processSuccessfulTransaction(transaction) {
@@ -35,8 +51,7 @@ class ReferralEarningService {
     const baseAmount = Number(transaction.amount || 0);
     if (Number.isNaN(baseAmount) || baseAmount <= 0) return { processed: false, reason: 'invalid_amount' };
 
-    const percent = this.getPercent();
-    const earningAmount = this.round2((percent / 100) * baseAmount);
+    const { amount: earningAmount, percent, fixedAmount } = this.computeEarning(baseAmount);
     if (earningAmount <= 0) return { processed: false, reason: 'zero_earning' };
 
     let ledger;
@@ -53,6 +68,8 @@ class ReferralEarningService {
         metadata: {
           reference: transaction.reference,
           category: transaction.category,
+          fixedAmount,
+          earningMode: fixedAmount > 0 ? 'max(fixed,percent)' : 'percent',
         },
       });
     } catch (error) {
@@ -68,7 +85,7 @@ class ReferralEarningService {
         $inc: { referralBonus: earningAmount },
         $set: { lastTransaction: new Date() },
       },
-      { new: true }
+      { new: true, upsert: true, setDefaultsOnInsert: true }
     );
 
     logger.info(
@@ -79,6 +96,7 @@ class ReferralEarningService {
       processed: true,
       amount: earningAmount,
       percent,
+      fixedAmount,
       ledgerId: ledger._id,
     };
   }

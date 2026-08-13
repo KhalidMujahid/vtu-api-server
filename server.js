@@ -7,6 +7,7 @@ const { startApiBalanceAlertWorker } = require('./src/workers/apiBalanceAlertWor
 const { startAirtimeReconciliationWorker } = require('./src/workers/airtimeReconciliationWorker');
 const { startAlrahuzDataReconciliationWorker } = require('./src/workers/alrahuzDataReconciliationWorker');
 const { startVtuPollingWorker } = require('./src/workers/vtuPollingWorker');
+const { runCommissionsReferralBackfill } = require('./src/scripts/backfillCommissionsReferrals');
 
 const PORT = process.env.PORT || 5000;
 
@@ -36,6 +37,19 @@ connectDB().then(async () => {
   startAirtimeReconciliationWorker();
   startAlrahuzDataReconciliationWorker();
   startVtuPollingWorker();
+
+  // Optional: run the one-time commission/referral backfill on startup.
+  // Enable by setting RUN_BACKFILL_ON_START=true in env. Runs in the background
+  // so it never blocks the HTTP server from coming up.
+  if (String(process.env.RUN_BACKFILL_ON_START || '').toLowerCase() === 'true') {
+    runCommissionsReferralBackfill()
+      .then((summary) => {
+        console.log('Startup backfill completed:', JSON.stringify(summary));
+      })
+      .catch((error) => {
+        console.error('Startup backfill failed:', error.message);
+      });
+  }
 
   process.on('unhandledRejection', (err) => {
     console.log(`Error: ${err.message}`);
