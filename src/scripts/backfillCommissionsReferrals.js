@@ -38,22 +38,9 @@ async function backfillAgentCommissions() {
   let skipped = 0;
   let errors = 0;
 
-  const commissionLedgers = await Transaction.find({
-    type: 'commission_earned',
-    'metadata.sourceTransaction': { $exists: false },
-  })
-    .select('user amount metadata purchaseAmount createdAt')
-    .sort({ createdAt: 1 })
-    .lean();
-
-  const ledgersByAgent = new Map();
-  for (const ledger of commissionLedgers) {
-    const key = String(ledger.user);
-    if (!ledgersByAgent.has(key)) ledgersByAgent.set(key, []);
-    ledgersByAgent.get(key).push(ledger);
-  }
-
-  // Gather eligible agent purchase transactions that lack commission.
+  // All successful, eligible agent purchase transactions that have not yet had
+  // commission attached to them. We no longer require a pre-existing
+  // commission_earned ledger; we reconstruct commission from scratch per agent.
   const purchaseTransactions = await Transaction.find({
     category: { $ne: 'commission' },
     type: { $nin: COMMISSION_TYPES },
@@ -64,80 +51,117 @@ async function backfillAgentCommissions() {
     .sort({ createdAt: 1 })
     .lean();
 
-  // Group purchases by agent (chronological) so we can pair with ledgers in order.
-  const purchasesByAgent = new Map();
+  const users = await User.find({
+    _id: { $in: [...new Set(purchaseTransactions.map((tx) => tx.user))] },
+  })
+    .select('_id role roles agentInfo.commissionRate')
+    .lean();
+
+  // agentId -> rate
+  const rateByAgent = new Map();
+  for (const user of users) {
+    const isAgent = user.role === 'agent' || (Array.isArray(user.roles) && user.roles.includes('agent'));
+    if (!isAgent) continue;
+    const r = Number(user.agentInfo?.commissionRate || 0);
+    rateByAgent.set(String(user._id), r > 0 ? r : 1);
+  }
+
+  const running = new Map();
+
   for (const tx of purchaseTransactions) {
-    const user = await User.findById(tx.user).select('role roles');
-    if (!user) continue;
-    if (user.role !== 'agent' && !(Array.isArray(user.roles) && user.roles.includes('agent'))) {
+    const agentId = String(tx.user);
+    const rate = rateByAgent.get(agentId);
+
+    if (!rate) {
+      skipped += 1; // not an agent (or agent doc missing)
+      continue;
+    }
+
+    processed += 1;
+
+    // Skip if a commission ledger for this purchase already exists.
+    const existingLedger = await Transaction.exists({
+      user: tx.user,
+      type: 'commission_earned',
+      'metadata.sourceTransaction': tx.reference,
+    });
+    if (existingLedger) {
       skipped += 1;
       continue;
     }
-    const key = String(tx.user);
-    if (!purchasesByAgent.has(key)) purchasesByAgent.set(key, []);
-    purchasesByAgent.get(key).push(tx);
-  }
 
-  const rateCache = new Map();
-  const running = new Map();
-
-  for (const [agentId, purchases] of purchasesByAgent.entries()) {
-    const ledgers = ledgersByAgent.get(agentId) || [];
-    // Pair the oldest purchases with the oldest commission ledgers in the same order.
-    // Only link as many purchases as there are ledgers for that agent.
-    const toLink = Math.min(purchases.length, ledgers.length);
-
-    for (let i = 0; i < toLink; i++) {
-      const tx = purchases[i];
-      processed += 1;
-      try {
-        if (!rateCache.has(agentId)) {
-          const user = await User.findById(agentId).select('agentInfo.commissionRate');
-          const r = Number(user?.agentInfo?.commissionRate || 0);
-          rateCache.set(agentId, r > 0 ? r : 1);
-        }
-        const rate = rateCache.get(agentId);
-        const baseAmount = Number(tx.amount || 0);
-        const commission = round2((rate / 100) * baseAmount);
-        if (!Number.isFinite(commission) || commission <= 0) {
-          skipped += 1;
-          continue;
-        }
-
-        await Transaction.updateOne(
-          { _id: tx._id },
-          {
-            $set: {
-              'metadata.commission': commission,
-              'metadata.commissionRate': rate,
-              'metadata.commissionEarned': true,
-              'metadata.agentCommission': {
-                amount: commission,
-                rate,
-                purchaseAmount: baseAmount,
-                backfilled: true,
-              },
-            },
-          }
-        );
-
-        const agg = running.get(agentId) || {
-          totalCommissionEarned: 0,
-          availableCommission: 0,
-          totalTransactions: 0,
-          totalTransactionAmount: 0,
-        };
-        agg.totalCommissionEarned = round2(agg.totalCommissionEarned + commission);
-        agg.availableCommission = round2(agg.availableCommission + commission);
-        agg.totalTransactions += 1;
-        agg.totalTransactionAmount = round2(agg.totalTransactionAmount + baseAmount);
-        running.set(agentId, agg);
-
-        updated += 1;
-      } catch (error) {
-        errors += 1;
-        logger.error(`Agent commission backfill error for tx ${tx.reference}: ${error.message}`);
+    try {
+      const baseAmount = Number(tx.amount || 0);
+      const commission = round2((rate / 100) * baseAmount);
+      if (!Number.isFinite(commission) || commission <= 0) {
+        skipped += 1;
+        continue;
       }
+
+      // Attach commission to the purchase transaction so the dashboard's
+      // per-service breakdown reflects it.
+      await Transaction.updateOne(
+        { _id: tx._id },
+        {
+          $set: {
+            'metadata.commission': commission,
+            'metadata.commissionRate': rate,
+            'metadata.commissionEarned': true,
+            'metadata.agentCommission': {
+              amount: commission,
+              rate,
+              purchaseAmount: baseAmount,
+              backfilled: true,
+            },
+          },
+        }
+      );
+
+      // Create a commission_earned ledger entry mirroring live crediting.
+      try {
+        await Transaction.create({
+          reference: `COM-EARN-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
+          user: tx.user,
+          type: 'commission_earned',
+          category: 'commission',
+          amount: commission,
+          fee: 0,
+          totalAmount: commission,
+          status: 'successful',
+          description: `Commission earned (${rate}%) from ${tx.type} purchase`,
+          metadata: {
+            commission,
+            commissionEarned: true,
+            commissionRate: rate,
+            purchaseAmount: baseAmount,
+            sourceTransaction: tx.reference,
+            serviceType: tx.type,
+            backfilled: true,
+          },
+          completedAt: new Date(),
+        });
+      } catch (ledgerInnerError) {
+        if (ledgerInnerError?.code !== 11000) {
+          throw ledgerInnerError;
+        }
+      }
+
+      const agg = running.get(agentId) || {
+        totalCommissionEarned: 0,
+        availableCommission: 0,
+        totalTransactions: 0,
+        totalTransactionAmount: 0,
+      };
+      agg.totalCommissionEarned = round2(agg.totalCommissionEarned + commission);
+      agg.availableCommission = round2(agg.availableCommission + commission);
+      agg.totalTransactions += 1;
+      agg.totalTransactionAmount = round2(agg.totalTransactionAmount + baseAmount);
+      running.set(agentId, agg);
+
+      updated += 1;
+    } catch (error) {
+      errors += 1;
+      logger.error(`Agent commission backfill error for tx ${tx.reference}: ${error.message}`);
     }
   }
 
