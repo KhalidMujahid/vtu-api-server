@@ -1196,6 +1196,7 @@ class AdminController {
       const {
         page = 1,
         limit = 20,
+        search,
         minBalance,
         maxBalance,
         locked,
@@ -1206,6 +1207,22 @@ class AdminController {
       const skip = (parseInt(page) - 1) * parseInt(limit);
       const query = {};
       
+      if (search && String(search).trim() !== '') {
+        const term = String(search).trim();
+        const ids = await User.find({
+          $or: [
+            { firstName: { $regex: term, $options: 'i' } },
+            { lastName: { $regex: term, $options: 'i' } },
+            { email: { $regex: term, $options: 'i' } },
+            { phoneNumber: { $regex: term, $options: 'i' } },
+          ],
+        }).select('_id').lean();
+
+        query.$or = [
+          { user: { $in: ids.map((u) => u._id) } },
+          { 'virtualAccount.accountNumber': { $regex: term, $options: 'i' } },
+        ];
+      }
       
       if (minBalance || maxBalance) {
         query.balance = {};
