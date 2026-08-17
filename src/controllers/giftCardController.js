@@ -12,7 +12,6 @@ const { AppError } = require('../middlewares/errorHandler');
 const logger = require('../utils/logger');
 const crypto = require('crypto');
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 async function refundToWallet(transaction, reason, amount) {
   try {
@@ -1087,7 +1086,6 @@ exports.getOrderCode = async (req, res, next) => {
   }
 };
 
-// ─── Prestmit (Primary) ───────────────────────────────────────────────────────
 
 exports.getPrestmitBalance = async (req, res, next) => {
   try {
@@ -1244,7 +1242,6 @@ exports.listOrders = async (req, res, next) => {
   }
 };
 
-// ─── Zendit (Backup) ──────────────────────────────────────────────────────────
 
 exports.getZenditProducts = async (req, res, next) => {
   try {

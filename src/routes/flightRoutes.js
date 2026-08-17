@@ -5,11 +5,9 @@ const { protect, requireTransactionPin } = require('../middlewares/auth');
 
 router.use(protect);
 
-// ── Shared ─────────────────────────────────────────────────────────────────────
 router.get('/airports', flightController.searchAirports);
 router.get('/wakanow/redirect', flightController.redirectWakanowAffiliate);
 
-// ── International Flights (Duffel) ────────────────────────────────────────────
 router.post('/international/search', flightController.searchInternational);
 router.get('/international/offers/:searchId', flightController.getInternationalOffers);
 router.get('/international/offer/:offerId', flightController.getInternationalOffer);
@@ -19,7 +17,6 @@ router.get('/international/bookings/:orderId', flightController.getInternational
 router.post('/international/bookings/:orderId/cancel', flightController.cancelInternationalBooking);
 router.post('/international/cancellations/:cancellationId/confirm', flightController.confirmInternationalCancellation);
 
-// ── Domestic Flights (Tiqwa) ─────────────────────────────────────────────────
 router.get('/domestic/airlines', flightController.getAirlines);
 router.post('/domestic/search', flightController.searchDomestic);
 router.post('/domestic/book', requireTransactionPin, flightController.bookDomestic);

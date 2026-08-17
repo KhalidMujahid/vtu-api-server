@@ -17,9 +17,6 @@ function parseBoolean(value, defaultValue = false) {
   return defaultValue;
 }
 
-// Reloadly — International Airtime Top-Up
-// Docs: https://docs.reloadly.com/airtime
-// Sign up: https://www.reloadly.com  |  Same client_id/secret as gift cards, different audience
 class ReloadlyAirtimeService {
   static tokenCache = {
     accessToken: null,
@@ -107,12 +104,10 @@ class ReloadlyAirtimeService {
     }
   }
 
-  // List all supported countries
   static async getCountries() {
     return this.request('GET', '/countries');
   }
 
-  // List operators for a country (e.g. countryCode = "NG", "GH", "US")
   static async getOperators(countryCode, { page = 1, size = 100, includeBundles = true } = {}) {
     return this.request('GET', `/operators/countries/${countryCode.toUpperCase()}`, null, {
       page,
@@ -121,14 +116,10 @@ class ReloadlyAirtimeService {
     });
   }
 
-  // Get a single operator by ID
   static async getOperator(operatorId) {
     return this.request('GET', `/operators/${operatorId}`);
   }
 
-  // Send an international top-up
-  // amount: in USD (useLocalAmount=false) OR in operator's local currency (useLocalAmount=true)
-  // recipientPhone.number should NOT include country code prefix
   static async sendTopup({ operatorId, amount, useLocalAmount = false, recipientCountryCode, recipientNumber, customIdentifier, senderCountryCode, senderNumber }) {
     const body = {
       operatorId: Number(operatorId),
@@ -149,7 +140,6 @@ class ReloadlyAirtimeService {
     return this.request('POST', '/topups', body);
   }
 
-  // List all transactions (with pagination + optional date range)
   static async getTransactions({ page = 0, size = 20, startDate, endDate } = {}) {
     const params = { page, size };
     if (startDate) params.startDate = startDate;
@@ -157,14 +147,12 @@ class ReloadlyAirtimeService {
     return this.request('GET', '/reports/transactions', null, params);
   }
 
-  // Get a transaction by your customIdentifier
   static async getTransactionByReference(customIdentifier) {
     const result = await this.request('GET', '/reports/transactions', null, { customIdentifier, size: 1 });
     const items = result?.content || (Array.isArray(result) ? result : []);
     return items[0] || null;
   }
 
-  // Get account balance
   static async getBalance() {
     return this.request('GET', '/accounts/balance');
   }

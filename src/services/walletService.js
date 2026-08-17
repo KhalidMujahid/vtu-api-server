@@ -12,7 +12,6 @@ async function getTransferFeeRate() {
       return setting.value;
     }
   } catch (_) {
-    // fall through to default
   }
   return 0.02;
 }

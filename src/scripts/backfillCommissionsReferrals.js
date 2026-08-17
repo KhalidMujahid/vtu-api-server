@@ -38,9 +38,6 @@ async function backfillAgentCommissions() {
   let skipped = 0;
   let errors = 0;
 
-  // All successful, eligible agent purchase transactions that have not yet had
-  // commission attached to them. We no longer require a pre-existing
-  // commission_earned ledger; we reconstruct commission from scratch per agent.
   const purchaseTransactions = await Transaction.find({
     category: { $ne: 'commission' },
     type: { $nin: COMMISSION_TYPES },
@@ -57,7 +54,6 @@ async function backfillAgentCommissions() {
     .select('_id role roles agentInfo.commissionRate')
     .lean();
 
-  // agentId -> rate
   const rateByAgent = new Map();
   for (const user of users) {
     const isAgent = user.role === 'agent' || (Array.isArray(user.roles) && user.roles.includes('agent'));
@@ -73,13 +69,12 @@ async function backfillAgentCommissions() {
     const rate = rateByAgent.get(agentId);
 
     if (!rate) {
-      skipped += 1; // not an agent (or agent doc missing)
+      skipped += 1;
       continue;
     }
 
     processed += 1;
 
-    // Skip if a commission ledger for this purchase already exists.
     const existingLedger = await Transaction.exists({
       user: tx.user,
       type: 'commission_earned',
@@ -98,8 +93,6 @@ async function backfillAgentCommissions() {
         continue;
       }
 
-      // Attach commission to the purchase transaction so the dashboard's
-      // per-service breakdown reflects it.
       await Transaction.updateOne(
         { _id: tx._id },
         {
@@ -117,7 +110,6 @@ async function backfillAgentCommissions() {
         }
       );
 
-      // Create a commission_earned ledger entry mirroring live crediting.
       try {
         await Transaction.create({
           reference: `COM-EARN-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
@@ -165,7 +157,6 @@ async function backfillAgentCommissions() {
     }
   }
 
-  // Persist running totals onto agent docs.
   for (const [agentId, agg] of running.entries()) {
     try {
       await User.updateOne(

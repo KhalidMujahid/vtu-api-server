@@ -174,7 +174,7 @@ module.exports = {
         const attempts = (user.pinAttempts || 0) + 1;
         const update = { pinAttempts: attempts };
         if (attempts >= 5) {
-          update.pinLockedUntil = new Date(Date.now() + 30 * 60 * 1000); // 30-min PIN lockout
+          update.pinLockedUntil = new Date(Date.now() + 30 * 60 * 1000);
         }
         await User.updateOne({ _id: user._id }, { $set: update });
 

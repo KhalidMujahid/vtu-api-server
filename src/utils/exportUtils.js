@@ -76,7 +76,6 @@ function toCsv(rows = []) {
   return [headerLine, ...dataLines].join('\n');
 }
 
-// Minimal PDF generator for simple text exports.
 function buildSimplePdf(lines = []) {
   const safeLines = (Array.isArray(lines) ? lines : [])
     .map(line => String(line).replace(/[()\\]/g, '\\$&'));

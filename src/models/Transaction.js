@@ -191,8 +191,6 @@ transactionSchema.post('save', async function(doc) {
   try {
     if (doc.status !== 'successful') return;
 
-    // Atomically claim referral processing — prevents double-award if save is called
-    // multiple times on the same document (e.g. status polling loop).
     const claimed = await this.constructor.findOneAndUpdate(
       { _id: doc._id, 'metadata.referralLedgerProcessed': { $ne: true } },
       {

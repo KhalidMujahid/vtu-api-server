@@ -319,7 +319,6 @@ class NelloBytesService {
   
 
 
-  // ── ClubKonnect direct request (same auth pattern, different base URL) ────────
   static async clubkonnectRequest(endpoint, params = {}) {
     const fullParams = {
       UserID: this.clubkonnectConfig.userId,
@@ -345,7 +344,6 @@ class NelloBytesService {
     }
   }
 
-  // ── ClubKonnect: Smile Data ────────────────────────────────────────────────
 
   static async getClubKonnectSmilePackages() {
     const response = await this.clubkonnectRequest('/APIParaGetSmileV1.asp');
@@ -388,7 +386,6 @@ class NelloBytesService {
     };
   }
 
-  // ── ClubKonnect: Spectranet Data ───────────────────────────────────────────
 
   static async getClubKonnectSpectranetPackages() {
     const response = await this.clubkonnectRequest('/APIParaGetSpectranetV1.asp');

@@ -5,7 +5,6 @@ const Transaction = require('../models/Transaction');
 const { AppError } = require('../middlewares/errorHandler');
 const logger = require('../utils/logger');
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 async function refundToWallet(transaction, reason, amount) {
   try {
@@ -16,7 +15,6 @@ async function refundToWallet(transaction, reason, amount) {
   }
 }
 
-// ─── International Flights (Duffel) ──────────────────────────────────────────
 
 exports.searchInternational = async (req, res, next) => {
   try {
@@ -100,7 +98,6 @@ exports.bookInternational = async (req, res, next) => {
       return next(new AppError('offerId and passengers are required', 400));
     }
 
-    // Validate required passenger fields
     for (const p of passengers) {
       if (!p.id || !p.given_name || !p.family_name || !p.born_on || !p.gender || !p.email || !p.phone_number) {
         return next(new AppError('Each passenger needs: id, given_name, family_name, born_on, gender, email, phone_number', 400));
@@ -108,7 +105,6 @@ exports.bookInternational = async (req, res, next) => {
       if (!p.title) p.title = p.gender === 'female' ? 'ms' : 'mr';
     }
 
-    // Fetch offer to get the price in its currency
     const offerResult = await DuffelService.getOffer(offerId);
     const offer = offerResult?.data;
     if (!offer) return next(new AppError('Offer not found or expired', 404));
@@ -116,7 +112,6 @@ exports.bookInternational = async (req, res, next) => {
     const wallet = await Wallet.findOne({ user: user._id });
     if (!wallet) return next(new AppError('Wallet not found', 404));
 
-    // chargedAmountNgn must be provided by the client (after FX conversion display)
     const chargedAmount = Number(req.body.amountNgn);
     if (!chargedAmount || chargedAmount <= 0) {
       return next(new AppError('amountNgn (NGN equivalent) is required', 400));
@@ -255,7 +250,6 @@ exports.confirmInternationalCancellation = async (req, res, next) => {
   }
 };
 
-// ─── Domestic Flights (Tiqwa) ─────────────────────────────────────────────────
 
 exports.getAirlines = async (req, res, next) => {
   try {

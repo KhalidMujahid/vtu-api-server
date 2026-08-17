@@ -38,9 +38,6 @@ connectDB().then(async () => {
   startAlrahuzDataReconciliationWorker();
   startVtuPollingWorker();
 
-  // Optional: run the one-time commission/referral backfill on startup.
-  // Enable by setting RUN_BACKFILL_ON_START=true in env. Runs in the background
-  // so it never blocks the HTTP server from coming up.
   if (String(process.env.RUN_BACKFILL_ON_START || '').toLowerCase() === 'true') {
     runCommissionsReferralBackfill()
       .then((summary) => {

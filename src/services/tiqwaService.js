@@ -2,9 +2,7 @@ const axios = require('axios');
 const logger = require('../utils/logger');
 const { AppError } = require('../middlewares/errorHandler');
 
-// Tiqwa — Africa-focused travel API (domestic + regional Nigerian flights)
-// Docs: https://docs.tiqwa.com  |  Sandbox: https://sandbox.tiqwa.com/v1
-// NOTE: Update field names below if they differ after verifying with your sandbox credentials.
+
 class TiqwaService {
   static config = {
     baseUrl: process.env.TIQWA_BASE_URL || 'https://sandbox.tiqwa.com/v1',
@@ -40,18 +38,15 @@ class TiqwaService {
     }
   }
 
-  // List supported airlines
   static async getAirlines() {
     return this.request('GET', '/airlines');
   }
 
-  // Search airports by keyword (IATA code or city name)
   static async searchAirports(query) {
     return this.request('GET', '/airports', null, { q: query });
   }
 
-  // Search domestic/regional flights
-  // origin/destination: IATA airport codes (e.g. LOS, ABV, KAN)
+
   static async searchFlights({ origin, destination, departureDate, returnDate, adults = 1, children = 0, infants = 0, cabinClass = 'economy' }) {
     const payload = {
       origin,
@@ -67,12 +62,10 @@ class TiqwaService {
     return this.request('POST', '/flights/search', payload);
   }
 
-  // Get fare details / availability for a specific offer key
   static async getFlight(offerId) {
     return this.request('GET', `/flights/${offerId}`);
   }
 
-  // Book a domestic flight
   static async bookFlight({ offerId, passengers, contactEmail, contactPhone }) {
     return this.request('POST', '/flights/orders', {
       offer_id: offerId,
@@ -81,17 +74,14 @@ class TiqwaService {
     });
   }
 
-  // Get booking details
   static async getBooking(bookingId) {
     return this.request('GET', `/flights/orders/${bookingId}`);
   }
 
-  // List bookings
   static async listBookings({ page = 1, limit = 20 } = {}) {
     return this.request('GET', '/flights/orders', null, { page, limit });
   }
 
-  // Cancel a booking
   static async cancelBooking(bookingId) {
     return this.request('POST', `/flights/orders/${bookingId}/cancel`, {});
   }
